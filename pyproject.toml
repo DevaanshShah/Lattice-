@@ -1,0 +1,29 @@
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "AI platform: natural-language prompt -> narrated, multi-scene Manim explainer video."
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "python-dotenv>=1.0",
+    "openai>=1.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov"]
+
+[project.scripts]
+lattice = "cli.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast, deterministic, no network/docker/model (hard gate to commit)",
+    "integration: needs the docker render container (LATTICE_TEST_INTEGRATION=1)",
+    "llm: calls a real model — deferred by default (LATTICE_TEST_LLM=1)",
+]
+
+[tool.setuptools]
+# flat-layout: top-level packages live at the repo root (core/, render/, …)
+packages = ["core", "render", "scripts"]

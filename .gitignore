@@ -1,0 +1,39 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# --- Secrets / config ---
+.env
+.env.local
+*.key
+
+# --- Lattice render artifacts (regenerated; never commit) ---
+out/
+media/            # Manim default output dir
+renders/
+cache/            # content-hash render + TTS cache
+*.mp4
+*.mkv
+*.wav
+*.mp3
+*.srt
+# keep tiny checked-in sample fixtures if any are added under tests/fixtures/
+!tests/fixtures/**
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,48 @@
+"""OpenAI-compatible LLM client — swappable via base_url / api_key / model.
+
+The generator and the vision critic are deliberately DIFFERENT models (strong coder
+writes the Manim code; a cheaper vision model checks the render). Both run through this
+one client with a different `model`.
+
+Wired in M0 but NOT called — the first real call lands in M1 (scene-spec generation).
+`openai` is imported lazily so importing this module never requires network or a key.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from core.config import settings
+
+
+class LLMClient:
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None,
+                 model: str | None = None) -> None:
+        self.base_url = base_url or settings.llm_base_url
+        self.api_key = api_key or settings.llm_api_key
+        self.model = model or settings.llm_model
+        self._client: Any = None  # created lazily on first call
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            from openai import OpenAI  # lazy: import only when actually calling out
+            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key or "not-set")
+        return self._client
+
+    def chat(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> str:
+        resp = self.client.chat.completions.create(
+            model=model or self.model, messages=messages, **kw
+        )
+        return resp.choices[0].message.content or ""
+
+    def chat_json(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> dict:
+        resp = self.client.chat.completions.create(
+            model=model or self.model, messages=messages,
+            response_format={"type": "json_object"}, **kw,
+        )
+        return json.loads(resp.choices[0].message.content or "{}")
+
+
+def get_client(**kw: Any) -> LLMClient:
+    return LLMClient(**kw)

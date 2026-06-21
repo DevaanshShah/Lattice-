@@ -1,0 +1,6 @@
+# Lattice runtime deps (host side). The heavy toolchain (Manim CE + LaTeX + FFmpeg)
+# lives in the Docker render image, NOT here — see Dockerfile / scripts/setup_env.py.
+pydantic>=2.5
+pydantic-settings>=2.1
+python-dotenv>=1.0
+openai>=1.10
