@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.llm import LLMClient, get_client
+from core.schemas.narration import NarrationScript
 from core.schemas.scene_spec import SceneSpec
 from generation import codegen
 from narration import captions, tts
@@ -30,15 +31,20 @@ class NarratedResult:
 
 
 def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
-          client: LLMClient | None = None, style=None, log=print) -> NarratedResult:
+          client: LLMClient | None = None, style=None, lines: list[str] | None = None,
+          log=print) -> NarratedResult:
     client = client or get_client()
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
     say = log or (lambda _m: None)
 
-    say("-> narration script (narration-first)")
-    script = narr_script.generate(spec, client=client)
-    say(f"   {len(script.lines)} line(s)")
+    if lines is not None:
+        script = NarrationScript(lines=list(lines))      # verbatim (an edit supplies the lines)
+        say(f"-> using {len(script.lines)} supplied narration line(s)")
+    else:
+        say("-> narration script (narration-first)")
+        script = narr_script.generate(spec, client=client)
+        say(f"   {len(script.lines)} line(s)")
 
     say("-> synthesizing audio (host-side gTTS, render stays no-net)")
     clips = tts.synthesize_lines(script.lines, out_dir=wd / "audio")
