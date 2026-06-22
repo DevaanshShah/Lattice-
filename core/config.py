@@ -26,11 +26,14 @@ class Settings(BaseSettings):
     quality_preview_flag: str = "-ql"  # 480p15
     quality_final_flag: str = "-qh"    # 1080p60
 
-    # --- loop caps (used from M2 onward; never hang) ---
-    max_repair_attempts: int = 4
-    max_critic_iters: int = 3
-    best_of_n: int = 1
+    # --- loop caps (M2: never hang) ---
+    max_repair_attempts: int = 4   # compile-repair retries per render
+    max_critic_iters: int = 2      # vision-critic <-> fix iterations before best-of-N fallback
+    best_of_n: int = 2             # candidates generated when the critic loop doesn't converge
     concurrency_cap: int = 4
+
+    # --- vision critic (M2) ---
+    critic_frames: int = 3         # keyframes sampled per render for the critic
 
     # --- LLM (OpenAI-compatible, swappable; NOT called in M0) ---
     llm_base_url: str = "https://openrouter.ai/api/v1"

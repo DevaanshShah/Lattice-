@@ -104,3 +104,6 @@ def render(
                     if "partial_movie_files" not in p.parts and (not res or res in p.parts)
                 )
     return RenderResult(proc.returncode, proc.stdout, proc.stderr, cmd, outputs)
+
+# NB: multi-frame extraction lives in render/worker.py (worker.extract_frames), which wraps
+# this module and adds duration-aware even sampling. sandbox stays manim-render-only.
