@@ -18,7 +18,7 @@ Two invariants run through every milestone and are non-negotiable acceptance gat
 | M0 — Environment spike & sandbox | 0 | T-0 | ✅ shipped — verified e2e (preview+final MP4 + keyframe; LaTeX OK; sandbox no-net proven; 9/9 unit) |
 | M1 — Scene spec → Manim code | 1 | T-1, T-2 | ✅ shipped — verified live (prompt→spec→clean-guarded code, rendered first try); 19/19 unit |
 | M2 — Verification loops (the moat) | 1 | T-3, T-4, T-5 | ✅ shipped — verified live (compile-repair + structured multi-frame vision critic + fix loop + best-of-N, caps respected); 39/39 unit |
-| M3 — CLI + eval harness + cache | 1 | T-6, T-7, T-8 | 🔲 planned |
+| M3 — CLI + eval harness + cache | 1 | T-6, T-7, T-8 | ✅ shipped — verified live (generate-scene + cache hit = no re-spend; eval battery + score table + baseline); 54/54 unit |
 | M4 — Narrated scene | 2 | T-9, T-10, T-11 | 🔲 planned |
 | M5 — Multi-scene video + consistency | 3 | T-12 … T-17 | 🔲 planned |
 | M6 — Editing & human control | 4 | T-18 … T-22 | 🔲 planned |

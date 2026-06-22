@@ -9,7 +9,7 @@ Keep the "Current state" table updated as milestones ship.
 
 > This is the **Lattice** project at `c:\Users\Dev\Desktop\Franko` (AI that turns a prompt into a
 > narrated multi-scene Manim explainer video). Read `RESUME.md`, `MILESTONES.md`, and
-> `AGENT_TICKETS.md`. M0, M1 and M2 are already shipped and verified — **do not rebuild them**.
+> `AGENT_TICKETS.md`. M0, M1, M2 and M3 are already shipped and verified — **do not rebuild them**.
 > Build the **next milestone** following the same rhythm: write the code, run
 > `python -m pytest -m unit -q`, then give me a live check-step and pause for me to confirm.
 
@@ -24,8 +24,8 @@ That's it — the new session has full context from the repo.
 | M0 | Env spike + Docker render sandbox | ✅ shipped (verified live) |
 | M1 | Scene spec → Manim code + guardrails | ✅ shipped (verified live) |
 | M2 | Verification loops: compile-repair + vision critic + best-of-N | ✅ shipped (verified live) |
-| **M3** | **CLI + eval harness + content-hash cache** | ⏭️ **NEXT** |
-| M4 | Narrated scene (TTS + sync + captions) | planned |
+| M3 | CLI + eval harness + content-hash cache | ✅ shipped (verified live) |
+| **M4** | **Narrated scene (TTS + sync + captions)** | ⏭️ **NEXT** |
 | M5 | Multi-scene video + consistency (**demo**) | planned |
 | M6 | Editing & human control | planned |
 | M7 | Web UI + hardened infra | planned |
@@ -58,6 +58,8 @@ e.g. M3 (CLI/eval/cache) wraps M2's loops, so M2 must be done before M3.
 | M0 render check | `python -m scripts.render_sample` |
 | M1 generate (prompt → spec → code → render) | `python -m scripts.gen_scene "<prompt>" --render` |
 | M2 verify (prompt → spec → compile-repair → vision critic) | `python -m verification.run "<prompt>" [--best-of N]` |
+| M3 CLI (prompt → verified MP4, cached) | `python -m cli "<prompt>" [--quality final] [--no-cache]` |
+| M3 eval battery + regression check | `python -m scripts.run_eval [--limit N] [--set-baseline]` |
 | Quick key test | see "Cheap test" in chat history (gpt-4o-mini, max_tokens=5) |
 
 ## See results
