@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # --- vision critic (M2) ---
     critic_frames: int = 3         # keyframes sampled per render for the critic
 
+    # --- multi-scene (M5) ---
+    scene_cap: int = 8             # Q4: hard cap on scenes per video (planner output + cost)
+
     # --- LLM (OpenAI-compatible, swappable; NOT called in M0) ---
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""
