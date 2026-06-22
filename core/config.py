@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # --- loop caps (M2: never hang) ---
     max_repair_attempts: int = 4   # compile-repair retries per render
-    max_critic_iters: int = 2      # vision-critic <-> fix iterations before best-of-N fallback
+    max_critic_iters: int = 3      # vision-critic <-> fix iterations before best-of-N fallback
     best_of_n: int = 2             # candidates generated when the critic loop doesn't converge
     concurrency_cap: int = 4
 
