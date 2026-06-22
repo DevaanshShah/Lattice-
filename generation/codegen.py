@@ -18,9 +18,12 @@ class CodegenError(RuntimeError):
     pass
 
 
-def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = None) -> str:
+def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = None,
+             style=None) -> str:
     client = client or get_client()
     system = load("manim-conventions") + "\n\n---\n\n" + load("codegen")
+    if style is not None:
+        system += "\n\n---\n\n" + style.as_prompt()
     user = (
         "Scene spec (JSON):\n" + spec.model_dump_json(indent=2)
         + f"\n\nGenerate the complete Manim CE file. The Scene subclass MUST be named `{SCENE_CLASS}`."
@@ -44,14 +47,17 @@ def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = N
 
 
 def generate_narrated(spec: SceneSpec, beats_audio: list[tuple[str, str, float]], *,
-                      attempts: int = 3, client: LLMClient | None = None) -> str:
+                      attempts: int = 3, client: LLMClient | None = None, style=None) -> str:
     """SceneSpec + per-beat (narration, audio_path, duration) -> narrated Manim code (M4).
 
     Same guardrails as `generate`, plus it must wire the audio: the code must call
     `self.add_sound(...)` (else the scene would be silent), and is regenerated until it does.
+    A `style` (M5) is injected so narrated multi-scene videos stay visually consistent too.
     """
     client = client or get_client()
     system = load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated")
+    if style is not None:
+        system += "\n\n---\n\n" + style.as_prompt()
     rows = "\n".join(
         f"Beat {i + 1}: narration={line!r} audio={path!r} duration={dur:.2f}s"
         for i, (line, path, dur) in enumerate(beats_audio)
