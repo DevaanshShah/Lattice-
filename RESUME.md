@@ -9,7 +9,7 @@ Keep the "Current state" table updated as milestones ship.
 
 > This is the **Lattice** project at `c:\Users\Dev\Desktop\Franko` (AI that turns a prompt into a
 > narrated multi-scene Manim explainer video). Read `RESUME.md`, `MILESTONES.md`, and
-> `AGENT_TICKETS.md`. M0, M1, M2 and M3 are already shipped and verified — **do not rebuild them**.
+> `AGENT_TICKETS.md`. M0, M1, M2, M3 and M4 are already shipped and verified — **do not rebuild them**.
 > Build the **next milestone** following the same rhythm: write the code, run
 > `python -m pytest -m unit -q`, then give me a live check-step and pause for me to confirm.
 
@@ -25,8 +25,8 @@ That's it — the new session has full context from the repo.
 | M1 | Scene spec → Manim code + guardrails | ✅ shipped (verified live) |
 | M2 | Verification loops: compile-repair + vision critic + best-of-N | ✅ shipped (verified live) |
 | M3 | CLI + eval harness + content-hash cache | ✅ shipped (verified live) |
-| **M4** | **Narrated scene (TTS + sync + captions)** | ⏭️ **NEXT** |
-| M5 | Multi-scene video + consistency (**demo**) | planned |
+| M4 | Narrated scene (TTS + sync + captions) | ✅ shipped (verified live) |
+| **M5** | **Multi-scene video + consistency (demo)** | ⏭️ **NEXT** |
 | M6 | Editing & human control | planned |
 | M7 | Web UI + hardened infra | planned |
 | M8 | Polish, moat & V2 | planned |
@@ -38,7 +38,8 @@ e.g. M3 (CLI/eval/cache) wraps M2's loops, so M2 must be done before M3.
 
 ## Environment (already set up on this machine)
 
-- **Python 3.10** (global) already has: pydantic, pydantic-settings, openai, python-dotenv, pytest.
+- **Python 3.10** (global) already has: pydantic, pydantic-settings, openai, python-dotenv, pytest, gtts, mutagen
+  (M4 TTS runs host-side; `pip install -r requirements.txt` on a fresh machine).
 - **Docker Desktop** running + image **`lattice-render:0.1`** built (Manim CE v0.18.1 + LaTeX + FFmpeg).
 - **`.env`** holds the OpenRouter key (gitignored, local only). Generator = `anthropic/claude-sonnet-4.5`,
   critic = `openai/gpt-4o-mini`. If `.env` is missing (fresh clone), copy `.env.example` → `.env` and paste a key.
@@ -60,6 +61,7 @@ e.g. M3 (CLI/eval/cache) wraps M2's loops, so M2 must be done before M3.
 | M2 verify (prompt → spec → compile-repair → vision critic) | `python -m verification.run "<prompt>" [--best-of N]` |
 | M3 CLI (prompt → verified MP4, cached) | `python -m cli "<prompt>" [--quality final] [--no-cache]` |
 | M3 eval battery + regression check | `python -m scripts.run_eval [--limit N] [--set-baseline]` |
+| M4 narrate (prompt → spoken, synced, captioned scene) | `python -m scripts.narrate "<prompt>"` |
 | Quick key test | see "Cheap test" in chat history (gpt-4o-mini, max_tokens=5) |
 
 ## See results
