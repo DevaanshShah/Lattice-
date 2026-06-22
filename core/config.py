@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # --- LLM (OpenAI-compatible, swappable; NOT called in M0) ---
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""
-    llm_model: str = "anthropic/claude-sonnet-4.5"   # generator (strong coder)
+    llm_model: str = "openai/gpt-4o-mini"            # generator (cheap; ~20x less than sonnet)
     critic_model: str = "openai/gpt-4o-mini"          # vision critic (cheap, swappable)
 
     # --- TTS (Q3; from M4) ---
