@@ -30,7 +30,7 @@ class NarratedResult:
 
 
 def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
-          client: LLMClient | None = None, log=print) -> NarratedResult:
+          client: LLMClient | None = None, style=None, log=print) -> NarratedResult:
     client = client or get_client()
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
@@ -46,7 +46,7 @@ def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
     say(f"   {len(clips)} clip(s), {sum(c.duration for c in clips):.1f}s total")
 
     say("-> narrated codegen (add_sound sync)")
-    code = codegen.generate_narrated(spec, beats_audio, client=client)
+    code = codegen.generate_narrated(spec, beats_audio, client=client, style=style)
 
     say("-> rendering (sandboxed, no network; audio mounted in)")
     rep = compile_repair.repair(code, wd, quality=quality, spec=spec, client=client, log=say)
