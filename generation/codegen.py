@@ -41,3 +41,41 @@ def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = N
             + "\n".join(f"- {i.message}" for i in issues)
         )})
     raise CodegenError(f"guardrails not satisfied after {attempts} attempts: {[i.rule for i in last]}")
+
+
+def generate_narrated(spec: SceneSpec, beats_audio: list[tuple[str, str, float]], *,
+                      attempts: int = 3, client: LLMClient | None = None) -> str:
+    """SceneSpec + per-beat (narration, audio_path, duration) -> narrated Manim code (M4).
+
+    Same guardrails as `generate`, plus it must wire the audio: the code must call
+    `self.add_sound(...)` (else the scene would be silent), and is regenerated until it does.
+    """
+    client = client or get_client()
+    system = load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated")
+    rows = "\n".join(
+        f"Beat {i + 1}: narration={line!r} audio={path!r} duration={dur:.2f}s"
+        for i, (line, path, dur) in enumerate(beats_audio)
+    )
+    user = (
+        "Scene spec (JSON):\n" + spec.model_dump_json(indent=2)
+        + f"\n\nNarration + audio per beat:\n{rows}\n\n"
+        f"Generate the complete narrated Manim file. The Scene subclass MUST be named `{SCENE_CLASS}`."
+    )
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+    last: list[guardrails.Issue] = []
+    for _ in range(attempts):
+        raw = client.chat(messages)
+        code = strip_code_fences(raw)
+        issues = guardrails.check(code)
+        if "add_sound" not in code:
+            issues = issues + [guardrails.Issue("no-audio", "must call self.add_sound(...) for each beat's audio")]
+        if not issues:
+            return code
+        last = issues
+        messages.append({"role": "assistant", "content": raw})
+        messages.append({"role": "user", "content": (
+            "Fix these and resend the FULL file (code only):\n"
+            + "\n".join(f"- {i.message}" for i in issues)
+        )})
+    raise CodegenError(f"narrated codegen failed after {attempts} attempts: {[i.rule for i in last]}")
