@@ -26,13 +26,19 @@ def _outline_of(project: VideoProject) -> Outline:
 
 def build_scene(node: SceneNode, project: VideoProject, *, scenes_dir: Path,
                 quality: str, client: LLMClient, log=print) -> SceneNode:
-    """Expand the node's intent into a spec, then narrate+render it with the shared style.
+    """Build one scene: (expand if needed) -> narrate+render with the shared style.
 
-    Mutates and returns `node`. Each call uses its own work dir, so parallel builds don't clash.
+    Mutates and returns `node`. Reuses `node.spec` when it already exists (so re-time/tweak/regen
+    are deterministic and don't silently re-author the scene); only expands a fresh scene. The
+    work dir is keyed off the IMMUTABLE `node.sid`, so reorder/insert never collide. Each call
+    uses its own dir, so parallel builds don't clash.
     """
-    item = OutlineItem(title=node.title, intent=node.intent)
-    spec = planner_expand.expand(item, _outline_of(project), node.index, client=client)
-    wd = scenes_dir / f"scene_{node.index:02d}"
+    if node.spec is None:
+        item = OutlineItem(title=node.title, intent=node.intent)
+        spec = planner_expand.expand(item, _outline_of(project), node.index, client=client)
+    else:
+        spec = node.spec
+    wd = scenes_dir / f"scene_{node.sid}"
     res = narrate.build(spec, work_dir=wd, quality=quality, client=client,
                         style=project.style, log=log)
     node.spec = spec
@@ -40,6 +46,7 @@ def build_scene(node: SceneNode, project: VideoProject, *, scenes_dir: Path,
     node.compiled = res.compiled
     node.mp4 = str(res.mp4) if res.mp4 else None
     node.srt = str(res.srt) if res.srt else None
+    node.script = list(res.lines)   # persist narration text (rollback reproducibility, FR-21)
     return node
 
 

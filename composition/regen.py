@@ -23,7 +23,15 @@ def regenerate_scene(project: VideoProject, index: int, *, out_dir: str | Path,
 
     node = project.scene(index)
     say(f"-> regenerating scene {index}: {node.title} (others reused)")
+
+    # failure-safety: keep the prior good render if the rebuild doesn't produce a clip, so a
+    # failed regen never drops the scene from the stitch or persists a regression.
+    prior = node.model_copy(deep=True)
     video.build_scene(node, project, scenes_dir=scenes_dir, quality=quality, client=client, log=say)
+    if not node.mp4:
+        say(f"[regen] scene {index} did not render; keeping the prior good clip")
+        project.scenes[index] = prior
+        return project
 
     ready = project.ordered_mp4s()
     if ready:
