@@ -21,7 +21,7 @@ Two invariants run through every milestone and are non-negotiable acceptance gat
 | M3 — CLI + eval harness + cache | 1 | T-6, T-7, T-8 | ✅ shipped — verified live (generate-scene + cache hit = no re-spend; eval battery + score table + baseline); 54/54 unit |
 | M4 — Narrated scene | 2 | T-9, T-10, T-11 | ✅ shipped — verified live (narration-first + host-side gTTS + add_sound sync + SRT; MP4 has h264+aac; render stayed no-net); 69/69 unit |
 | M5 — Multi-scene video + consistency | 3 | T-12 … T-17 | ✅ shipped — **v1 demo!** verified live (outline+gate → style → 3 scenes parallel → stitched 95.5s narrated film h264+aac; a scene self-healed via compile-repair); 100/100 unit |
-| M6 — Editing & human control | 4 | T-18 … T-22 | 🔲 planned |
+| M6 — Editing & human control | 4 | T-18 … T-22 | ✅ shipped — verified live (reorder + re-stitch, no re-render; legacy M5 project migrated); 131/131 unit. Adversarial design pass caught the sid/isolation + versioned-persistence bugs pre-build |
 | M7 — Web UI + hardened infra | 5 | T-23 … T-28 | 🔲 planned |
 | M8 — Polish, moat & V2 | 6 | T-29 … T-34 | 🔲 ongoing |
 

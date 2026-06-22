@@ -9,7 +9,7 @@ Keep the "Current state" table updated as milestones ship.
 
 > This is the **Lattice** project at `c:\Users\Dev\Desktop\Franko` (AI that turns a prompt into a
 > narrated multi-scene Manim explainer video). Read `RESUME.md`, `MILESTONES.md`, and
-> `AGENT_TICKETS.md`. M0–M5 are already shipped and verified (v1 demo works) — **do not rebuild them**.
+> `AGENT_TICKETS.md`. M0–M6 are already shipped and verified (v1 demo works; scene-level editing works) — **do not rebuild them**.
 > Build the **next milestone** following the same rhythm: write the code, run
 > `python -m pytest -m unit -q`, then give me a live check-step and pause for me to confirm.
 
@@ -27,8 +27,8 @@ That's it — the new session has full context from the repo.
 | M3 | CLI + eval harness + content-hash cache | ✅ shipped (verified live) |
 | M4 | Narrated scene (TTS + sync + captions) | ✅ shipped (verified live) |
 | M5 | Multi-scene video + consistency (**demo**) | ✅ shipped — **v1 demo works** |
-| **M6** | **Editing & human control** | ⏭️ **NEXT** |
-| M7 | Web UI + hardened infra | planned |
+| M6 | Editing & human control | ✅ shipped (verified live) |
+| **M7** | **Web UI + hardened infra** | ⏭️ **NEXT** |
 | M8 | Polish, moat & V2 | planned |
 
 **Build order is sequential — do not skip.** M0 → M1 → **M2** → M3 → M4 → M5 (demo) → M6 → M7 → M8.
@@ -64,6 +64,7 @@ e.g. M3 (CLI/eval/cache) wraps M2's loops, so M2 must be done before M3.
 | M4 narrate (prompt → spoken, synced, captioned scene) | `python -m scripts.narrate "<prompt>"` |
 | M5 generate-video (topic → outline → multi-scene film) | `python -m scripts.generate_video "<topic>" [--yes] [--max-scenes N]` |
 | M5 regenerate one scene + re-stitch | `python -m scripts.regen_scene <index>` |
+| M6 scene-level editing | `python -m scripts.edit_scenes {list,reorder,delete,insert,edit-narration,tweak,history,rollback} ...` |
 | Quick key test | see "Cheap test" in chat history (gpt-4o-mini, max_tokens=5) |
 
 ## See results
