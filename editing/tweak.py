@@ -15,6 +15,7 @@ from composition.scene_dag import VideoProject
 from core.llm import LLMClient, get_client
 from core.schemas.scene_spec import SceneSpec
 from core.textutil import extract_json
+from editing import history
 from prompts.loader import load
 
 
@@ -59,6 +60,7 @@ def tweak_scene(project: VideoProject, index: int, instruction: str, *, out_dir:
     say = log or (lambda _m: None)
     say(f"-> tweaking scene {index} ({node.title}): {instruction!r}")
 
+    history.snapshot(node, out_dir=out_dir, label=f"pre-tweak: {instruction[:40]}")  # reversible
     node.spec = apply_tweak(node.spec, instruction, client=client)   # revised spec drives the rebuild
     # regenerate_scene reuses node.spec, keeps the prior clip on failure, and re-stitches on success
     regen.regenerate_scene(project, index, out_dir=out_dir, quality=quality, client=client, log=say)

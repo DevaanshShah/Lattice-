@@ -10,6 +10,7 @@ from pathlib import Path
 
 from composition.scene_dag import VideoProject
 from core.llm import LLMClient, get_client
+from editing import history
 from editing._common import restitch_and_save
 from narration import narrate
 
@@ -29,6 +30,7 @@ def edit_narration(project: VideoProject, index: int, new_lines: list[str], *,
     say = log or (lambda _m: None)
     say(f"-> editing narration for scene {index} ({node.title}); re-timing scene {index} ONLY")
 
+    history.snapshot(node, out_dir=out_dir, label="pre-narration-edit")  # reversible
     wd = Path(out_dir) / "scenes" / f"scene_{node.sid}"
     res = narrate.build(node.spec, work_dir=wd, quality=quality, client=client,
                         style=project.style, lines=list(new_lines), log=say)
