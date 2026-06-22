@@ -4,3 +4,6 @@ pydantic>=2.5
 pydantic-settings>=2.1
 python-dotenv>=1.0
 openai>=1.10
+# M4 narration (host-side TTS so the render stays no-net)
+gtts>=2.5
+mutagen>=1.47
