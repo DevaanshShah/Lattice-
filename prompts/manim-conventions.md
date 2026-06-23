@@ -49,14 +49,36 @@ class GeneratedScene(Scene):
   place layers with VGroup(layer1, layer2, ...).arrange(RIGHT, buff=2.0); connect nodes with Line(a.get_center(), b.get_center()).
   Use <= 5 nodes per layer and small radii so it fits the frame.
 - Tree / graph: nodes = labeled Circles; edges = Line/Arrow between their .get_center()s; lay out by level (a VGroup per level, arranged DOWN).
-- HIGHLIGHT / emphasis = a THIN OUTLINE or a flash, NEVER a big filled shape over content (a filled
-  Rectangle behind text/a matrix just covers and overlaps it — the #1 highlight defect). Use:
-  SurroundingRectangle(x, color=YELLOW) (unfilled, auto-sized to x) | Indicate(x) | x.animate.set_color(YELLOW).
-  To highlight a matrix ROW or COLUMN, wrap the matrix's own parts:
-    SurroundingRectangle(m.get_rows()[0], color=YELLOW)      # first row
-    SurroundingRectangle(m.get_columns()[0], color=YELLOW)   # first column
-  Do NOT hand-draw your own Rectangle bar across the matrix. Labels are plain Text().next_to(...) —
-  never a filled background bar.
+- HIGHLIGHT one element among many = make IT stand out, NEVER cover it. Principle: outline / pulse /
+  recolor / scale the target, AND/OR dim the rest — never a big filled shape over content (a filled
+  Rectangle behind text just overlaps it — the #1 highlight defect). Pick one or combine:
+    self.play(Create(SurroundingRectangle(x, color=YELLOW)))    # thin auto-sized outline (unfilled)
+    self.play(Indicate(x))                                      # quick pulse, no leftover mobject
+    self.play(x.animate.set_color(YELLOW))                      # or .scale(1.2) to enlarge in place
+    self.play(*[m.animate.set_opacity(0.3) for m in others])    # dim the rest; restore with set_opacity(1)
+  The target is any VISIBLE mobject (Text/MathTex, shapes, plot curves, Matrix parts, VGroups — all
+  support set_opacity). A matrix row/column is just one case — wrap its own parts, never draw a bar across it:
+    SurroundingRectangle(m.get_rows()[0], color=YELLOW)         # one row  (get_columns()[0] for a column)
+  Labels are plain Text().next_to(...), never a filled background bar.
+
+=== COMMON PATTERNS (map any scene beat to a known-good idiom; combine these, keep them snappy) ===
+- INTRODUCE / BUILD UP: build a VGroup(a, b, c).arrange(RIGHT, buff=0.5), then reveal — together with
+  self.play(FadeIn(grp)), or one at a time with self.play(LaggedStart(*[FadeIn(m) for m in grp], lag_ratio=0.2)).
+- FOCUS one element (bring to CENTRE): enlarge it at origin, dim the rest, then undo (save_state FIRST).
+    focus.save_state()
+    self.play(focus.animate.move_to(ORIGIN).scale(1.6), *[m.animate.set_opacity(0.25) for m in rest])
+    self.play(Restore(focus), *[m.animate.set_opacity(1) for m in rest])
+- REMOVE / DELETE: fade it out, drop it from the group, re-flow so there is NO gap.
+    self.play(FadeOut(x)); grp.remove(x); self.play(grp.animate.arrange(RIGHT, buff=0.5))
+- MARK / POINT with an arrow: a buffed arrow + label, neither overlapping the target.
+    arr = Arrow(label.get_top(), target.get_bottom(), buff=0.25); self.play(GrowArrow(arr))   # or Brace(target, DOWN)
+- COMPARE two things side by side: arrange, then outline each.
+    pair = VGroup(left, right).arrange(RIGHT, buff=1.5); self.play(FadeIn(pair))
+    self.play(Create(SurroundingRectangle(left, color=BLUE)), Create(SurroundingRectangle(right, color=GREEN)))
+- STEP THROUGH items one at a time (snappy): for m in grp: self.play(Indicate(m), run_time=0.5).
+- TRANSFORM / MORPH a into b (same spot): self.play(ReplacementTransform(a, b))  (Transform(a, b) keeps a's handle).
+- MOVE / REORDER: self.play(x.animate.move_to(target.get_center())), or grp.animate.arrange(...) to re-lay-out.
+- CONNECT elements: Line(a.get_center(), b.get_center()) or Arrow(..., buff=0.1); self.play(Create(line)).
 
 === OBJECTS & API ===
 - Words: Text("..."). Math: MathTex(r"..."). Shapes: Circle, Square, Rectangle, Arrow, Line, Dot,
