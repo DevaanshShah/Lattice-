@@ -11,12 +11,25 @@ import json
 import re
 
 
+_CODE_START = re.compile(r"^[ \t]*(from\s+\w[\w.]*\s+import|import\s+\w)", re.MULTILINE)
+
+
 def strip_code_fences(text: str) -> str:
-    """Remove a leading ```lang fence and a trailing ``` fence, if present."""
+    """Extract Python from a model reply, tolerating fences AND leading/trailing prose.
+
+    Weak models often wrap code as "Here is the file:\\n```python\\n...\\n```" or leak a sentence
+    before the import. We (1) take the contents of the first fenced block if any fence exists
+    anywhere, then (2) drop any leading prose before the first real `import`/`from ... import`.
+    """
     t = text.strip()
-    if t.startswith("```"):
-        t = re.sub(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?", "", t)
-        t = re.sub(r"\n?```[ \t]*$", "", t)
+    fenced = re.search(r"```[a-zA-Z0-9_+-]*[ \t]*\r?\n(.*?)```", t, re.DOTALL)
+    if fenced:
+        t = fenced.group(1).strip()
+    else:
+        t = re.sub(r"\n?```[ \t]*$", "", re.sub(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?", "", t)).strip()
+    m = _CODE_START.search(t)          # slice off any leading prose before the code actually starts
+    if m and m.start() > 0:
+        t = t[m.start():]
     return t.strip()
 
 

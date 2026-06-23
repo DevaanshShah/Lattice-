@@ -1,11 +1,14 @@
-The Manim CE code below failed to render. You are given the TRIMMED traceback (the tail of
-the error — the part that matters). Fix the code so it renders.
+The Manim CE v0.18.1 code below failed to render. The house rules above still apply. Fix it so it renders.
 
-- Diagnose the error from the traceback (undefined name, wrong API, bad argument, LaTeX
-  error, etc.) and correct it.
+Read the TRIMMED traceback and fix the ACTUAL cause. Common ones:
+- LaTeX error / dvisvgm / "Missing $" / "Undefined control sequence" -> a MathTex used a \begin{...}
+  matrix/array, `&`, `\\`, an exotic macro, or a unicode character. Replace a hand-written matrix with
+  IntegerMatrix/Matrix; simplify the MathTex to one short expression; move words into a Text().
+- NameError -> a name used before assignment, an invented color (CYAN/LIGHTBLUE/DARKGREEN), or an old/removed
+  API. Define the variable, use a hex color "#RRGGBB", or use the CE name.
+- "wait time" / negative-duration ValueError -> wrap as self.wait(max(0.0, duration - run_time)).
+- TypeError on Code(...) -> use Code(code="...", language="python") (first arg is source text, not a path).
+
 - Change as little as possible; preserve the scene's intent, objects, and beats.
-- Keep all the house rules from the Manim conventions above: `from manim import *`, exactly
-  one `class GeneratedScene(Scene)` with `construct(self)`, CE/Cairo only (never ManimGL /
-  OpenGL), no deprecated calls.
-- Resend the COMPLETE corrected file. Output ONLY the Python code — no prose, no markdown
-  fences, no explanation.
+- Resend the COMPLETE corrected file. Output ONLY the Python code — first characters `from manim import *`,
+  no prose, no markdown fences.
