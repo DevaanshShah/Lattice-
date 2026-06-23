@@ -100,7 +100,8 @@ def test_narrate_build_happy_path(tmp_path, monkeypatch):
     monkeypatch.setattr(narrate.compile_repair, "repair",
                         lambda code, wd, **k: RepairResult(True, code, mp4, [], []))
 
-    res = narrate.build(SPEC, work_dir=tmp_path, client=object(), log=None)
+    # critic=False exercises the compile-repair-only orchestration wiring
+    res = narrate.build(SPEC, work_dir=tmp_path, client=object(), critic=False, log=None)
     assert res.compiled and res.mp4 == mp4
     assert res.srt and res.srt.exists()
     txt = res.srt.read_text(encoding="utf-8")
@@ -122,5 +123,37 @@ def test_narrate_build_reports_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(narrate.compile_repair, "repair",
                         lambda code, wd, **k: RepairResult(False, code, None, [], [], "boom"))
 
-    res = narrate.build(SPEC, work_dir=tmp_path, client=object(), log=None)
+    res = narrate.build(SPEC, work_dir=tmp_path, client=object(), critic=False, log=None)
     assert res.compiled is False and res.mp4 is None and res.srt is None
+
+
+@pytest.mark.unit
+def test_narrate_build_runs_vision_critic_and_preserves_sync(tmp_path, monkeypatch):
+    """When the critic is on (default), narrate.build routes through vision_critic.run, and a
+    rendered (best-attempt) clip still yields captions. The narration-preserving fixer is passed in."""
+    from core.schemas.narration import NarrationScript
+    from narration import narrate
+    from narration.tts import Clip
+    from verification.vision_critic import CritiqueReport, CritiqueResult
+
+    monkeypatch.setattr(narrate.narr_script, "generate",
+                        lambda spec, **k: NarrationScript(lines=["alpha", "beta"]))
+    monkeypatch.setattr(narrate.tts, "synthesize_lines",
+                        lambda lines, *, out_dir, **k: [Clip(l, Path(out_dir) / f"c{i}.mp3", 1.0)
+                                                        for i, l in enumerate(lines)]
+                        if Path(out_dir).mkdir(parents=True, exist_ok=True) is None else [])
+    monkeypatch.setattr(narrate.codegen, "generate_narrated", lambda spec, beats, **k: "code+add_sound")
+
+    mp4 = tmp_path / "v.mp4"
+    seen = {}
+
+    def fake_run(code, wd, spec, **k):
+        seen["issue_regen_fn"] = k.get("issue_regen_fn")
+        return CritiqueResult(True, CritiqueReport(ok=True), code, mp4)
+
+    monkeypatch.setattr(narrate.vision_critic, "run", fake_run)
+
+    res = narrate.build(SPEC, work_dir=tmp_path, client=object(), log=None)  # critic on (default)
+    assert res.compiled and res.mp4 == mp4
+    assert callable(seen["issue_regen_fn"])             # the narration-preserving fixer was wired in
+    assert res.srt and "alpha" in res.srt.read_text(encoding="utf-8")

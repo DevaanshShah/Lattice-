@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     render_network: bool = False  # sandbox: NO network unless explicitly enabled (Q5)
     render_timeout_s: int = 600
 
+    # --- sandbox hardening (M7 / FR-23): bound model-written code, contain hostile snippets ---
+    # These ride on top of the day-one guarantees (--network=none + image's non-root user + --rm).
+    render_memory: str = "2g"          # hard RAM cap (container OOM-killed past it)
+    render_cpus: str = "2.0"           # CPU quota (no host CPU monopoly)
+    render_pids_limit: int = 512       # cap live processes -> contains fork bombs
+    render_read_only: bool = False     # read-only root FS (writable: the mounted /manim + tmpfs)
+    render_tmpfs_size: str = "512m"    # size of the ephemeral /tmp tmpfs when read_only is on
+    render_user: str = ""              # explicit --user (uid[:gid]); empty = the image's non-root default
+
     # quality presets -> manim CLI flags. preview = fast/low-res, final = slow/high-res.
     quality_preview_flag: str = "-ql"  # 480p15
     quality_final_flag: str = "-qh"    # 1080p60
@@ -35,6 +44,18 @@ class Settings(BaseSettings):
     # --- vision critic (M2) ---
     critic_frames: int = 2            # keyframes per critique (fewer frames = fewer image tokens)
     critic_image_detail: str = "low"  # "low" ~= 85 vision tokens/frame vs ~765 for "high" — big cut
+    video_critic_enabled: bool = True  # M7: run the vision critic in the multi-scene video path too
+                                       # (catches overlap/off-screen/blank per scene). Off = cheaper, blind.
+    layout_lint_enabled: bool = True   # FREE deterministic off-frame lint BEFORE the paid vision call:
+                                       # geometry catches off-frame exactly, so the generator fixes it
+                                       # in one pass instead of the critic flailing across iterations.
+    vision_confirm: bool = True        # paid vision critic as a confirmation pass (defects geometry
+                                       # can't see: merged glyphs, crowding, color). Default for the
+                                       # SINGLE-scene generate-scene moat. The multi-scene VIDEO path
+                                       # overrides this with video_vision_confirm (below).
+    video_vision_confirm: bool = False  # MULTI-scene video: paid vision OFF by default — across 8 scenes
+                                        # it adds up, and the free off-frame lint + codegen guardrails carry
+                                        # most of the value. Set LATTICE_VIDEO_VISION_CONFIRM=1 to re-enable.
 
     # --- token budget (cost control) ---
     # caps output per call: bounds output-token cost (the dominant cost) AND the upfront credit

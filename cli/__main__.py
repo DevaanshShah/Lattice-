@@ -66,6 +66,15 @@ def generate_scene(
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
+    # Subcommand routing kept minimal so the historic `lattice "<prompt>"` form is unchanged.
+    raw = sys.argv[1:] if argv is None else argv
+    if raw and raw[0] == "render-sandbox":      # M7 / FR-23 containment harness
+        from scripts.render_sandbox import main as sandbox_main
+        return sandbox_main(raw[1:])
+    if raw and raw[0] == "serve":               # M7 web UI
+        from scripts.serve import main as serve_main
+        return serve_main(raw[1:])
+
     enable_utf8()
     ap = argparse.ArgumentParser(prog="generate-scene",
                                  description="Prompt -> verified Manim scene MP4 (M3 CLI).")

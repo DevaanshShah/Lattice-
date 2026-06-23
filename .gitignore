@@ -37,3 +37,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# --- local reference clones / scratch (NOT Lattice code) ---
+# (gitignore has no inline comments — keep patterns on their own line)
+# external manim-from-prompt repo, kept locally for reference
+manimator/
+# scratch probe of Manim's bbox API
+/test_manim_api.py
+# accidental output-redirect artifact
+*scratchpadtest_manim_api.py

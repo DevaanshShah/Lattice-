@@ -46,8 +46,13 @@ class GeneratedScene(Scene):
 - Function plot: ax = Axes(x_range=[-3, 3, 1], y_range=[-2, 2, 1]).scale(0.8); g = ax.plot(lambda x: x**2, color=BLUE).
   The plotted function MUST be finite over the WHOLE x_range — no 1/x, no log/sqrt of <= 0. NumberLine(x_range=[0, 10, 1], length=10).
 - Neural network / layered graph: each layer = VGroup(*[Circle(radius=0.2) for _ in range(n)]).arrange(DOWN, buff=0.4);
-  place layers with VGroup(layer1, layer2, ...).arrange(RIGHT, buff=2.0); connect nodes with Line(a.get_center(), b.get_center()).
-  Use <= 5 nodes per layer and small radii so it fits the frame.
+  place layers with net = VGroup(layer1, layer2, ...).arrange(RIGHT, buff=2.0). For a FULLY-CONNECTED net you MUST
+  connect EVERY node of a layer to EVERY node of the next (nested loop) — thin + faint so it reads as a mesh:
+    edges = VGroup(*[Line(a.get_center(), b.get_center(), stroke_width=1.5, color=GREY)
+                     for a in layer1 for b in layer2])
+  A SINGLE Arrow between whole layer GROUPS is only for a high-level block diagram (e.g. "input -> network -> output"),
+  NEVER for a real network — if the scene is about connections/weights, draw the node-to-node edges. Draw the edges
+  BEHIND the nodes (self.add(edges) before the layers, or edges.set_z_index(-1)). <= 5 nodes/layer, small radii, fits frame.
 - Tree / graph: nodes = labeled Circles; edges = Line/Arrow between their .get_center()s; lay out by level (a VGroup per level, arranged DOWN).
 - HIGHLIGHT one element among many = make IT stand out, NEVER cover it. Principle: outline / pulse /
   recolor / scale the target, AND/OR dim the rest — never a big filled shape over content (a filled
@@ -103,11 +108,17 @@ class GeneratedScene(Scene):
   y in [-3.5, 3.5] (that margin leaves room for the object's own width/height). Prefer relative placement —
   .to_edge(DIR), .next_to(obj, DIR, buff=...), .arrange(DIR, buff=...) — over absolute .move_to(LEFT*7).
 - BANDS, kept physically apart so nothing collides:
-    TITLE  : title at the top                          -> x.to_edge(UP)
+    TITLE  : title at the top, ALWAYS shrunk to fit the frame width so it never runs off the edges ->
+             title = Text("...").to_edge(UP);  title.scale_to_fit_width(min(title.width, 12.5))
+             (a long title clipped on the left/right is the #1 title defect — never skip the fit-to-width)
     MAIN   : the diagram / equation / plot, centered   -> x.move_to(ORIGIN) (or slightly up, to leave title room)
     LABEL  : a label sits next to its own object       -> label.next_to(obj, DOWN, buff=0.15)
     STATUS : transient comparison/step text, bottom    -> x.to_edge(DOWN)
   Never put STATUS text on top of the MAIN diagram or a LABEL.
+- LABELLING MANY EDGES/LINES (e.g. weights w1..wn on the arrows into a neuron): place each label at ITS OWN line's
+  midpoint, nudged clear of the line, font_size <= 24 — and stagger adjacent ones so two labels on neighbouring
+  lines never land on the same point (merged edge labels like "w2"/"w3" stacked is a common defect):
+    lbl = MathTex(r"w_2", font_size=24).next_to(line2.point_from_proportion(0.5), UP, buff=0.12)
 - buff >= 0.2 between any two objects. A column/row of related items (matrix entries, steps, options)
   MUST be one VGroup(...).arrange(DOWN or RIGHT, buff=0.4) for EVEN spacing — never hand-place each item
   at its own coordinate (the gaps come out uneven).

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lattice — prompt → narrated explainer</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Lattice</h1>
+    <span class="tag">prompt → narrated multi-scene explainer</span>
+  </header>
+
+  <!-- 1. Prompt -->
+  <section id="prompt-panel" class="panel">
+    <h2>1 · Topic</h2>
+    <div class="row">
+      <input id="topic" type="text" placeholder="e.g. how TCP works" autocomplete="off" />
+      <label class="quality">quality
+        <select id="quality">
+          <option value="preview">preview (fast draft)</option>
+          <option value="final">final (high-res)</option>
+        </select>
+      </label>
+      <button id="plan-btn">Plan outline</button>
+    </div>
+    <p class="hint">Planning is cheap — you approve the outline before any scene renders.</p>
+  </section>
+
+  <!-- 2. Outline approval gate -->
+  <section id="outline-panel" class="panel hidden">
+    <h2>2 · Approve outline <small id="pid-label"></small></h2>
+    <ol id="outline-list"></ol>
+    <div class="row">
+      <button id="build-btn">Approve &amp; render →</button>
+      <span class="hint">Untick a scene to cut it before paying to render.</span>
+    </div>
+  </section>
+
+  <!-- 3. Scenes -->
+  <section id="scenes-panel" class="panel hidden">
+    <div class="row spread">
+      <h2>3 · Scenes</h2>
+      <div class="row">
+        <select id="subtitle-mode">
+          <option value="none">no subtitles</option>
+          <option value="burn">burned-in subtitles</option>
+          <option value="separate">separate .srt track</option>
+        </select>
+        <button id="script-btn" class="ghost">Download script</button>
+        <button id="download-btn">Download final</button>
+      </div>
+    </div>
+    <div id="scenes"></div>
+  </section>
+
+  <!-- live progress -->
+  <aside id="progress" class="panel hidden">
+    <div class="prog-wrap">
+      <div class="cylinder" id="cylinder">
+        <div class="liquid" id="liquid"></div>
+        <span class="pct" id="pct">0%</span>
+      </div>
+      <div class="prog-info">
+        <div class="phase-label" id="phase-label">Thinking…</div>
+        <div class="phase-sub" id="phase-sub"></div>
+      </div>
+    </div>
+    <details class="log-details">
+      <summary>Technical details</summary>
+      <pre id="log"></pre>
+    </details>
+  </aside>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

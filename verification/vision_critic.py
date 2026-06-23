@@ -162,9 +162,12 @@ def run(code: str, work_dir: str | Path, spec: SceneSpec | None = None, *,
         compile_regen_fn: compile_repair.RegenFn | None = None,
         issue_regen_fn: Callable[[str, CritiqueReport], str] | None = None,
         caps: Caps | None = None, quality: str = "preview", frames: int | None = None,
-        client: LLMClient | None = None,
+        client: LLMClient | None = None, vision_confirm: bool | None = None,
         log: Callable[[str], None] | None = None) -> CritiqueResult:
-    """Compile-repair → critique → fix → re-render, up to the critic cap; return best."""
+    """Compile-repair → free layout lint → (optional) paid vision critique → fix → re-render, up to
+    the cap; return best. `vision_confirm` overrides settings.vision_confirm (the video path passes
+    the cheaper video_vision_confirm)."""
+    do_vision = settings.vision_confirm if vision_confirm is None else vision_confirm
     caps = caps or Caps()
     frames = settings.critic_frames if frames is None else frames  # config-driven (cost lever)
     work_dir = Path(work_dir)
@@ -187,12 +190,30 @@ def run(code: str, work_dir: str | Path, spec: SceneSpec | None = None, *,
                                     quality=quality, frames=frames, spec=spec,
                                     client=client, log=log)
         if not rep.ok:
-            # never compiled -> vision is NOT called (compile gates vision)
-            say(f"[critic] iter {it}: scene never compiled; skipping vision")
+            # never compiled -> lint/vision NOT called (compile gates everything)
+            say(f"[critic] iter {it}: scene never compiled; skipping lint+vision")
             return CritiqueResult(False, None, rep.code, iterations=it, repair=rep)
 
-        # LAYER 2 (paid): structured visual critique of multiple frames.
-        report = critic_fn(rep.frames)
+        # LAYER 1.5 (FREE, deterministic): off-frame geometry lint. If it finds issues, fix them
+        # with the SAME generator fixer — no paid vision call this iteration.
+        if settings.layout_lint_enabled:
+            from verification import layout_lint  # lazy: only the video path needs it
+            lreport = layout_lint.lint(work_dir)
+            if lreport.issues:
+                result = CritiqueResult(True, lreport, rep.code, rep.mp4, list(rep.frames), it, rep)
+                say(f"[critic] iter {it}/{caps.max_critic_iters}: layout-lint found "
+                    f"{lreport.n_issues} off-frame issue(s); fixing FREE (no vision call)")
+                if best is None or result.score() > best.score():
+                    best = result
+                if it < caps.max_critic_iters:
+                    current = issue_regen_fn(rep.code, lreport)
+                continue  # re-render; DO NOT spend a vision call on a defect geometry already caught
+
+        # LAYER 2 (paid, optional): structured visual critique for what geometry can't see.
+        if do_vision:
+            report = critic_fn(rep.frames)
+        else:
+            report = CritiqueReport(ok=True, score=None, issues=[])  # lint-only mode: nothing more to check
         result = CritiqueResult(True, report, rep.code, rep.mp4, list(rep.frames), it, rep)
         say(f"[critic] iter {it}/{caps.max_critic_iters}: "
             f"score={report.effective_score()} issues={report.n_issues} ok={report.ok}")

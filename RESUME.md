@@ -28,7 +28,7 @@ That's it — the new session has full context from the repo.
 | M4 | Narrated scene (TTS + sync + captions) | ✅ shipped (verified live) |
 | M5 | Multi-scene video + consistency (**demo**) | ✅ shipped — **v1 demo works** |
 | M6 | Editing & human control | ✅ shipped (verified live) |
-| **M7** | **Web UI + hardened infra** | ⏭️ **NEXT** |
+| **M7** | **Web UI + hardened infra** | 🧪 **code complete — unit gate green (178/178); live browser check pending** |
 | M8 | Polish, moat & V2 | planned |
 
 **Build order is sequential — do not skip.** M0 → M1 → **M2** → M3 → M4 → M5 (demo) → M6 → M7 → M8.
@@ -65,6 +65,8 @@ e.g. M3 (CLI/eval/cache) wraps M2's loops, so M2 must be done before M3.
 | M5 generate-video (topic → outline → multi-scene film) | `python -m scripts.generate_video "<topic>" [--yes] [--max-scenes N]` |
 | M5 regenerate one scene + re-stitch | `python -m scripts.regen_scene <index>` |
 | M6 scene-level editing | `python -m scripts.edit_scenes {list,reorder,delete,insert,edit-narration,tweak,history,rollback} ...` |
+| M7 serve the web UI | `python -m scripts.serve [--host H] [--port 8000]`  (or `lattice serve`) → browser at http://127.0.0.1:8000 |
+| M7 sandbox containment check | `lattice render-sandbox tests/fixtures/{fork_bomb,net_egress}.py` → contained (non-zero exit), host untouched |
 | Quick key test | see "Cheap test" in chat history (gpt-4o-mini, max_tokens=5) |
 
 ## See results

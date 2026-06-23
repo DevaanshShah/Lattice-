@@ -19,13 +19,17 @@ class NarrationError(RuntimeError):
     pass
 
 
-def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = None) -> NarrationScript:
+def generate(spec: SceneSpec, *, context: str | None = None, attempts: int = 3,
+             client: LLMClient | None = None) -> NarrationScript:
+    """`context` (optional) is the story arc — where this scene sits in the whole video and what
+    came before/after — so the narration links scenes into one continuous lesson, not isolated clips."""
     client = client or get_client()
     beats = "\n".join(
         f"{i + 1}. {b.action} {b.targets}" + (f" — {b.notes}" if b.notes else "")
         for i, b in enumerate(spec.beats)
     )
-    user = (f"Scene title: {spec.title}\nSeed narration: {spec.narration}\n"
+    ctx = f"{context}\n\n" if context else ""
+    user = (f"{ctx}Scene title: {spec.title}\nSeed narration: {spec.narration}\n"
             f"Beats ({len(spec.beats)}):\n{beats}\n\nReturn the narration JSON now.")
     messages = [{"role": "system", "content": load("narration")},
                 {"role": "user", "content": user}]

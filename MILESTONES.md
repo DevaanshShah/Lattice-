@@ -22,7 +22,7 @@ Two invariants run through every milestone and are non-negotiable acceptance gat
 | M4 — Narrated scene | 2 | T-9, T-10, T-11 | ✅ shipped — verified live (narration-first + host-side gTTS + add_sound sync + SRT; MP4 has h264+aac; render stayed no-net); 69/69 unit |
 | M5 — Multi-scene video + consistency | 3 | T-12 … T-17 | ✅ shipped — **v1 demo!** verified live (outline+gate → style → 3 scenes parallel → stitched 95.5s narrated film h264+aac; a scene self-healed via compile-repair); 100/100 unit |
 | M6 — Editing & human control | 4 | T-18 … T-22 | ✅ shipped — verified live (reorder + re-stitch, no re-render; legacy M5 project migrated); 131/131 unit. Adversarial design pass caught the sid/isolation + versioned-persistence bugs pre-build |
-| M7 — Web UI + hardened infra | 5 | T-23 … T-28 | 🔲 planned |
+| M7 — Web UI + hardened infra | 5 | T-23 … T-28 | 🧪 code complete — thin FastAPI skin over the M6 engine (async job queue + per-scene status + SSE progress + quality toggle + export w/ burned-in or separate captions) + hardened sandbox (mem/cpu/pids caps, wall-clock kill, opt-in read-only FS, containment harness); 178/178 unit. **Live browser check pending.** |
 | M8 — Polish, moat & V2 | 6 | T-29 … T-34 | 🔲 ongoing |
 
 **Reality check:** M0–M5 (~6 weeks part-time) already give the portfolio milestone — *type a topic, approve the outline, get a narrated multi-scene video.* M6–M8 turn that demo into a product.

@@ -34,6 +34,66 @@ def build_concat_command(work_dir: str | Path, list_file: str, out_rel: str, *,
     return cmd
 
 
+def _docker_prefix(work_dir: str | Path, *, network: bool | None, image: str | None) -> list[str]:
+    net = settings.render_network if network is None else network
+    cmd = ["docker", "run", "--rm"]
+    if not net:
+        cmd.append("--network=none")
+    cmd += ["-v", f"{Path(work_dir).resolve().as_posix()}:/manim", "-w", "/manim", image or settings.render_image]
+    return cmd
+
+
+def build_probe_audio_command(work_dir: str | Path, mp4_rel: str, *,
+                              network: bool | None = None, image: str | None = None) -> list[str]:
+    """ffprobe argv that prints audio stream indices (empty output => the clip has no audio)."""
+    return _docker_prefix(work_dir, network=network, image=image) + [
+        "ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+        "-of", "csv=p=0", mp4_rel]
+
+
+def build_add_silent_audio_command(work_dir: str | Path, in_rel: str, out_rel: str, *,
+                                   network: bool | None = None, image: str | None = None) -> list[str]:
+    """ffmpeg argv that muxes a silent stereo AAC track onto a video-only clip (copies the video)."""
+    return _docker_prefix(work_dir, network=network, image=image) + [
+        "ffmpeg", "-loglevel", "error", "-y", "-i", in_rel,
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-shortest", out_rel]
+
+
+def _ensure_uniform_audio(work_dir: str | Path, part_rels: list[str], *,
+                          network: bool | None = None, image: str | None = None,
+                          timeout: int | None = None) -> None:
+    """If clips have MIXED audio presence, the concat demuxer drops audio from the whole film. Give
+    any silent clip a silent track so one bad scene can't mute everything. No-op when uniform."""
+    if len(part_rels) <= 1:
+        return
+    t = timeout or settings.render_timeout_s
+
+    def has_audio(rel: str) -> bool:
+        try:
+            p = subprocess.run(build_probe_audio_command(work_dir, rel, network=network, image=image),
+                               capture_output=True, encoding="utf-8", errors="replace", timeout=t)
+            return p.returncode == 0 and bool((p.stdout or "").strip())
+        except (OSError, subprocess.SubprocessError):
+            return True  # can't tell -> assume fine, don't rewrite
+
+    have = [has_audio(r) for r in part_rels]
+    if all(have) or not any(have):
+        return  # uniform (all voiced or all silent) -> the concat handles it fine
+    for rel, ok in zip(part_rels, have):
+        if ok:
+            continue
+        tmp = rel + ".aud.mp4"
+        try:
+            p = subprocess.run(build_add_silent_audio_command(work_dir, rel, tmp, network=network, image=image),
+                               capture_output=True, encoding="utf-8", errors="replace", timeout=t)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        out = Path(work_dir) / tmp
+        if p.returncode == 0 and out.exists():
+            out.replace(Path(work_dir) / rel)  # swap the silent clip for one carrying a silent track
+
+
 def stitch(mp4_paths: list[str | Path], *, work_dir: str | Path, out_name: str = "final.mp4",
            reencode: bool = False, network: bool | None = None, image: str | None = None,
            timeout: int | None = None) -> Path:
@@ -52,6 +112,8 @@ def stitch(mp4_paths: list[str | Path], *, work_dir: str | Path, out_name: str =
         dst = parts / f"part_{i:03d}.mp4"
         shutil.copy2(src, dst)
         rels.append(f"parts/{dst.name}")
+    # one silent scene must not mute the whole film: give any voiceless clip a silent track first
+    _ensure_uniform_audio(work_dir, rels, network=network, image=image, timeout=timeout)
     (work_dir / "concat.txt").write_text("".join(f"file '{r}'\n" for r in rels), encoding="utf-8")
 
     cmd = build_concat_command(work_dir, "concat.txt", out_name, reencode=reencode,
