@@ -49,7 +49,14 @@ class GeneratedScene(Scene):
   place layers with VGroup(layer1, layer2, ...).arrange(RIGHT, buff=2.0); connect nodes with Line(a.get_center(), b.get_center()).
   Use <= 5 nodes per layer and small radii so it fits the frame.
 - Tree / graph: nodes = labeled Circles; edges = Line/Arrow between their .get_center()s; lay out by level (a VGroup per level, arranged DOWN).
-- Emphasis: Indicate(x); SurroundingRectangle(x, color=YELLOW); x.animate.set_color(YELLOW).
+- HIGHLIGHT / emphasis = a THIN OUTLINE or a flash, NEVER a big filled shape over content (a filled
+  Rectangle behind text/a matrix just covers and overlaps it — the #1 highlight defect). Use:
+  SurroundingRectangle(x, color=YELLOW) (unfilled, auto-sized to x) | Indicate(x) | x.animate.set_color(YELLOW).
+  To highlight a matrix ROW or COLUMN, wrap the matrix's own parts:
+    SurroundingRectangle(m.get_rows()[0], color=YELLOW)      # first row
+    SurroundingRectangle(m.get_columns()[0], color=YELLOW)   # first column
+  Do NOT hand-draw your own Rectangle bar across the matrix. Labels are plain Text().next_to(...) —
+  never a filled background bar.
 
 === OBJECTS & API ===
 - Words: Text("..."). Math: MathTex(r"..."). Shapes: Circle, Square, Rectangle, Arrow, Line, Dot,
