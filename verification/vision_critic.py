@@ -27,7 +27,7 @@ from pathlib import Path
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from core.config import settings
-from core.llm import LLMClient, get_client
+from core.llm import LLMClient, get_client, get_critic_client
 from core.schemas.scene_spec import SceneSpec
 from core.textutil import extract_json, strip_code_fences
 from prompts.loader import load
@@ -90,7 +90,7 @@ def critique(frames: list[Path], *, intent: str = "", client: LLMClient | None =
     """
     if not frames:
         raise CritiqueError("no frames to critique (compile must succeed first)")
-    client = client or get_client(model=model or settings.critic_model)
+    client = client or get_critic_client()  # may be a different provider (e.g. Gemini for vision)
 
     text = ("Intended scene content:\n" + (intent or "(none given)")
             + f"\n\nCritique these {len(frames)} frames (sampled start→end) and return JSON.")

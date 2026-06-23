@@ -64,3 +64,13 @@ class LLMClient:
 
 def get_client(**kw: Any) -> LLMClient:
     return LLMClient(**kw)
+
+
+def get_critic_client() -> LLMClient:
+    """Vision-critic client. May live on a DIFFERENT provider than the generator
+    (e.g. Groq generator + Gemini vision critic). Falls back to the generator's provider."""
+    return LLMClient(
+        base_url=settings.critic_base_url or settings.llm_base_url,
+        api_key=settings.critic_api_key or settings.llm_api_key,
+        model=settings.critic_model,
+    )

@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "openai/gpt-4o-mini"            # generator (cheap; ~20x less than sonnet)
     critic_model: str = "openai/gpt-4o-mini"          # vision critic (cheap, swappable)
+    critic_base_url: str = ""                         # optional: critic on a DIFFERENT provider (e.g. Groq gen + Gemini critic). empty = same as generator
+    critic_api_key: str = ""                          # empty = reuse llm_api_key
     prompt_cache_enabled: bool = True                 # mark static system prompt cacheable (Anthropic cache_control)
 
     # --- TTS (Q3; from M4) ---
