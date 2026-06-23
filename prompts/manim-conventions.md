@@ -79,6 +79,10 @@ class GeneratedScene(Scene):
 - TRANSFORM / MORPH a into b (same spot): self.play(ReplacementTransform(a, b))  (Transform(a, b) keeps a's handle).
 - MOVE / REORDER: self.play(x.animate.move_to(target.get_center())), or grp.animate.arrange(...) to re-lay-out.
 - CONNECT elements: Line(a.get_center(), b.get_center()) or Arrow(..., buff=0.1); self.play(Create(line)).
+- SHOW A -> B side by side (e.g. a matrix and its transpose): lay the whole thing out as
+  row = VGroup(matrix_a, arrow, matrix_b).arrange(RIGHT, buff=1.2), then put any caption ABOVE it with
+  caption.next_to(row, UP, buff=0.4). The arrow and caption live in the GAP/above — NEVER overlapping
+  matrix_a or matrix_b (a centred caption landing on the matrices is the defect to avoid).
 
 === OBJECTS & API ===
 - Words: Text("..."). Math: MathTex(r"..."). Shapes: Circle, Square, Rectangle, Arrow, Line, Dot,
@@ -104,7 +108,9 @@ class GeneratedScene(Scene):
     LABEL  : a label sits next to its own object       -> label.next_to(obj, DOWN, buff=0.15)
     STATUS : transient comparison/step text, bottom    -> x.to_edge(DOWN)
   Never put STATUS text on top of the MAIN diagram or a LABEL.
-- buff >= 0.2 between any two objects. Group related items as VGroup(...).arrange(DIR, buff=...).
+- buff >= 0.2 between any two objects. A column/row of related items (matrix entries, steps, options)
+  MUST be one VGroup(...).arrange(DOWN or RIGHT, buff=0.4) for EVEN spacing — never hand-place each item
+  at its own coordinate (the gaps come out uneven).
 - SCALE TRIGGER: a Text/MathTex longer than ~30 chars -> font_size <= 28 or scale until width < 12.
   A row/VGroup wider than ~13 units -> .scale_to_fit_width(12) the whole group.
 - TRANSIENT TEXT: FadeOut (or ReplacementTransform) the old text BEFORE showing new text in the same spot — never two texts in one region at once.

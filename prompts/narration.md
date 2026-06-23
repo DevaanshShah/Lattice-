@@ -11,4 +11,9 @@ Rules:
 - Conversational and explanatory, not a robotic list of object names. Teach the idea.
 - Provide the SAME number of lines as there are beats. For a 'wait' beat, give a short
   connecting sentence (it's fine for it to be brief).
+- SPEAK it — do NOT write math notation. These lines are read ALOUD by text-to-speech, so use
+  spoken words, never symbols / LaTeX / sub- or super-scripts. Convert to how it is said:
+    a_11 -> "a one one"   (NOT "a eleven")      A^T -> "A transpose"      x^2 -> "x squared"
+    a/b or \frac{a}{b} -> "a over b"            \sum -> "the sum of"      <= -> "less than or equal to"
+    * -> "times"          pi -> "pie"           a_ij -> "a i j"
 - No labels, no markdown — just the sentences inside the JSON. Output strictly valid JSON.
