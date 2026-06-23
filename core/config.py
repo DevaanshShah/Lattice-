@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "openai/gpt-4o-mini"            # generator (cheap; ~20x less than sonnet)
     critic_model: str = "openai/gpt-4o-mini"          # vision critic (cheap, swappable)
+    prompt_cache_enabled: bool = True                 # mark static system prompt cacheable (Anthropic cache_control)
 
     # --- TTS (Q3; from M4) ---
     tts_engine: str = "gtts"
