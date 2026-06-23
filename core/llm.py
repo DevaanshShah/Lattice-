@@ -31,12 +31,14 @@ class LLMClient:
         return self._client
 
     def chat(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> str:
+        kw.setdefault("max_tokens", settings.max_output_tokens)  # cost + reservation cap (caller can override)
         resp = self.client.chat.completions.create(
             model=model or self.model, messages=messages, **kw
         )
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> dict:
+        kw.setdefault("max_tokens", settings.max_output_tokens)
         resp = self.client.chat.completions.create(
             model=model or self.model, messages=messages,
             response_format={"type": "json_object"}, **kw,

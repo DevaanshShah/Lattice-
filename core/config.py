@@ -33,7 +33,13 @@ class Settings(BaseSettings):
     concurrency_cap: int = 4
 
     # --- vision critic (M2) ---
-    critic_frames: int = 3         # keyframes sampled per render for the critic
+    critic_frames: int = 2            # keyframes per critique (fewer frames = fewer image tokens)
+    critic_image_detail: str = "low"  # "low" ~= 85 vision tokens/frame vs ~765 for "high" — big cut
+
+    # --- token budget (cost control) ---
+    # caps output per call: bounds output-token cost (the dominant cost) AND the upfront credit
+    # reservation providers require (this is what 402'd Sonnet at 64000 on the capped key).
+    max_output_tokens: int = 8192
 
     # --- multi-scene (M5) ---
     scene_cap: int = 8             # Q4: hard cap on scenes per video (planner output + cost)

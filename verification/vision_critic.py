@@ -96,7 +96,11 @@ def critique(frames: list[Path], *, intent: str = "", client: LLMClient | None =
             + f"\n\nCritique these {len(frames)} frames (sampled start→end) and return JSON.")
     content: list[dict] = [{"type": "text", "text": text}]
     for f in frames:
-        content.append({"type": "image_url", "image_url": {"url": _data_url(f)}})
+        # "detail": low -> the vision model downsamples the frame to a fixed small token budget
+        # (~85 tok vs ~765 for high). Plenty for spotting overlap/off-screen; a big cut on the
+        # single priciest call type in the pipeline.
+        content.append({"type": "image_url",
+                        "image_url": {"url": _data_url(f), "detail": settings.critic_image_detail}})
 
     messages = [{"role": "system", "content": load("vision-critic")},
                 {"role": "user", "content": content}]
@@ -157,11 +161,12 @@ def run(code: str, work_dir: str | Path, spec: SceneSpec | None = None, *,
         critic_fn: Callable[[list[Path]], CritiqueReport] | None = None,
         compile_regen_fn: compile_repair.RegenFn | None = None,
         issue_regen_fn: Callable[[str, CritiqueReport], str] | None = None,
-        caps: Caps | None = None, quality: str = "preview", frames: int = 3,
+        caps: Caps | None = None, quality: str = "preview", frames: int | None = None,
         client: LLMClient | None = None,
         log: Callable[[str], None] | None = None) -> CritiqueResult:
     """Compile-repair → critique → fix → re-render, up to the critic cap; return best."""
     caps = caps or Caps()
+    frames = settings.critic_frames if frames is None else frames  # config-driven (cost lever)
     work_dir = Path(work_dir)
     intent = ""
     if spec is not None:
