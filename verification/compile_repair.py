@@ -20,6 +20,7 @@ from core.textutil import strip_code_fences
 from prompts.loader import load
 from render import worker
 from render.worker import WorkerResult
+from verification import error_fixes
 from verification.caps import Caps
 
 # (code, work_dir) -> WorkerResult ; (code, trimmed_error) -> new_code
@@ -139,7 +140,13 @@ def repair(code: str, work_dir: str | Path, *, render_fn: RenderFn | None = None
         attempts.append(Attempt(i, False, last_error))
         say(f"[compile] attempt {i}/{caps.max_repair_attempts}: FAILED (exit {res.returncode})")
         if i < caps.max_repair_attempts:
-            current = regen_fn(current, last_error)
+            # try a FREE deterministic fix (invented color / stale API) before paying the LLM
+            det = error_fixes.try_deterministic_fix(current, res.stderr or res.stdout)
+            if det is not None:
+                say("[compile] deterministic fix applied (no LLM call)")
+                current = det
+            else:
+                current = regen_fn(current, last_error)
 
     # cap exhausted: graceful failure — best attempt + a useful error, never a hang
     say(f"[compile] gave up after {caps.max_repair_attempts} attempts")
