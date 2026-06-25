@@ -56,9 +56,10 @@ class Settings(BaseSettings):
                                        # can't see: merged glyphs, crowding, color). Default for the
                                        # SINGLE-scene generate-scene moat. The multi-scene VIDEO path
                                        # overrides this with video_vision_confirm (below).
-    video_vision_confirm: bool = False  # MULTI-scene video: paid vision OFF by default — across 8 scenes
-                                        # it adds up, and the free off-frame lint + codegen guardrails carry
-                                        # most of the value. Set LATTICE_VIDEO_VISION_CONFIRM=1 to re-enable.
+    video_vision_confirm: bool = True   # MULTI-scene video: paid vision ON — it's the only layer that SEES
+                                        # the render (catches text-on-shape overlap, literal labels, color that
+                                        # the blind lint misses). Keep it cheap with a fast critic (Groq). Set
+                                        # LATTICE_VIDEO_VISION_CONFIRM=0 to go blind/cheaper.
 
     # --- token budget (cost control) ---
     # caps output per call: bounds output-token cost (the dominant cost) AND the upfront credit
