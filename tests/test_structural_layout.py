@@ -35,6 +35,8 @@ def test_lattice_scene_src_compiles():
     compile(lattice_scene.LATTICE_SCENE_SRC, "<lattice_scene>", "exec")
     assert "class LatticeScene(Scene)" in lattice_scene.LATTICE_SCENE_SRC
     assert "def setup_scene" in lattice_scene.LATTICE_SCENE_SRC
+    # components render math labels as MathTex (fixes the literal "$x_1$" structural-A/B bug)
+    assert "def _label" in lattice_scene.LATTICE_SCENE_SRC and "MathTex" in lattice_scene.LATTICE_SCENE_SRC
 
 
 # --- guardrail accepts the subclass --------------------------------------------------------

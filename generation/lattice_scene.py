@@ -81,17 +81,28 @@ class LatticeScene(Scene):
         mob.move_to(center)
         return mob
 
+    def _label(self, text, font_size=24):
+        # Math labels (x_1, w^2, \\sigma, $...$) render as MathTex; plain words as Text. Without
+        # this, "x_1"/"$x_1$" show as LITERAL text instead of a subscript (the structural-A/B bug).
+        s = str(text)
+        if "$" in s or "_" in s or "^" in s or chr(92) in s:
+            try:
+                return MathTex(s.strip("$"), font_size=font_size)
+            except Exception:
+                return Text(s, font_size=font_size)
+        return Text(s, font_size=font_size)
+
     # --- starter components: self-laying-out, own their labels (no sibling collisions) ---
     def labeled_box(self, text, color=BLUE, w=1.6, h=1.0):
         box = Rectangle(width=w, height=h, color=color)
-        lbl = Text(str(text), font_size=24).move_to(box.get_center())
+        lbl = self._label(text, 24).move_to(box.get_center())
         if lbl.width > w - 0.2:
             lbl.scale_to_fit_width(w - 0.2)
         return VGroup(box, lbl)
 
     def node(self, label, color=BLUE, r=0.35):
         c = Circle(radius=r, color=color)
-        lbl = Text(str(label), font_size=22).move_to(c.get_center())
+        lbl = self._label(label, 22).move_to(c.get_center())
         if lbl.width > 2 * r - 0.1:
             lbl.scale_to_fit_width(2 * r - 0.1)
         return VGroup(c, lbl)

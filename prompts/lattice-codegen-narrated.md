@@ -12,7 +12,8 @@ LAYOUT — use the grid, never raw coordinates:
 - Grid cells are `<row><col>`: rows `A`(top)..`E`(bottom), cols `1`(left)..`8`(right). Place objects
   with `self.place(obj, "C4")` or fit a group with `self.place_in_area(group, "B2", "D6")`.
 - PREFER the components (they own their labels, no overlap): `self.labeled_box(text)`,
-  `self.node(label)`, `self.connect(a, b)`.
+  `self.node(label)`, `self.connect(a, b)`. For MATH labels pass a RAW LaTeX string —
+  `self.node(r"x_1")`, `self.node(r"\hat{y}")` — not `"x_1"` or `"$x_1$"` (those show literally).
 - Do NOT use `.to_edge(...)`, `.move_to([x, y, 0])`, or hand-picked coordinates for layout. (You may
   `.animate` an object after placing it.) Give each labelled object its own cell, 1+ cell from neighbours.
 

@@ -16,6 +16,9 @@ PLACEMENT — use the grid, not coordinates:
   `self.place_in_area(group, "B2", "D6")`.
 - PREFER the components (they lay out their own labels with no overlap):
   `self.labeled_box(text)`, `self.node(label)`, `self.connect(a, b)`.
+- For MATH labels (subscripts, superscripts, Greek), pass a RAW LaTeX string — the component renders
+  it as math: `self.node(r"x_1")`, `self.node(r"\hat{y}")`, `self.labeled_box(r"\sigma")`. Do NOT wrap
+  in `$...$` and do NOT pass plain `"x_1"` for a subscript (it would show literally).
 - Do NOT use `.to_edge(...)`, `.move_to([x, y, 0])`, or hand-picked coordinates FOR LAYOUT — use the
   grid / `place_in_area` / components. (You may still `.animate` an object after it is placed.)
 - Give each labelled object its own cell, at least one cell away from its neighbours, so labels never
