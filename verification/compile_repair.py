@@ -86,6 +86,22 @@ def _default_fixer(spec: SceneSpec | None, client: LLMClient | None) -> RegenFn:
     return fix
 
 
+# A render can fail because the SANDBOX is unavailable (Docker daemon down) rather than because the
+# code is wrong. Repairing the code can't fix that, so the loop must abort instead of burning LLM
+# fix calls + renders against a dead daemon (the eval once spent ~$0.16 doing exactly that).
+_INFRA_MARKERS = (
+    "error during connect",                # docker client can't reach the daemon (Desktop stopped)
+    "cannot connect to the docker daemon",
+    "is the docker daemon running",
+    "dockerdesktoplinuxengine",
+)
+
+
+def _is_infra_failure(res: WorkerResult) -> bool:
+    s = ((res.stderr or "") + " " + (res.stdout or "")).lower()
+    return any(m in s for m in _INFRA_MARKERS)
+
+
 def repair(code: str, work_dir: str | Path, *, render_fn: RenderFn | None = None,
            regen_fn: RegenFn | None = None, caps: Caps | None = None,
            quality: str = "preview", frames: int = 3,
@@ -110,6 +126,14 @@ def repair(code: str, work_dir: str | Path, *, render_fn: RenderFn | None = None
             attempts.append(Attempt(i, True))
             say(f"[compile] attempt {i}/{caps.max_repair_attempts}: OK")
             return RepairResult(True, current, res.mp4, list(res.frames), attempts)
+
+        if _is_infra_failure(res):
+            # sandbox is unavailable — NOT a code defect; retrying/fixing wastes tokens. Abort now.
+            say("[compile] sandbox unavailable (Docker daemon unreachable) — aborting; not a code "
+                "defect. Start Docker Desktop and retry.")
+            attempts.append(Attempt(i, False, "infrastructure: Docker daemon unreachable"))
+            return RepairResult(False, current, None, [], attempts,
+                                "sandbox unavailable: Docker daemon unreachable (start Docker and retry)")
 
         last_error = trim_traceback(res.stderr or res.stdout)
         attempts.append(Attempt(i, False, last_error))

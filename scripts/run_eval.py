@@ -34,6 +34,16 @@ def main(argv: list[str] | None = None) -> int:
                          "discriminates the structural scaffold from free-hand")
     args = ap.parse_args(argv)
 
+    import subprocess
+    try:
+        docker_up = subprocess.run(["docker", "info"], capture_output=True, timeout=25).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        docker_up = False
+    if not docker_up:
+        print("[X] Docker is not running — start Docker Desktop and retry. "
+              "(Renders run in the sandbox; without it every prompt fails with exit 127.)")
+        return 2
+
     battery = HARD if args.hard else BATTERY
     if args.hard:
         print(f"(HARD prompt set — {len(HARD)} dense ML/multi-element prompts)")
