@@ -10,9 +10,63 @@ Wired in M0 but NOT called — the first real call lands in M1 (scene-spec gener
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 from core.config import settings
+
+# --- process-wide token + cost accounting (the eval cost metric) -----------------------------
+# Every chat()/chat_json() call adds its `resp.usage` here, regardless of which client instance
+# made it — so a whole pipeline run (spec-gen + codegen + repairs + critic, across threads) can
+# be measured by reset_usage() before and usage_snapshot() after. Best-effort cost via a per-model
+# price table (USD per 1M tokens, input/output); unknown models contribute 0 cost but still count tokens.
+MODEL_PRICES: dict[str, tuple[float, float]] = {
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-4o": (2.50, 10.0),
+    "deepseek/deepseek-v4-pro": (0.40, 1.20),
+    "deepseek/deepseek-chat": (0.28, 0.88),
+    "anthropic/claude-sonnet-4.5": (3.0, 15.0),
+    "anthropic/claude-3.5-sonnet": (3.0, 15.0),
+}
+
+_usage_lock = threading.Lock()
+_usage: dict[str, float] = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "cost_usd": 0.0}
+
+
+def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Best-effort USD cost from MODEL_PRICES; 0.0 for unknown models (tokens are still tracked)."""
+    price = MODEL_PRICES.get((model or "").lower())
+    if not price:
+        return 0.0
+    pin, pout = price
+    return prompt_tokens / 1_000_000 * pin + completion_tokens / 1_000_000 * pout
+
+
+def reset_usage() -> None:
+    """Zero the accumulator (call before measuring a unit of work, e.g. one eval prompt)."""
+    with _usage_lock:
+        _usage.update(prompt_tokens=0, completion_tokens=0, calls=0, cost_usd=0.0)
+
+
+def usage_snapshot() -> dict:
+    """A copy of the current totals: {prompt_tokens, completion_tokens, calls, cost_usd}."""
+    with _usage_lock:
+        return dict(_usage)
+
+
+def _record_usage(model: str, resp: Any) -> None:
+    """Add one response's token usage to the process-wide accumulator (no-op if absent)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return
+    pt = int(getattr(u, "prompt_tokens", 0) or 0)
+    ct = int(getattr(u, "completion_tokens", 0) or 0)
+    with _usage_lock:
+        _usage["prompt_tokens"] += pt
+        _usage["completion_tokens"] += ct
+        _usage["calls"] += 1
+        _usage["cost_usd"] += estimate_cost(model, pt, ct)
 
 
 class LLMClient:
@@ -51,6 +105,7 @@ class LLMClient:
         resp = self.client.chat.completions.create(
             model=model or self.model, messages=self._with_cache(messages, model), **kw
         )
+        _record_usage(model or self.model, resp)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> dict:
@@ -59,6 +114,7 @@ class LLMClient:
             model=model or self.model, messages=self._with_cache(messages, model),
             response_format={"type": "json_object"}, **kw,
         )
+        _record_usage(model or self.model, resp)
         return json.loads(resp.choices[0].message.content or "{}")
 
 

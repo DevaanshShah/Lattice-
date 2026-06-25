@@ -7,10 +7,11 @@ code is well-formed CE that targets the pinned version.
 """
 from __future__ import annotations
 
+from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.scene_spec import SCENE_CLASS, SceneSpec
 from core.textutil import strip_code_fences
-from generation import guardrails
+from generation import guardrails, lattice_scene
 from prompts.loader import load
 
 
@@ -18,10 +19,16 @@ class CodegenError(RuntimeError):
     pass
 
 
+def _finalize(code: str, structural: bool) -> str:
+    """In structural mode, prepend the LatticeScene base so the generated GeneratedScene resolves it."""
+    return (lattice_scene.LATTICE_SCENE_SRC + "\n\n" + code) if structural else code
+
+
 def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = None,
              style=None) -> str:
     client = client or get_client()
-    system = load("manim-conventions") + "\n\n---\n\n" + load("codegen")
+    structural = settings.structural_layout
+    system = load("manim-conventions") + "\n\n---\n\n" + load("lattice-codegen" if structural else "codegen")
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
     user = (
@@ -34,9 +41,9 @@ def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = N
     for _ in range(attempts):
         raw = client.chat(messages)
         code = strip_code_fences(raw)
-        issues = guardrails.check(code)
+        issues = guardrails.check(code, structural=structural)
         if not issues:
-            return code
+            return _finalize(code, structural)
         last = issues
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": (
@@ -55,7 +62,9 @@ def generate_narrated(spec: SceneSpec, beats_audio: list[tuple[str, str, float]]
     A `style` (M5) is injected so narrated multi-scene videos stay visually consistent too.
     """
     client = client or get_client()
-    system = load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated")
+    structural = settings.structural_layout
+    system = load("manim-conventions") + "\n\n---\n\n" + load(
+        "lattice-codegen-narrated" if structural else "codegen-narrated")
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
     rows = "\n".join(
@@ -73,11 +82,11 @@ def generate_narrated(spec: SceneSpec, beats_audio: list[tuple[str, str, float]]
     for _ in range(attempts):
         raw = client.chat(messages)
         code = strip_code_fences(raw)
-        issues = guardrails.check(code)
+        issues = guardrails.check(code, structural=structural)
         if "add_sound" not in code:
             issues = issues + [guardrails.Issue("no-audio", "must call self.add_sound(...) for each beat's audio")]
         if not issues:
-            return code
+            return _finalize(code, structural)
         last = issues
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": (

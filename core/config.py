@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     critic_image_detail: str = "low"  # "low" ~= 85 vision tokens/frame vs ~765 for "high" — big cut
     video_critic_enabled: bool = True  # M7: run the vision critic in the multi-scene video path too
                                        # (catches overlap/off-screen/blank per scene). Off = cheaper, blind.
+    structural_layout: bool = False    # Phase 2: generate against the LatticeScene grid scaffold (mandatory
+                                       # title + named-cell placement) instead of free-hand coordinates.
+                                       # Default OFF so it can be A/B-measured vs the baseline (eval --structural).
     layout_lint_enabled: bool = True   # FREE deterministic off-frame lint BEFORE the paid vision call:
                                        # geometry catches off-frame exactly, so the generator fixes it
                                        # in one pass instead of the critic flailing across iterations.

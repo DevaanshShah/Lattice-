@@ -44,7 +44,12 @@ _REQUIRED: list[tuple[re.Pattern, str, str]] = [
 ]
 
 
-def check(code: str) -> list[Issue]:
+# Structural mode (FR-32): the scene MUST use the LatticeScene scaffold, not free-hand Scene.
+_STRUCTURAL_BASE = re.compile(r"class\s+GeneratedScene\s*\(\s*LatticeScene\s*\)")
+_STRUCTURAL_SETUP = re.compile(r"self\.setup_scene\s*\(")
+
+
+def check(code: str, *, structural: bool = False) -> list[Issue]:
     issues: list[Issue] = []
     for pat, rule, msg in _FORBIDDEN:
         if pat.search(code):
@@ -52,4 +57,12 @@ def check(code: str) -> list[Issue]:
     for pat, rule, msg in _REQUIRED:
         if not pat.search(code):
             issues.append(Issue(rule, msg))
+    if structural:
+        # ENFORCE the scaffold so the model can't ignore it and free-hand the layout.
+        if not _STRUCTURAL_BASE.search(code):
+            issues.append(Issue("structural-base",
+                "must subclass LatticeScene: `class GeneratedScene(LatticeScene):` (do NOT subclass Scene directly)"))
+        if not _STRUCTURAL_SETUP.search(code):
+            issues.append(Issue("structural-setup",
+                "construct must begin with `self.setup_scene(<title>)` — it renders the mandatory title + builds the grid"))
     return issues
