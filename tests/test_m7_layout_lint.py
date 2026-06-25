@@ -83,6 +83,45 @@ def test_run_probe_short_circuits_without_scene_py(tmp_path):
     assert layout_lint._run_probe(tmp_path) is None
 
 
+# --- overlap detection (Phase 3) -----------------------------------------------------------
+
+@pytest.mark.unit
+def test_overlapping_top_level_texts_flagged():
+    facts = _facts([
+        {"i": 0, "kind": "MathTex", "label": "w_2", "x": [0.0, 0.5], "y": [0.0, 0.3]},
+        {"i": 1, "kind": "MathTex", "label": "w_3", "x": [0.1, 0.6], "y": [0.05, 0.35]},  # overlaps w_2
+    ])
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1 and "w_2" in ov[0].location and "w_3" in ov[0].location
+
+
+@pytest.mark.unit
+def test_distant_texts_not_flagged():
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "a", "x": [-5, -4], "y": [1, 1.4]},
+        {"i": 1, "kind": "Text", "label": "b", "x": [4, 5], "y": [1, 1.4]},
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_text_over_shape_not_flagged():
+    # a label sitting on a box is INTENDED; only text-vs-text counts (avoids the false-positive trap)
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "lbl", "x": [0, 0.5], "y": [0, 0.3]},
+        {"i": 1, "kind": "Rectangle", "label": "", "x": [-0.2, 0.7], "y": [-0.2, 0.5]},
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_overlap_issues_combined_and_capped():
+    items = [{"i": k, "kind": "Text", "label": f"t{k}", "x": [0, 1], "y": [0, 1]} for k in range(8)]
+    issues = layout_lint.issues_from_facts(_facts(items))   # all mutually overlap
+    assert len(issues) <= layout_lint._MAX_ISSUES
+    assert any(i.type == "overlap" for i in issues)
+
+
 # --- the vision_critic splice: free lint gates the paid vision call -------------------------
 
 def _ok_render(mp4, png):

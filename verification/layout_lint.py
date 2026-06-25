@@ -8,10 +8,11 @@ the scene HEADLESS inside the same pinned sandbox container, applies each animat
 (so final positions are correct — not the pre-move positions a naive snapshot would read), walks
 the resulting mobjects, and reports anything whose bounding box leaves the frame.
 
-Scope is deliberately OFF-FRAME ONLY (v1). Overlap is NOT linted here: a clean MathTex flattens
-into many glyph submobjects a naive overlap rule would flag as self-overlapping, firing needless
-(expensive) fix calls — so overlap needs a VGroup/glyph-aware predicate and is left to the vision
-pass for now. Off-frame has no such false-positive surface: a box past the edge is past the edge.
+Two defect classes, both deterministic: OFF-FRAME (a box past the edge) and OVERLAP (Phase 3 — two
+TOP-LEVEL text mobjects whose boxes intersect, the w2/w3-merge defect). The probe walks only
+TOP-LEVEL `self.mobjects` (never flattens), so a single MathTex's internal glyphs are not separate
+items — no glyph false positives — and overlap is restricted to text-vs-text so intended
+label-inside-box / arrow-over-content isn't flagged.
 
 Invariants: runs only AFTER compile-repair succeeds (the scene already renders); degrades to
 ok=True / no issues on ANY probe failure, so it never blocks a renderable scene or hangs the loop.
@@ -32,6 +33,13 @@ from verification.vision_critic import CritiqueIssue, CritiqueReport
 # safe margin (the generator should pull WELL inside, not just barely on-screen).
 _OFF_FRAME_MARGIN = 0.15
 _MAX_ISSUES = 6  # keep the fix prompt small — the fix call is the expensive one
+
+# Overlap (Phase 3): flag TWO TOP-LEVEL TEXT mobjects whose boxes intersect. Top-level only (the probe
+# never flattens), so a single MathTex's internal glyphs are NOT separate items — no glyph false
+# positives. Restricting to text-vs-text avoids flagging intended label-inside-box / arrow-over-content.
+_TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title"}
+_OVERLAP_MIN_FRAC = 0.25  # min intersection as a fraction of the SMALLER box's area to call it overlap
+_MAX_OVERLAP_ISSUES = 4
 
 # The in-container probe. Runs scene.py headless, applies animation END states, prints one JSON
 # line of top-level mobject bounding boxes. Self-contained (no project imports) — it executes in
@@ -132,8 +140,43 @@ def _run_probe(work_dir: Path) -> dict | None:
         return None
 
 
+def _overlap_frac(a: dict, b: dict) -> float:
+    """Intersection area of two bboxes as a fraction of the smaller box's area (0 if disjoint)."""
+    ox = max(0.0, min(a["x"][1], b["x"][1]) - max(a["x"][0], b["x"][0]))
+    oy = max(0.0, min(a["y"][1], b["y"][1]) - max(a["y"][0], b["y"][0]))
+    inter = ox * oy
+    if inter <= 0:
+        return 0.0
+    area_a = (a["x"][1] - a["x"][0]) * (a["y"][1] - a["y"][0])
+    area_b = (b["x"][1] - b["x"][0]) * (b["y"][1] - b["y"][0])
+    smaller = min(area_a, area_b)
+    return (inter / smaller) if smaller > 0 else 0.0
+
+
+def _overlap_issues(items: list[dict]) -> list[CritiqueIssue]:
+    """Flag pairs of top-level TEXT mobjects whose boxes intersect (the w2/w3-merge defect class)."""
+    texts = [it for it in items if it["kind"] in _TEXT_KINDS and it.get("label")]
+    pairs = []
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            frac = _overlap_frac(texts[i], texts[j])
+            if frac >= _OVERLAP_MIN_FRAC:
+                pairs.append((frac, texts[i], texts[j]))
+    issues: list[CritiqueIssue] = []
+    for _, a, b in sorted(pairs, key=lambda p: -p[0])[:_MAX_OVERLAP_ISSUES]:
+        la, lb = a["label"], b["label"]
+        issues.append(CritiqueIssue(
+            type="overlap",
+            location=f"'{la}' & '{lb}'",
+            description=f"Text '{la}' and '{lb}' overlap — their bounding boxes intersect.",
+            suggested_fix=(f"Separate '{la}' and '{lb}': place them in different regions / cells, or "
+                           f"use next_to(..., buff>=0.3) so the labels don't sit on top of each other."),
+        ))
+    return issues
+
+
 def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
-    """Pure: turn probe geometry facts into OFF-FRAME CritiqueIssues. Unit-testable without Docker."""
+    """Pure: probe geometry facts -> OFF-FRAME + OVERLAP CritiqueIssues. Unit-testable without Docker."""
     fx, fy = facts["frame"]
     issues: list[CritiqueIssue] = []
     for it in facts.get("items", []):
@@ -157,9 +200,8 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
                                f"x in [-{fx - 0.5:.1f}, {fx - 0.5:.1f}], y in [-{fy - 0.5:.1f}, {fy - 0.5:.1f}] "
                                f"(keep a ~0.5 safe margin; scale_to_fit_width or next_to/shift it inward)."),
             ))
-        if len(issues) >= _MAX_ISSUES:
-            break
-    return issues
+    issues.extend(_overlap_issues(facts.get("items", [])))   # text-vs-text overlap (Phase 3)
+    return issues[:_MAX_ISSUES]
 
 
 def lint(work_dir: str | Path) -> CritiqueReport:
