@@ -12,7 +12,7 @@ import sys
 from core import llm
 from core.config import settings
 from core.console import enable_utf8
-from eval.battery import BATTERY
+from eval.battery import BATTERY, HARD
 from eval.score import BatteryReport, PromptResult, compare
 
 
@@ -29,7 +29,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--vision", action="store_true",
                     help="include the paid vision-critic loop (slow). Default OFF: measure compile/"
                          "first-try/off-frame via compile-repair + free lint only (~3-5x faster).")
+    ap.add_argument("--hard", action="store_true",
+                    help="use the HARD prompt set (dense ML scenes) instead of the easy battery — "
+                         "discriminates the structural scaffold from free-hand")
     args = ap.parse_args(argv)
+
+    battery = HARD if args.hard else BATTERY
+    if args.hard:
+        print(f"(HARD prompt set — {len(HARD)} dense ML/multi-element prompts)")
 
     if not args.vision:
         settings.vision_confirm = False     # skip the critic re-render loop — the eval measures, not polishes
@@ -38,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         settings.structural_layout = True   # read by generation.codegen at call time
         print("(structural layout ON — LatticeScene grid scaffold)")
 
-    prompts = BATTERY[: args.limit] if args.limit else BATTERY
+    prompts = battery[: args.limit] if args.limit else battery
     out = settings.out_dir / "eval"
     out.mkdir(parents=True, exist_ok=True)
 

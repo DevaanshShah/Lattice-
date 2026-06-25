@@ -19,3 +19,15 @@ BATTERY: list[str] = [
     "explain how a for-loop iterates over a list",
     "visualize matrix multiplication of two 2x2 matrices",
 ]
+
+# A separate HARD set — dense ML/multi-element scenes where free-hand layout visibly breaks
+# (label merges, single-arrow networks, off-frame). Used to DISCRIMINATE the structural scaffold
+# from free-hand (run_eval --hard), since the easy BATTERY above already passes at ~100%.
+HARD: list[str] = [
+    "explain how a single artificial neuron computes a weighted sum and applies an activation",
+    "explain how a neural network with an input, hidden, and output layer makes a prediction",
+    "explain backpropagation updating the weights of a small neural network",
+    "explain the attention mechanism computing query-key-value scores",
+    "visualize gradient descent stepping down a loss curve toward the minimum",
+    "explain how a convolution filter slides over an image to produce a feature map",
+]
