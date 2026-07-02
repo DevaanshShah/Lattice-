@@ -10,6 +10,7 @@ makes FR-33 (voice swap) and FR-34 (multi-language) cheap later.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,25 @@ class Clip:
     text: str
     path: Path
     duration: float   # seconds (measured, used to sync/pad the animation)
+
+
+# gTTS has no NLP context — it reads jargon phonetically wrong ("bigram" -> "bee-gram",
+# "n-gram" -> "n gram"). We rewrite ONLY the audio input to a phonetic spelling; the saved/
+# on-screen script keeps the correct spelling. Ordered longest-first so "bigrams" wins over "bigram".
+_PRONUNCIATION: list[tuple[str, str]] = [
+    (r"\bn-?grams\b", "en-grams"),   (r"\bn-?gram\b", "en-gram"),
+    (r"\bbigrams\b", "by-grams"),    (r"\bbigram\b", "by-gram"),
+    (r"\btrigrams\b", "try-grams"),  (r"\btrigram\b", "try-gram"),
+    (r"\bunigrams\b", "you-nih-grams"), (r"\bunigram\b", "you-nih-gram"),
+]
+
+
+def _for_speech(text: str) -> str:
+    """Phonetic rewrite of terms gTTS mispronounces (audio only, not the displayed script)."""
+    out = text
+    for pat, rep in _PRONUNCIATION:
+        out = re.sub(pat, rep, out, flags=re.IGNORECASE)
+    return out
 
 
 def _synth_gtts(text: str, out_path: Path, *, lang: str = "en") -> None:
@@ -40,12 +60,13 @@ def synthesize(text: str, *, out_dir: str | Path, engine: str | None = None,
     engine = engine or settings.tts_engine
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    key = content_hash("tts-v1", engine, lang, text)
+    speech = _for_speech(text)  # phonetic rewrite for the audio; display text stays original
+    key = content_hash("tts-v2", engine, lang, speech)
     path = out_dir / f"{key}.mp3"
 
     if not (cache and path.exists()):
         if engine == "gtts":
-            _synth_gtts(text, path, lang=lang)
+            _synth_gtts(speech, path, lang=lang)
         else:
             raise ValueError(f"unknown TTS engine: {engine!r}")
     return Clip(text, path, _duration(path))

@@ -84,6 +84,8 @@ class LatticeScene(Scene):
     def _label(self, text, font_size=24):
         # Math labels (x_1, w^2, \\sigma, $...$) render as MathTex; plain words as Text. Without
         # this, "x_1"/"$x_1$" show as LITERAL text instead of a subscript (the structural-A/B bug).
+        if isinstance(text, Mobject):
+            return text  # model passed a ready MathTex/Text (natural idiom) — use it, don't str() its repr
         s = str(text)
         if "$" in s or "_" in s or "^" in s or chr(92) in s:
             try:

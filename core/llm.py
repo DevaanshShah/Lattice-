@@ -11,9 +11,22 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from typing import Any
 
 from core.config import settings
+
+
+def _is_transient(e: Exception) -> bool:
+    """5xx / 429 / timeouts / dropped connections are safe to retry; 4xx (auth, bad request)
+    are not — those are deterministic and would just burn attempts."""
+    code = getattr(e, "status_code", None)
+    if code is not None:
+        return code == 429 or code >= 500
+    return type(e).__name__ in {
+        "APIConnectionError", "APITimeoutError", "InternalServerError",
+        "RateLimitError", "ServiceUnavailableError",
+    }
 
 # --- process-wide token + cost accounting (the eval cost metric) -----------------------------
 # Every chat()/chat_json() call adds its `resp.usage` here, regardless of which client instance
@@ -100,17 +113,40 @@ class LLMClient:
             {"type": "text", "text": head["content"], "cache_control": {"type": "ephemeral"}}]}
         return [cached, *messages[1:]]
 
+    def _create(self, *, attempts: int = 6, **kwargs: Any) -> Any:
+        """API call with bounded retry on transient errors (5xx/429/timeout) AND on an empty
+        message — some gateway-routed models (e.g. deepseek v3.2/v4 on AiCredits) intermittently
+        500 or return blank content (AiCredits 500-streaks for ~10-20s, so retry persistently).
+        4xx (auth/bad request) raise immediately (no point retrying)."""
+        last_exc: Exception | None = None
+        resp = None
+        for i in range(attempts):
+            try:
+                resp = self.client.chat.completions.create(**kwargs)
+            except Exception as e:  # noqa: BLE001 — re-raised below if not transient/last
+                last_exc = e
+                if _is_transient(e) and i < attempts - 1:
+                    time.sleep(1.5 * (i + 1))
+                    continue
+                raise
+            content = (resp.choices[0].message.content or "") if resp.choices else ""
+            if not content.strip() and i < attempts - 1:
+                time.sleep(1.0 * (i + 1))  # blank content -> treat as transient gateway glitch
+                continue
+            return resp
+        if last_exc is not None:
+            raise last_exc
+        return resp
+
     def chat(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> str:
         kw.setdefault("max_tokens", settings.max_output_tokens)  # cost + reservation cap (caller can override)
-        resp = self.client.chat.completions.create(
-            model=model or self.model, messages=self._with_cache(messages, model), **kw
-        )
+        resp = self._create(model=model or self.model, messages=self._with_cache(messages, model), **kw)
         _record_usage(model or self.model, resp)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], *, model: str | None = None, **kw: Any) -> dict:
         kw.setdefault("max_tokens", settings.max_output_tokens)
-        resp = self.client.chat.completions.create(
+        resp = self._create(
             model=model or self.model, messages=self._with_cache(messages, model),
             response_format={"type": "json_object"}, **kw,
         )

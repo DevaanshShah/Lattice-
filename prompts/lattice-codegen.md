@@ -24,6 +24,28 @@ PLACEMENT — use the grid, not coordinates:
 - Give each labelled object its own cell, at least one cell away from its neighbours, so labels never
   collide. Keep related items in one `VGroup` and place the group.
 
+STRUCTURED DATA — use Manim's built-ins, NOT the grid, for these (the grid is for freeform diagrams;
+placing tabular values into cells by hand is the #1 broken-scene cause — cells won't line up):
+- A TABLE / MATRIX of numbers or words (counts, probabilities, comparisons): build ONE `Table(...)`
+  (or `IntegerTable(...)` / `MathTable(...)`) — it draws the grid lines and aligns every cell for you.
+  Then place the whole table as a single object: `self.place_in_area(table, "B2", "D7")`. NEVER create
+  separate row/column VGroups and position cell values with next_to/place — they will not align.
+  ```python
+  t = Table([["", "the", "cat"], ["the", "0", "2"], ["cat", "1", "0"]], include_outer_lines=True)
+  self.place_in_area(t, "B2", "E7")
+  ```
+  Highlight cells via `t.add_highlighted_cell((2, 3))`, `t.get_rows()[i]`, `t.get_entries((r, c))`.
+- A BAR CHART / probability distribution: one `BarChart(values=[...], bar_names=[...])`, placed as one object.
+- A PLOTTED FUNCTION / axes: build `ax = Axes(...)`, place the AXES ONCE with
+  `self.place_in_area(ax, "B2", "E7")`, THEN plot and mark everything relative to it:
+  `curve = ax.plot(f)`, `dot = Dot(ax.c2p(x0, y0))`, `tan = ax.plot(tangent_fn)`. Do NOT call
+  `self.place(...)` on the curve, dot, or tangent separately — `c2p` already positions them ON the
+  axes; re-placing a sub-element re-centers it on a cell and DETACHES it from the graph. Group extra
+  labels with the axes and place the group once if you must move it.
+- A BRACE annotation ("these form a group / a bigram"): `Brace(mob)` + `BraceLabel(mob, "text")`.
+- HIGHLIGHT: pass the ORIGINAL, already-placed object to `SurroundingRectangle` — NEVER `.copy()`
+  (a copy has no placed position, so the box draws in the wrong spot).
+
 CONTENT:
 - Implement every object in `objects` and every beat in `beats`, in order. Map actions to animations:
   create->Create, write->Write, fade_in->FadeIn, fade_out->FadeOut, transform->Transform,
