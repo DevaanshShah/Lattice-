@@ -151,15 +151,60 @@ def _make_issue_fixer(spec, style, use_components, client, *, structural: bool =
     return fix
 
 
+def _make_compile_fixer(spec, style, use_components, client, *, structural: bool = False):
+    """Custom compile-repair fixer: on a COMPILE FAILURE, regenerate using the SAME structural/freehand
+    system prompt as the original codegen, then RE-APPLY the base source (LatticeScene / components).
+
+    Without this, `compile_repair`'s default fixer uses a generic prompt with no scaffold awareness and
+    never re-prepends the base source -- so a compile failure mid-run SILENTLY DROPS structural mode for
+    the rest of that scene (confirmed: a scene reverted to a plain freehand `Scene` subclass, losing
+    every geometry primitive, after hitting exactly one compile error). Mirrors `_make_issue_fixer`,
+    just matching compile_repair.RegenFn's (code, error) -> str shape instead of (code, report) -> str.
+    """
+    conventions = load("manim-conventions")
+    if structural:
+        system = conventions + "\n\n---\n\n" + load("lattice-codegen")
+        base_src = lattice_scene.LATTICE_SCENE_SRC
+    else:
+        system = conventions + "\n\n---\n\n" + load("codegen")
+        if use_components:
+            system += "\n\n---\n\n" + COMPONENTS_PROMPT
+        base_src = COMPONENTS_SRC if use_components else None
+    if style is not None:
+        system += "\n\n---\n\n" + style.as_prompt()
+    intent = f"\n\nScene intent (keep it, do not change it):\n{spec.model_dump_json(indent=2)}" if spec else ""
+
+    def fix(code: str, error: str) -> str:
+        scene = code.split(base_src, 1)[-1] if base_src else code  # show just the scene, not the base
+        user = (f"TRIMMED TRACEBACK:\n{error}\n\nCURRENT CODE:\n{scene}{intent}\n\n"
+                "Resend the full corrected file (code only).")
+        fixed = strip_code_fences(client.chat([{"role": "system", "content": system},
+                                               {"role": "user", "content": user}]))
+        out = (base_src + "\n\n" + fixed) if base_src else fixed
+        return out if structural else _enforce_background(out)
+
+    return fix
+
+
 def _critic_intent(spec: SceneSpec | None) -> str:
     if spec is None:
         return ""
     return f"Prompt: {spec.prompt}\nTitle: {spec.title}\nNarration: {spec.narration}"
 
 
+# Measured gTTS pace ~2.2 words/sec. We turn the animation's real duration into a firm word CEILING so
+# narration doesn't outrun the visuals and play over a frozen final frame (measured: an unguided script
+# ran 25.5s over an 11.9s animation; a first soft-budget attempt still overshot 2x because a competing
+# "2-4 sentences" rule won -- so the budget is now the single authoritative length instruction).
+_WORDS_PER_SECOND = 2.3
+_MIN_NARRATION_WORDS = 20  # floor: even a very short scene gets a coherent sentence, not a fragment
+
+
 def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str, *,
-                     client: LLMClient) -> str:
-    """Spoken narration grounded in the ACTUAL generated code — no hallucination of things not on screen."""
+                     client: LLMClient, target_seconds: float | None = None) -> str:
+    """Spoken narration grounded in the ACTUAL generated code — no hallucination of things not on screen.
+    target_seconds (the MEASURED silent-animation duration, if known) becomes a soft word-count budget
+    so narration doesn't run 2x+ longer than the visuals and sit over a static frozen frame."""
     total = len(outline.items)
     is_first = index == 0
     is_last = index == total - 1
@@ -174,8 +219,24 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
         arc_lines.append(f"Next scene will cover: {next_scene.title}")
     arc_block = ("\n" + "\n".join(arc_lines)) if arc_lines else ""
 
-    # Trim code to avoid huge prompts — the text/label definitions are in the first ~60 lines
-    code_preview = "\n".join(code.splitlines()[:80])
+    # Show the model the ACTUAL scene, not the LatticeScene scaffold boilerplate that (in structural
+    # mode) precedes GeneratedScene — else it narrates the grid ("coordinates A-E, columns 1-8")
+    # instead of the real content. Start at GeneratedScene; freehand has no base so this is a no-op.
+    body = code[code.index("class GeneratedScene"):] if "class GeneratedScene" in code else code
+    code_preview = "\n".join(body.splitlines()[:80])
+
+    if target_seconds and target_seconds > 0:
+        target_words = max(_MIN_NARRATION_WORDS, round(target_seconds * _WORDS_PER_SECOND))
+        length_rule = (
+            f"- LENGTH / PACING (this governs the whole reply): the animation is only about "
+            f"{target_seconds:.0f}s long, so write AT MOST about {target_words} words. This is a firm "
+            f"CEILING, not a target to fill — going over means the voice keeps talking over a frozen "
+            f"final frame, which looks dead. Cut every filler phrase ('one of the most famous', "
+            f"'timeless', \"let's explore\", 'in this scene'); say only the single most important idea "
+            f"about what is on screen. Fewer words is better than more."
+        )
+    else:
+        length_rule = "- LENGTH: 2-3 tight sentences; cut filler, say only what matters."
 
     system = (
         "You write spoken narration for an educational animation — like a confident, engaging teacher "
@@ -189,7 +250,8 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
         "- Teach the concept — don't just read out object names.\n"
         "- Build a natural bridge from the previous scene (if any) in one sentence — no 'Previously...' clichés.\n"
         "- End with a forward pull toward the next scene (if any).\n"
-        "- 2–4 sentences. Plain text only — no bullets, no markdown."
+        "- Plain text only — no bullets, no markdown.\n"
+        f"{length_rule}"
     )
     user = (
         f"Video topic: {outline.topic}\n"
@@ -222,20 +284,25 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
                            structural=structural)
     if not structural:
         code = _enforce_background(code)  # freehand: pin a consistent bg (structural sets it in setup_scene)
+    compile_fixer = _make_compile_fixer(spec, style, use_components, client, structural=structural)
     if use_critic:
         cr = vision_critic.run(
             code, wd, spec, quality="preview", client=client, vision_confirm=True,
+            compile_regen_fn=compile_fixer,
             issue_regen_fn=_make_issue_fixer(spec, style, use_components, client, structural=structural),
             critic_fn=lambda fr: critique(fr, intent=_critic_intent(spec), client=get_critic_client()),
             log=lambda _m: None)
         ok, mp4 = cr.compiled, cr.mp4
     else:
-        rep = compile_repair.repair(code, wd, quality="preview", spec=spec, client=client, log=lambda _m: None)
+        rep = compile_repair.repair(code, wd, quality="preview", spec=spec, client=client,
+                                    regen_fn=compile_fixer, log=lambda _m: None)
         ok, mp4 = rep.ok, rep.mp4
     if not ok or not mp4:
         raise RuntimeError(f"render failed for scene {index}")
     video_rel = Path(mp4).resolve().relative_to(wd.resolve()).as_posix()
-    narration_text = _scene_narration(item, outline, index, code, client=client)
+    video_duration = _probe_duration(wd, video_rel)  # measured, real -- used to pace narration length
+    narration_text = _scene_narration(item, outline, index, code, client=client,
+                                      target_seconds=video_duration)
     (wd / "narration.txt").write_text(narration_text, encoding="utf-8")
     clip = tts.synthesize(narration_text, out_dir=wd)
     audio_rel = Path(clip.path).resolve().relative_to(wd.resolve()).as_posix()

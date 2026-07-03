@@ -1,0 +1,86 @@
+"""Narration pacing (Tier 1 follow-up): a measured mismatch showed a scene's narration running 25.5s
+over an 11.9s silent animation -- the back half played over a static frozen frame. `_scene_narration`
+now accepts the MEASURED animation duration and turns it into a soft word-count budget in the prompt,
+so the narrator doesn't write far more than the visuals can carry. Pure prompt-construction tests
+(fake client captures the messages) -- no LLM/Docker needed."""
+import pytest
+
+from composition.decoupled import _MIN_NARRATION_WORDS, _WORDS_PER_SECOND, _scene_narration
+from core.schemas.outline import Outline, OutlineItem
+
+ITEM = OutlineItem(title="Squares on the Right Triangle", intent="Build a square on each side.")
+OUTLINE = Outline(topic="Pythagorean theorem", items=[ITEM])
+CODE = "class GeneratedScene(LatticeScene):\n    def construct(self):\n        pass\n"
+
+
+class _FakeClient:
+    def __init__(self, reply="Some narration."):
+        self.reply = reply
+        self.system = None
+        self.user = None
+
+    def chat(self, messages, **kw):
+        self.system = messages[0]["content"]
+        self.user = messages[1]["content"]
+        return self.reply
+
+
+@pytest.mark.unit
+def test_no_target_seconds_omits_pacing_rule():
+    fake = _FakeClient()
+    _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=None)
+    assert "PACING" not in fake.system
+
+
+@pytest.mark.unit
+def test_target_seconds_adds_pacing_rule_with_computed_word_budget():
+    fake = _FakeClient()
+    target = 12.0
+    _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=target)
+    assert "PACING" in fake.system
+    assert "12" in fake.system  # the target seconds appear
+    expected_words = round(target * _WORDS_PER_SECOND)
+    assert str(expected_words) in fake.system
+
+
+@pytest.mark.unit
+def test_tiny_target_seconds_floors_to_minimum_words():
+    fake = _FakeClient()
+    _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=1.0)  # 1s * 2.3 << floor
+    assert f"{_MIN_NARRATION_WORDS} words" in fake.system
+
+
+@pytest.mark.unit
+def test_zero_target_seconds_omits_pacing_rule():
+    # 0.0 is falsy -- an unmeasured/failed probe (_probe_duration returns 0.0 on failure) must not
+    # produce a bogus "aim for 0 words" instruction
+    fake = _FakeClient()
+    _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=0.0)
+    assert "PACING" not in fake.system
+
+
+@pytest.mark.unit
+def test_narration_grounds_in_code_and_arc():
+    fake = _FakeClient()
+    _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=10.0)
+    assert "Pythagorean theorem" in fake.user
+    assert "GeneratedScene" in fake.user  # the actual code, not a paraphrase
+
+
+@pytest.mark.unit
+def test_narration_preview_strips_scaffold_boilerplate():
+    # structural mode prepends the LatticeScene grid class; the narrator must see the SCENE, not the
+    # grid boilerplate (else it narrates "coordinates A to E, columns 1 through 8" -- a real regression)
+    scaffolded = (
+        "class LatticeScene(Scene):\n"
+        "    GRID_COLS = 8\n"
+        "    def setup_scene(self, title): pass\n"
+        "    def place_in_area(self, m, a, b): pass\n"
+        "class GeneratedScene(LatticeScene):\n"
+        "    def construct(self):\n"
+        "        self.square_on_segment(A, B, away_from=C)  # the real scene\n"
+    )
+    fake = _FakeClient()
+    _scene_narration(ITEM, OUTLINE, 0, scaffolded, client=fake, target_seconds=10.0)
+    assert "square_on_segment" in fake.user       # the real scene IS shown
+    assert "GRID_COLS" not in fake.user            # the grid boilerplate is NOT

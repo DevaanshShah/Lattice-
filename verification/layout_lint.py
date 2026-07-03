@@ -32,7 +32,7 @@ from verification.vision_critic import CritiqueIssue, CritiqueReport
 # so a mobject sitting flush against the edge isn't nagged. The suggested fix asks for a larger
 # safe margin (the generator should pull WELL inside, not just barely on-screen).
 _OFF_FRAME_MARGIN = 0.15
-_MAX_ISSUES = 6  # keep the fix prompt small — the fix call is the expensive one
+_MAX_ISSUES = 8  # keep the fix prompt small — the fix call is the expensive one
 
 # Overlap (Phase 3): flag TWO TOP-LEVEL TEXT mobjects whose boxes intersect. Top-level only (the probe
 # never flattens), so a single MathTex's internal glyphs are NOT separate items — no glyph false
@@ -40,6 +40,15 @@ _MAX_ISSUES = 6  # keep the fix prompt small — the fix call is the expensive o
 _TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title"}
 _OVERLAP_MIN_FRAC = 0.25  # min intersection as a fraction of the SMALLER box's area to call it overlap
 _MAX_OVERLAP_ISSUES = 4
+
+# Clearance (Tier 1 / GPT #6): two labels touching by a few px have ~0 intersection-area but still read
+# as cramped. Distance metrics catch that where IoU/area-fraction can't. Flag a text pair that is ALIGNED
+# on one axis (gap 0) and separated by a tiny positive gap (< this) on the other — i.e. adjacent + cramped.
+_MIN_CLEARANCE = 0.12
+# Tiny-font (Tier 1): a SINGLE LINE of text shorter than this (Manim units) is ~unreadable on an
+# 8-unit-tall frame — usually the place_in_area auto-scale-to-fit shrinking content into a cramped region.
+_MIN_TEXT_HEIGHT = 0.18
+_MAX_TINY_FONT_ISSUES = 4
 
 # The in-container probe. Runs scene.py headless, applies animation END states, prints one JSON
 # line of top-level mobject bounding boxes. Self-contained (no project imports) — it executes in
@@ -94,11 +103,22 @@ def _kind(m):
     return type(m).__name__
 
 
-def _label(m):
+def _rawtext(m):
     t = getattr(m, "text", None)
     if t is None:
         t = getattr(m, "tex_string", None)
-    return (str(t)[:48] if t else "")
+    return str(t) if t else ""
+
+
+def _label(m):
+    return _rawtext(m)[:48]
+
+
+def _fontsize(m):
+    try:
+        return float(getattr(m, "font_size", 0) or 0)
+    except Exception:
+        return 0.0
 
 
 def _bbox(m):
@@ -114,7 +134,8 @@ try:
     for i, m in enumerate(S.mobjects):     # top-level mobjects only (a group's bbox covers its parts)
         try:
             x, y = _bbox(m)
-            items.append({"i": i, "kind": _kind(m), "label": _label(m), "x": x, "y": y})
+            items.append({"i": i, "kind": _kind(m), "label": _label(m), "x": x, "y": y,
+                          "fs": _fontsize(m), "nl": ("\n" in _rawtext(m))})
         except Exception:
             pass
     print(json.dumps({"ok": True,
@@ -153,24 +174,71 @@ def _overlap_frac(a: dict, b: dict) -> float:
     return (inter / smaller) if smaller > 0 else 0.0
 
 
+def _edge_gap(a: dict, b: dict) -> tuple[float, float]:
+    """(gap_x, gap_y) between two axis-aligned boxes; 0 on an axis where they overlap/touch."""
+    gap_x = max(0.0, max(a["x"][0], b["x"][0]) - min(a["x"][1], b["x"][1]))
+    gap_y = max(0.0, max(a["y"][0], b["y"][0]) - min(a["y"][1], b["y"][1]))
+    return gap_x, gap_y
+
+
 def _overlap_issues(items: list[dict]) -> list[CritiqueIssue]:
-    """Flag pairs of top-level TEXT mobjects whose boxes intersect (the w2/w3-merge defect class)."""
+    """Flag TEXT pairs that OVERLAP (boxes intersect) OR NEARLY TOUCH (distance-based clearance — aligned
+    on one axis with a tiny gap on the other). The clearance case catches labels a few px apart that
+    area-fraction alone misses (IoU ~ 0 but visually cramped)."""
     texts = [it for it in items if it["kind"] in _TEXT_KINDS and it.get("label")]
-    pairs = []
+    flagged = []  # (severity, kind, a, b) — higher severity sorts first
     for i in range(len(texts)):
         for j in range(i + 1, len(texts)):
-            frac = _overlap_frac(texts[i], texts[j])
+            a, b = texts[i], texts[j]
+            frac = _overlap_frac(a, b)
             if frac >= _OVERLAP_MIN_FRAC:
-                pairs.append((frac, texts[i], texts[j]))
+                flagged.append((1.0 + frac, "overlap", a, b))
+                continue
+            gx, gy = _edge_gap(a, b)
+            gap = None  # near-touch only when ALIGNED on one axis (gap 0) and cramped on the other
+            if gx == 0.0 and 0.0 < gy < _MIN_CLEARANCE:
+                gap = gy
+            elif gy == 0.0 and 0.0 < gx < _MIN_CLEARANCE:
+                gap = gx
+            if gap is not None:
+                flagged.append((1.0 - gap, "touch", a, b))  # smaller gap => higher severity
     issues: list[CritiqueIssue] = []
-    for _, a, b in sorted(pairs, key=lambda p: -p[0])[:_MAX_OVERLAP_ISSUES]:
+    for _, kind, a, b in sorted(flagged, key=lambda p: -p[0])[:_MAX_OVERLAP_ISSUES]:
         la, lb = a["label"], b["label"]
+        desc = (f"Text '{la}' and '{lb}' overlap — their bounding boxes intersect." if kind == "overlap"
+                else f"Text '{la}' and '{lb}' nearly touch — the gap between them is tiny (cramped).")
         issues.append(CritiqueIssue(
             type="overlap",
             location=f"'{la}' & '{lb}'",
-            description=f"Text '{la}' and '{lb}' overlap — their bounding boxes intersect.",
+            description=desc,
             suggested_fix=(f"Separate '{la}' and '{lb}': place them in different regions / cells, or "
-                           f"use next_to(..., buff>=0.3) so the labels don't sit on top of each other."),
+                           f"use next_to(..., buff>=0.3) so the labels aren't cramped."),
+        ))
+    return issues
+
+
+def _tiny_font_issues(items: list[dict]) -> list[CritiqueIssue]:
+    """Flag SINGLE-LINE text rendered too small to read — usually auto-scaled to fit a cramped region
+    (the place_in_area tradeoff). Multi-line text is skipped (its height isn't a per-line proxy)."""
+    small = []
+    for it in items:
+        if it["kind"] not in _TEXT_KINDS or not it.get("label") or it.get("nl"):
+            continue
+        h = it["y"][1] - it["y"][0]
+        if 0.0 < h < _MIN_TEXT_HEIGHT:
+            small.append((h, it))
+    issues: list[CritiqueIssue] = []
+    for h, it in sorted(small, key=lambda p: p[0])[:_MAX_TINY_FONT_ISSUES]:
+        tag = it["label"]
+        fs = it.get("fs") or 0
+        fs_hint = f", font_size~{fs:.0f}" if fs else ""
+        issues.append(CritiqueIssue(
+            type="tiny_font",
+            location=f"{it['kind']} '{tag}'",
+            description=f"Text '{tag}' renders very small (height {h:.2f}u{fs_hint}) — likely unreadable.",
+            suggested_fix=(f"Give it more room or a larger font — it was likely auto-scaled to fit a cramped "
+                           f"region. Use fewer elements per row / a wider region / a bigger cell so its "
+                           f"rendered height is >= {_MIN_TEXT_HEIGHT}u."),
         ))
     return issues
 
@@ -200,7 +268,8 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
                                f"x in [-{fx - 0.5:.1f}, {fx - 0.5:.1f}], y in [-{fy - 0.5:.1f}, {fy - 0.5:.1f}] "
                                f"(keep a ~0.5 safe margin; scale_to_fit_width or next_to/shift it inward)."),
             ))
-    issues.extend(_overlap_issues(facts.get("items", [])))   # text-vs-text overlap (Phase 3)
+    issues.extend(_overlap_issues(facts.get("items", [])))    # overlap + near-touch clearance (Tier 1)
+    issues.extend(_tiny_font_issues(facts.get("items", [])))  # unreadable tiny text (Tier 1)
     return issues[:_MAX_ISSUES]
 
 

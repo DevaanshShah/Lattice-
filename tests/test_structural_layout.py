@@ -27,6 +27,47 @@ def test_grid_corners_ordered_left_top_to_right_bottom():
     assert cells["A1"] != cells["E8"]
 
 
+# --- square_on_segment orientation math (pure mirror; the real bug was a wrong-side square) ------
+
+def _point_in_triangle(pt, t0, t1, t2):
+    def sign(p1, p2, p3):
+        return (p1[0]-p3[0])*(p2[1]-p3[1]) - (p2[0]-p3[0])*(p1[1]-p3[1])
+    d1, d2, d3 = sign(pt, t0, t1), sign(pt, t1, t2), sign(pt, t2, t0)
+    has_neg, has_pos = (d1 < 0 or d2 < 0 or d3 < 0), (d1 > 0 or d2 > 0 or d3 > 0)
+    return not (has_neg and has_pos)
+
+
+def _centroid(pts):
+    xs, ys = zip(*pts)
+    return (sum(xs) / len(pts), sum(ys) / len(pts))
+
+
+@pytest.mark.unit
+def test_square_lands_outside_the_exact_regressed_triangle():
+    # the EXACT triangle from the regression: default outward=True put square_a's square INSIDE
+    t0, t1, t2 = (0.0, 0.0), (1.6, 0.0), (0.0, 2.133)
+    center = _centroid([t0, t1, t2])
+    sq = lattice_scene.square_corners_away_from(t0, t1, away_from=center)
+    assert not _point_in_triangle(_centroid(sq), t0, t1, t2)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("t0,t1,t2", [
+    ((0.0, 0.0), (1.6, 0.0), (0.0, 2.133)),      # the regressed case
+    ((0.0, 2.133), (1.6, 0.0), (0.0, 0.0)),      # same triangle, reversed winding
+    ((0.0, 0.0), (4.0, 0.0), (3.5, 0.5)),        # obtuse
+    ((0.0, 0.0), (2.0, 0.0), (1.0, 1.732)),      # near-equilateral
+    ((-1.0, -2.0), (3.0, -1.0), (0.0, 2.0)),     # scalene, negative coords
+    ((1.2, 3.4), (-2.1, 0.7), (4.4, -1.5)),      # arbitrary rotation
+])
+def test_square_orientation_generalizes_across_triangle_shapes_and_vertex_order(t0, t1, t2):
+    # every edge, BOTH directions -- away_from must win regardless of which vertex order is passed
+    center = _centroid([t0, t1, t2])
+    for p1, p2 in [(t0, t1), (t1, t0), (t1, t2), (t2, t1), (t2, t0), (t0, t2)]:
+        sq = lattice_scene.square_corners_away_from(p1, p2, away_from=center)
+        assert not _point_in_triangle(_centroid(sq), t0, t1, t2), f"square on {p1}->{p2} landed inside"
+
+
 # --- the base source is valid python -------------------------------------------------------
 
 @pytest.mark.unit
@@ -37,6 +78,13 @@ def test_lattice_scene_src_compiles():
     assert "def setup_scene" in lattice_scene.LATTICE_SCENE_SRC
     # components render math labels as MathTex (fixes the literal "$x_1$" structural-A/B bug)
     assert "def _label" in lattice_scene.LATTICE_SCENE_SRC and "MathTex" in lattice_scene.LATTICE_SCENE_SRC
+
+
+@pytest.mark.unit
+def test_lattice_scene_src_square_on_segment_takes_away_from():
+    # the embedded (real, in-container) method must carry the away_from fix, not just the pure mirror
+    assert "def square_on_segment" in lattice_scene.LATTICE_SCENE_SRC
+    assert "away_from" in lattice_scene.LATTICE_SCENE_SRC
 
 
 # --- guardrail accepts the subclass --------------------------------------------------------

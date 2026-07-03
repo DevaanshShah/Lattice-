@@ -42,9 +42,23 @@ placing tabular values into cells by hand is the #1 broken-scene cause — cells
   `self.place(...)` on the curve, dot, or tangent separately — `c2p` already positions them ON the
   axes; re-placing a sub-element re-centers it on a cell and DETACHES it from the graph. Group extra
   labels with the axes and place the group once if you must move it.
-- A BRACE annotation ("these form a group / a bigram"): `Brace(mob)` + `BraceLabel(mob, "text")`.
+- A BRACE annotation ("these form a group / a bigram"): `self.braced(mob, "text", DOWN)` — or Manim's
+  `Brace(mob)` + `BraceLabel(mob, "text")`.
 - HIGHLIGHT: pass the ORIGINAL, already-placed object to `SurroundingRectangle` — NEVER `.copy()`
   (a copy has no placed position, so the box draws in the wrong spot).
+
+GEOMETRY / CONSTRUCTIONS — do NOT hand-compute coordinates for these; the model gets the precise math
+wrong blind. Use the helper or the built-in:
+- A SQUARE flush on a triangle/segment side: `self.square_on_segment(A, B, away_from=REF)` — pass the
+  two vertex POINTS and a THIRD reference point the square must extend away from (the triangle's other
+  vertex, or `triangle.get_center()`), e.g. `self.square_on_segment(tri.get_vertices()[0], tri.get_vertices()[1], away_from=tri.get_center())`.
+  ALWAYS pass `away_from` — it is what makes the square land on the correct outside every time,
+  regardless of vertex order; guessing `outward=True/False` instead is a coin flip that can put the
+  square INSIDE the triangle. It is already positioned — do NOT `self.place()` it. NEVER build a
+  `Square()` and `next_to()` a corner: it will float, not sit flush on the side.
+- A RIGHT-ANGLE mark or an ANGLE arc: use Manim's `RightAngle(line1, line2)` / `Angle(line1, line2)` —
+  build the two `Line`s along the sides and pass them in; do not hand-place an arc.
+- A POINT / label ON a plotted curve: `Dot(ax.c2p(x0, f(x0)))` — it sits on the axes; never `self.place()` it.
 
 CONTENT:
 - Implement every object in `objects` and every beat in `beats`, in order. Map actions to animations:

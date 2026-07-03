@@ -30,6 +30,24 @@ def grid_cells() -> dict[str, tuple[float, float]]:
     return cells
 
 
+def square_corners_away_from(
+    p1: tuple[float, float], p2: tuple[float, float], away_from: tuple[float, float],
+) -> list[tuple[float, float]]:
+    """Pure 2D mirror of `LatticeScene.square_on_segment`'s orientation math (no Manim/Docker needed):
+    the 4 corners of a square flush on segment p1->p2, picked to extend AWAY from `away_from` via a
+    dot-product side test. z is dropped (always 0 for our 2D constructions) -- this mirrors the
+    in-container method's logic exactly, just without the Manim Polygon/np.ndarray wrapping."""
+    ax, ay = p1[0], p1[1]
+    bx, by = p2[0], p2[1]
+    ex, ey = bx - ax, by - ay
+    px, py = -ey, ex   # rotate +90 deg; |perp| == |edge| => a square
+    rx, ry = away_from[0], away_from[1]
+    mx, my = (ax + bx) / 2.0, (ay + by) / 2.0
+    if px * (rx - mx) + py * (ry - my) > 0:   # perp points TOWARD the reference -> flip
+        px, py = -px, -py
+    return [(ax, ay), (bx, by), (bx + px, by + py), (ax + px, ay + py)]
+
+
 LATTICE_SCENE_SRC = '''from manim import *
 import numpy as np
 
@@ -111,4 +129,36 @@ class LatticeScene(Scene):
 
     def connect(self, a, b, color=GREY, buff=0.1):
         return Arrow(a.get_center(), b.get_center(), buff=buff, color=color, stroke_width=3)
+
+    # --- geometry primitives: correctness-by-construction for the math the model reasons badly blind ---
+    def square_on_segment(self, p1, p2, away_from=None, color=BLUE, fill_opacity=0.25, outward=True):
+        """A square built FLUSH on segment p1->p2 (side length = |p1 p2|), extending to ONE side.
+        Removes the hard math of placing a square on a triangle's edge (the model gets this wrong
+        free-hand). Already positioned relative to p1/p2 -- do NOT self.place() it.
+
+        ALWAYS pass `away_from` (a third reference point the square must extend away from, e.g. the
+        triangle's third vertex or `triangle.get_center()`) -- the side is then picked by a dot-product
+        test, so it is correct for ANY vertex order/winding, not a guess. Without `away_from`, the
+        legacy `outward` bool picks a side by a fixed rotation sign, which can be the WRONG side
+        depending on winding (this caused a real overlap bug) -- only rely on it if you truly have no
+        reference point available.
+        """
+        a = np.array(p1, dtype=float); b = np.array(p2, dtype=float)
+        edge = b - a
+        perp = np.array([-edge[1], edge[0], 0.0])   # rotate +90 deg in-plane; |perp| == |edge| => a square
+        if away_from is not None:
+            ref = np.array(away_from, dtype=float)
+            mid = (a + b) / 2.0
+            if np.dot(perp, ref - mid) > 0:   # perp points TOWARD the reference -> flip to point away
+                perp = -perp
+        elif not outward:
+            perp = -perp
+        return Polygon(a, b, b + perp, a + perp, color=color,
+                       fill_color=color, fill_opacity=fill_opacity, stroke_width=2)
+
+    def braced(self, mob, text, direction=DOWN, color=GREY):
+        """A Brace on `mob` in `direction` with its label just beyond it. Returns VGroup(brace, label)."""
+        br = Brace(mob, direction=direction, color=color)
+        lbl = self._label(text, 24).next_to(br, direction, buff=0.1)
+        return VGroup(br, lbl)
 '''

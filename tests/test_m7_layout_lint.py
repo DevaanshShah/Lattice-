@@ -122,6 +122,61 @@ def test_overlap_issues_combined_and_capped():
     assert any(i.type == "overlap" for i in issues)
 
 
+# --- distance-based clearance + tiny font (Tier 1) -----------------------------------------
+
+@pytest.mark.unit
+def test_near_touch_texts_flagged():
+    # aligned on y, 0.05 horizontal gap: no area overlap (IoU ~0) but visually cramped -> flagged
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "a", "x": [0.0, 1.0], "y": [0.0, 0.3]},
+        {"i": 1, "kind": "Text", "label": "b", "x": [1.05, 2.05], "y": [0.0, 0.3]},
+    ])
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1 and "nearly touch" in ov[0].description
+
+
+@pytest.mark.unit
+def test_diagonal_near_texts_not_flagged():
+    # small gap on BOTH axes (corner-to-corner) is not cramped -> not flagged
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "a", "x": [0.0, 1.0], "y": [0.0, 0.3]},
+        {"i": 1, "kind": "Text", "label": "b", "x": [1.05, 2.05], "y": [0.4, 0.7]},
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_clearance_beyond_threshold_not_flagged():
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "a", "x": [0.0, 1.0], "y": [0.0, 0.3]},
+        {"i": 1, "kind": "Text", "label": "b", "x": [1.15, 2.15], "y": [0.0, 0.3]},  # 0.15 gap > 0.12
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_tiny_single_line_text_flagged():
+    facts = _facts([{"i": 0, "kind": "Text", "label": "tiny", "x": [0.0, 0.5], "y": [0.0, 0.1],
+                     "fs": 8.0, "nl": False}])   # height 0.1 < 0.18
+    tf = [i for i in layout_lint.issues_from_facts(facts) if i.type == "tiny_font"]
+    assert len(tf) == 1 and "tiny" in tf[0].location
+
+
+@pytest.mark.unit
+def test_tiny_multiline_text_not_flagged():
+    # multi-line height isn't a per-line legibility proxy -> skipped
+    facts = _facts([{"i": 0, "kind": "Text", "label": "two\nlines", "x": [0.0, 2.0], "y": [0.0, 0.1],
+                     "fs": 24.0, "nl": True}])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "tiny_font"] == []
+
+
+@pytest.mark.unit
+def test_readable_text_not_flagged_tiny():
+    facts = _facts([{"i": 0, "kind": "Text", "label": "ok", "x": [0.0, 1.0], "y": [0.0, 0.4],
+                     "fs": 28.0, "nl": False}])   # height 0.4 >= 0.18
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "tiny_font"] == []
+
+
 # --- the vision_critic splice: free lint gates the paid vision call -------------------------
 
 def _ok_render(mp4, png):
