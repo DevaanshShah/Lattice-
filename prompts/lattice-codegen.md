@@ -20,9 +20,15 @@ PLACEMENT — use the grid, not coordinates:
   it as math: `self.node(r"x_1")`, `self.node(r"\hat{y}")`, `self.labeled_box(r"\sigma")`. Do NOT wrap
   in `$...$` and do NOT pass plain `"x_1"` for a subscript (it would show literally).
 - Do NOT use `.to_edge(...)`, `.move_to([x, y, 0])`, or hand-picked coordinates FOR LAYOUT — use the
-  grid / `place_in_area` / components. (You may still `.animate` an object after it is placed.)
+  grid / `place_in_area` / components.
 - Give each labelled object its own cell, at least one cell away from its neighbours, so labels never
   collide. Keep related items in one `VGroup` and place the group.
+- ANIMATION MOTION — a moving object must STOP in an EMPTY grid cell, never ON another object. Animate to
+  a cell: `packet.animate.move_to(self.cell("C6"))`. Do NOT animate onto another object's edge/center —
+  `x.animate.move_to(box.get_left())` or `.get_center()` lands x ON TOP of box (a packet buried in a box,
+  an arrow struck through a label — the #1 motion defect). A packet "arriving at" a node should stop in
+  the cell BESIDE it, not on it. The overlap rules apply to an object's FINAL animated position exactly
+  as to its initial placement.
 
 STRUCTURED DATA — use Manim's built-ins, NOT the grid, for these (the grid is for freeform diagrams;
 placing tabular values into cells by hand is the #1 broken-scene cause — cells won't line up):

@@ -5,7 +5,8 @@ so the narrator doesn't write far more than the visuals can carry. Pure prompt-c
 (fake client captures the messages) -- no LLM/Docker needed."""
 import pytest
 
-from composition.decoupled import _MIN_NARRATION_WORDS, _WORDS_PER_SECOND, _scene_narration
+from composition.decoupled import (_MIN_NARRATION_WORDS, _WORDS_PER_SECOND, _clean_narration,
+                                    _scene_narration)
 from core.schemas.outline import Outline, OutlineItem
 
 ITEM = OutlineItem(title="Squares on the Right Triangle", intent="Build a square on each side.")
@@ -65,6 +66,36 @@ def test_narration_grounds_in_code_and_arc():
     _scene_narration(ITEM, OUTLINE, 0, CODE, client=fake, target_seconds=10.0)
     assert "Pythagorean theorem" in fake.user
     assert "GeneratedScene" in fake.user  # the actual code, not a paraphrase
+
+
+@pytest.mark.unit
+def test_clean_narration_strips_chat_framing():
+    # the exact web defect: model wrapped the spoken words in preamble + markdown + closing remarks,
+    # which gTTS would read aloud. _clean_narration must keep ONLY the spoken sentences.
+    garbage = (
+        "Here's the spoken narration for this scene:\n\n"
+        '**"TCP\'s slow start begins with an exponential increase."**\n\n'
+        '**"Next, we\'ll see an example transfer."**\n\n'
+        "Only visuals from the code are referenced. The narration stays concise.\n\n"
+        "Let me know if you'd like any adjustments!"
+    )
+    out = _clean_narration(garbage)
+    assert out.startswith("TCP's slow start")
+    assert "example transfer" in out
+    for bad in ("Here's the", "**", "Let me know", "Only visuals", "narration stays"):
+        assert bad not in out
+
+
+@pytest.mark.unit
+def test_clean_narration_passthrough_clean_text():
+    clean = "This scene shows a right triangle. Watch how the squares relate. Next, we prove it."
+    assert _clean_narration(clean) == clean
+
+
+@pytest.mark.unit
+def test_clean_narration_never_empty():
+    # if EVERYTHING looked like meta, fall back to the original rather than return empty audio
+    assert _clean_narration("Here's the narration:").strip() != ""
 
 
 @pytest.mark.unit

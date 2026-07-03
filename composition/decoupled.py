@@ -14,6 +14,7 @@ ffmpeg/ffprobe run INSIDE the render image (no host ffmpeg), via `composition.st
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -199,6 +200,37 @@ def _critic_intent(spec: SceneSpec | None) -> str:
 _WORDS_PER_SECOND = 2.3
 _MIN_NARRATION_WORDS = 20  # floor: even a very short scene gets a coherent sentence, not a fragment
 
+# The narrator model sometimes wraps the spoken words in chat framing ("Here's the narration:",
+# markdown **bold**, closing "Let me know if...") which gTTS then reads ALOUD (a real web defect).
+# Strip it deterministically so a chatty model can never leak meta-commentary into the audio.
+_NARRATION_META = (
+    "let me know", "hope this helps", "hope that helps", "feel free", "as requested", "as you asked",
+    "only visuals", "only the visuals", "the narration stays", "the narration is", "no extra detail",
+    "no additional detail", "i've kept", "i have kept", "would you like", "adjustments!",
+    "here's the narration", "here is the narration", "here's the spoken", "here is the spoken",
+)
+
+
+def _clean_narration(text: str) -> str:
+    """Strip chatty framing (markdown emphasis, 'Here's the narration:' preamble, 'Let me know...' trailer)
+    so gTTS speaks ONLY the intended words. Line-based + conservative: keeps anything not clearly meta;
+    never returns empty (falls back to the original)."""
+    t = text.replace("**", "").replace("*", "").replace("`", "")
+    kept = []
+    for ln in t.splitlines():
+        s = ln.strip().strip('"“”‘’ ').strip()
+        if not s:
+            continue
+        low = s.lower()
+        is_meta = (
+            ("narration" in low and (low.endswith(":") or low.startswith(("here", "sure", "okay", "ok"))))
+            or any(k in low for k in _NARRATION_META)
+            or low.rstrip(".!") in ("sure", "certainly", "of course", "okay", "ok")
+        )
+        if not is_meta:
+            kept.append(s)
+    return " ".join(kept).strip() or text.strip()
+
 
 def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str, *,
                      client: LLMClient, target_seconds: float | None = None) -> str:
@@ -250,7 +282,8 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
         "- Teach the concept — don't just read out object names.\n"
         "- Build a natural bridge from the previous scene (if any) in one sentence — no 'Previously...' clichés.\n"
         "- End with a forward pull toward the next scene (if any).\n"
-        "- Plain text only — no bullets, no markdown.\n"
+        "- Output ONLY the words to be spoken: NO preamble ('Here's the narration:'), NO markdown or "
+        "asterisks or quotes, NO closing remarks ('let me know', 'hope this helps'). Just the sentences.\n"
         f"{length_rule}"
     )
     user = (
@@ -260,8 +293,9 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
         f"Animation code (what is actually on screen):\n```python\n{code_preview}\n```\n\n"
         "Write the spoken narration for this scene. Only reference visuals that exist in the code above."
     )
-    return client.chat([{"role": "system", "content": system},
-                        {"role": "user", "content": user}], max_tokens=400).strip()
+    raw = client.chat([{"role": "system", "content": system},
+                       {"role": "user", "content": user}], max_tokens=400)
+    return _clean_narration(raw)
 
 
 # --- one scene, end to end -------------------------------------------------------------------
@@ -309,18 +343,30 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
     if not ok or not mp4:
         raise RuntimeError(f"render failed for scene {index}")
     video_rel = Path(mp4).resolve().relative_to(wd.resolve()).as_posix()
-    if narration_override is not None:
-        narration_text = "\n".join(s for s in narration_override if s and s.strip()).strip()
-    else:
-        video_duration = _probe_duration(wd, video_rel)  # measured, real -- used to pace narration length
-        narration_text = _scene_narration(item, outline, index, code, client=client,
-                                          target_seconds=video_duration)
-    (wd / "narration.txt").write_text(narration_text, encoding="utf-8")
-    clip = tts.synthesize(narration_text, out_dir=wd)
-    audio_rel = Path(clip.path).resolve().relative_to(wd.resolve()).as_posix()
-    if not mux_audio(wd, video_rel, audio_rel, "narrated.mp4"):
-        raise RuntimeError(f"audio mux failed for scene {index}")
-    return wd / "narrated.mp4"
+    narrated = wd / "narrated.mp4"
+    try:
+        if narration_override is not None:
+            narration_text = "\n".join(s for s in narration_override if s and s.strip()).strip()
+        else:
+            video_duration = _probe_duration(wd, video_rel)  # measured -- paces narration length
+            narration_text = _scene_narration(item, outline, index, code, client=client,
+                                              target_seconds=video_duration)
+        (wd / "narration.txt").write_text(narration_text, encoding="utf-8")
+        clip = tts.synthesize(narration_text, out_dir=wd)
+        audio_rel = Path(clip.path).resolve().relative_to(wd.resolve()).as_posix()
+        if not mux_audio(wd, video_rel, audio_rel, "narrated.mp4"):
+            raise RuntimeError(f"audio mux failed for scene {index}")
+        return narrated
+    except Exception:
+        # A narration/TTS/mux hiccup must NOT discard an already-GOOD silent render — that was costing a
+        # full re-render (a scene that rendered fine then vanished). An explicit narration EDIT still fails
+        # loudly (the caller keeps the prior clip+words); the normal build ships the scene SILENT (stitch
+        # adds a uniform silent track) rather than lose good visuals to a flaky audio step.
+        if narration_override is not None:
+            raise
+        (wd / "narration.txt").write_text("(narration unavailable)", encoding="utf-8")
+        shutil.copyfile(mp4, narrated)
+        return narrated
 
 
 def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_components,

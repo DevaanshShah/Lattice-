@@ -177,6 +177,77 @@ def test_readable_text_not_flagged_tiny():
     assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "tiny_font"] == []
 
 
+# --- WIDENED lint: cross-group label overlap + shape-over-text (the classes v1 missed) ------
+# The narrow v1 only compared TOP-LEVEL text, so a label buried in a labeled_box VGroup and a shape
+# drawn on top of a label both slipped (web "how tcp works": arrow-through-box, timer-circle-on-box).
+
+def _facts2(items, texts):
+    return {"ok": True, "frame": FRAME, "items": items, "texts": texts}
+
+
+@pytest.mark.unit
+def test_cross_group_labels_overlap_flagged():
+    # scene-0 box-jam: two labels from DIFFERENT boxes (top 0 vs 1) whose boxes overlap
+    facts = _facts2([], [
+        {"top": 0, "kind": "Text", "label": "Hi", "x": [0.0, 0.6], "y": [0.0, 0.3]},
+        {"top": 1, "kind": "Text", "label": "Computer B", "x": [0.3, 1.5], "y": [0.0, 0.3]},
+    ])
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert ov and "Hi" in ov[0].location
+
+
+@pytest.mark.unit
+def test_same_group_labels_not_flagged():
+    # two texts in the SAME component (same top) overlapping is intended -> never a defect
+    facts = _facts2([], [
+        {"top": 0, "kind": "Text", "label": "a", "x": [0.0, 0.6], "y": [0.0, 0.3]},
+        {"top": 0, "kind": "Text", "label": "b", "x": [0.1, 0.7], "y": [0.05, 0.35]},
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_circle_over_label_flagged():
+    # scene-3: a FREE Circle drawn on top of a box's label -> occlusion defect
+    facts = _facts2(
+        [{"i": 5, "kind": "Circle", "label": "", "x": [0.0, 0.8], "y": [0.0, 0.8]}],
+        [{"top": 1, "kind": "Text", "label": "Packet 3", "x": [0.1, 0.7], "y": [0.2, 0.6]}],
+    )
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert ov and "Packet 3" in ov[0].location and "Circle" in ov[0].location
+
+
+@pytest.mark.unit
+def test_rectangle_over_label_not_flagged():
+    # a Rectangle over a label is the intended labeled_box CONTAINER -> NOT flagged (the v1 false-positive dodge)
+    facts = _facts2(
+        [{"i": 2, "kind": "Rectangle", "label": "", "x": [-0.2, 1.0], "y": [-0.2, 0.6]}],
+        [{"top": 3, "kind": "Text", "label": "lbl", "x": [0.0, 0.6], "y": [0.0, 0.3]}],
+    )
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_shape_barely_touching_label_not_flagged():
+    # a Circle clipping just a corner of a label (<35% covered) is not occlusion -> conservative, no FP
+    facts = _facts2(
+        [{"i": 5, "kind": "Circle", "label": "", "x": [0.6, 1.4], "y": [0.2, 1.0]}],
+        [{"top": 1, "kind": "Text", "label": "x", "x": [0.0, 0.7], "y": [0.0, 0.4]}],
+    )
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"] == []
+
+
+@pytest.mark.unit
+def test_backward_compat_top_level_items_still_work():
+    # old callers pass only `items` (no `texts`): top-level text overlap must behave exactly as before
+    facts = _facts([
+        {"i": 0, "kind": "MathTex", "label": "w_2", "x": [0.0, 0.5], "y": [0.0, 0.3]},
+        {"i": 1, "kind": "MathTex", "label": "w_3", "x": [0.1, 0.6], "y": [0.05, 0.35]},
+    ])
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1
+
+
 # --- the vision_critic splice: free lint gates the paid vision call -------------------------
 
 def _ok_render(mp4, png):

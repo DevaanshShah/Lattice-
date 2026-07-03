@@ -8,6 +8,8 @@ that scene. `_make_issue_fixer` (vision/lint-driven) was already scaffold-safe; 
 closes the same gap for compile-failure-driven regen. Pure prompt-construction tests (fake client) --
 no LLM/Docker needed.
 """
+from pathlib import Path
+
 import pytest
 
 from composition.decoupled import _make_compile_fixer, _make_issue_fixer
@@ -49,6 +51,41 @@ def test_compile_fixer_freehand_mode_reenforces_background():
     out = fixer("class GeneratedScene(Scene):\n    def construct(self):\n        pass\n",
                "SyntaxError: bad")
     assert "background_color" in out                   # freehand path re-pins the background
+
+
+@pytest.mark.unit
+def test_build_scene_keeps_good_render_when_narration_fails(tmp_path, monkeypatch):
+    # the web defect: a scene RENDERED fine, then a narration/TTS hiccup discarded the whole thing.
+    # Now a good silent render must survive -> the scene ships SILENT, not lost.
+    from composition import decoupled
+    from core.schemas.outline import Outline, OutlineItem
+    from core.schemas.scene_spec import SceneSpec
+    from verification.compile_repair import RepairResult
+
+    spec = SceneSpec.model_validate({
+        "title": "T", "prompt": "p", "narration": "n",
+        "objects": [{"id": "o", "kind": "square"}], "beats": [{"action": "create", "targets": ["o"]}]})
+    outline = Outline(topic="t", items=[OutlineItem(title="T", intent="x")])
+    wd = tmp_path / "scene_0"
+
+    def fake_repair(code, work_dir, **k):   # a successful render: a silent mp4 inside the work dir
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+        silent = Path(work_dir) / "silent.mp4"
+        silent.write_bytes(b"good-render")
+        return RepairResult(True, code, silent, [], [])
+
+    monkeypatch.setattr("verification.compile_repair.repair", fake_repair)
+    monkeypatch.setattr("composition.decoupled._probe_duration", lambda *a, **k: 5.0)
+    monkeypatch.setattr("composition.decoupled._scene_narration",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("narration provider 500")))
+
+    out = decoupled.build_scene(
+        outline.items[0], outline, 0, work_dir=wd, client=object(), use_critic=False, structural=True,
+        base_code="class GeneratedScene(LatticeScene):\n    pass\n", spec=spec)
+
+    assert out == wd / "narrated.mp4" and out.exists()
+    assert out.read_bytes() == b"good-render"                         # the GOOD render, preserved
+    assert (wd / "narration.txt").read_text().strip() == "(narration unavailable)"
 
 
 @pytest.mark.unit

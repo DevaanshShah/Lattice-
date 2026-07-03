@@ -37,7 +37,8 @@ _MAX_ISSUES = 8  # keep the fix prompt small — the fix call is the expensive o
 # Overlap (Phase 3): flag TWO TOP-LEVEL TEXT mobjects whose boxes intersect. Top-level only (the probe
 # never flattens), so a single MathTex's internal glyphs are NOT separate items — no glyph false
 # positives. Restricting to text-vs-text avoids flagging intended label-inside-box / arrow-over-content.
-_TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title"}
+_TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title",
+               "DecimalNumber", "Integer", "Variable"}
 _OVERLAP_MIN_FRAC = 0.25  # min intersection as a fraction of the SMALLER box's area to call it overlap
 _MAX_OVERLAP_ISSUES = 4
 
@@ -49,6 +50,16 @@ _MIN_CLEARANCE = 0.12
 # 8-unit-tall frame — usually the place_in_area auto-scale-to-fit shrinking content into a cramped region.
 _MIN_TEXT_HEIGHT = 0.18
 _MAX_TINY_FONT_ISSUES = 4
+
+# Shape-over-text (widening — the class the narrow v1 missed): a FREE round/linear shape (a timer
+# circle drawn on a box, an arrow struck THROUGH a label) covering a text from a DIFFERENT group is
+# almost always an occlusion defect. We DELIBERATELY EXCLUDE Rectangle/Square/Polygon — those are
+# commonly the intended label CONTAINER (labeled_box), so flagging text-inside-its-box would
+# false-positive (exactly the trap the v1 dodged). Only cross-group occlusion by a non-box shape.
+_OCCLUDER_KINDS = {"Circle", "Ellipse", "Arc", "Annulus", "Dot", "AnnotationDot", "Arrow", "Line",
+                   "DashedLine", "Vector", "DoubleArrow", "CurvedArrow", "Arrow3D", "Sector"}
+_COVER_FRAC = 0.35        # a shape covering >= this fraction of a text's OWN area occludes it
+_MAX_COVERED_ISSUES = 4
 
 # The in-container probe. Runs scene.py headless, applies animation END states, prints one JSON
 # line of top-level mobject bounding boxes. Self-contained (no project imports) — it executes in
@@ -126,21 +137,42 @@ def _bbox(m):
     return [float(ul[0]), float(dr[0])], [float(dr[1]), float(ul[1])]   # x[left,right], y[bottom,top]
 
 
+_TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title",
+               "DecimalNumber", "Integer", "Variable"}
+
+
+def _collect_texts(top, m, out):
+    """Collect text mobjects at ANY depth, each tagged with `top` = its top-level ancestor index, so a
+    label buried in a labeled_box VGroup is comparable. Stop at the text (don't descend into its glyphs
+    / SingleStringMathTex children) -> no glyph double-count and no false positives."""
+    try:
+        if _kind(m) in _TEXT_KINDS:
+            x, y = _bbox(m)
+            out.append({"top": top, "kind": _kind(m), "label": _label(m), "x": x, "y": y,
+                        "fs": _fontsize(m), "nl": ("\n" in _rawtext(m))})
+            return
+        for s in getattr(m, "submobjects", []):
+            _collect_texts(top, s, out)
+    except Exception:
+        pass
+
+
 try:
     import scene as _mod
     S = _mod.GeneratedScene()
     S.construct()
-    items = []
-    for i, m in enumerate(S.mobjects):     # top-level mobjects only (a group's bbox covers its parts)
+    items, texts = [], []
+    for i, m in enumerate(S.mobjects):     # top-level mobjects (a group's bbox covers its parts)
         try:
             x, y = _bbox(m)
             items.append({"i": i, "kind": _kind(m), "label": _label(m), "x": x, "y": y,
                           "fs": _fontsize(m), "nl": ("\n" in _rawtext(m))})
         except Exception:
             pass
+        _collect_texts(i, m, texts)        # text labels at any depth, tagged with this top index
     print(json.dumps({"ok": True,
                       "frame": [float(config.frame_x_radius), float(config.frame_y_radius)],
-                      "items": items}))
+                      "items": items, "texts": texts}))
 except Exception as e:
     print(json.dumps({"ok": False, "error": str(type(e).__name__) + ": " + str(e)[:200]}))
 '''
@@ -181,15 +213,18 @@ def _edge_gap(a: dict, b: dict) -> tuple[float, float]:
     return gap_x, gap_y
 
 
-def _overlap_issues(items: list[dict]) -> list[CritiqueIssue]:
-    """Flag TEXT pairs that OVERLAP (boxes intersect) OR NEARLY TOUCH (distance-based clearance — aligned
-    on one axis with a tiny gap on the other). The clearance case catches labels a few px apart that
-    area-fraction alone misses (IoU ~ 0 but visually cramped)."""
-    texts = [it for it in items if it["kind"] in _TEXT_KINDS and it.get("label")]
+def _overlap_issues(texts: list[dict]) -> list[CritiqueIssue]:
+    """Flag TEXT pairs (labels at ANY depth) that OVERLAP (boxes intersect) OR NEARLY TOUCH (distance-
+    based clearance). Pairs from the SAME top-level group are skipped (a component's own parts are
+    intended); CROSS-group text collision — a moved box's label landing on another box's label — is the
+    class the narrow top-level-only v1 missed."""
+    texts = [t for t in texts if t.get("label")]
     flagged = []  # (severity, kind, a, b) — higher severity sorts first
     for i in range(len(texts)):
         for j in range(i + 1, len(texts)):
             a, b = texts[i], texts[j]
+            if a.get("top") is not None and a.get("top") == b.get("top"):
+                continue  # same container (e.g. one component's parts) -> intended, not a defect
             frac = _overlap_frac(a, b)
             if frac >= _OVERLAP_MIN_FRAC:
                 flagged.append((1.0 + frac, "overlap", a, b))
@@ -217,12 +252,49 @@ def _overlap_issues(items: list[dict]) -> list[CritiqueIssue]:
     return issues
 
 
-def _tiny_font_issues(items: list[dict]) -> list[CritiqueIssue]:
-    """Flag SINGLE-LINE text rendered too small to read — usually auto-scaled to fit a cramped region
-    (the place_in_area tradeoff). Multi-line text is skipped (its height isn't a per-line proxy)."""
+def _covered_issues(items: list[dict], texts: list[dict]) -> list[CritiqueIssue]:
+    """Flag a text label substantially COVERED by a FREE round/linear shape from a DIFFERENT group — a
+    timer circle drawn on a box, an arrow struck through a label (scenes 0 & 3). Box shapes are excluded
+    (they're the intended label container), and a shape covering its OWN group's label is skipped, so
+    intended label-inside-box never trips."""
+    shapes = [it for it in items if it["kind"] in _OCCLUDER_KINDS]
+    texts = [t for t in texts if t.get("label")]
+    if not shapes or not texts:
+        return []
+    flagged = []  # (cover_frac, text, shape)
+    for t in texts:
+        area_t = (t["x"][1] - t["x"][0]) * (t["y"][1] - t["y"][0])
+        if area_t <= 0:
+            continue
+        for s in shapes:
+            if s.get("i") == t.get("top"):
+                continue  # the shape IS this text's own top-level container -> intended
+            ox = max(0.0, min(t["x"][1], s["x"][1]) - max(t["x"][0], s["x"][0]))
+            oy = max(0.0, min(t["y"][1], s["y"][1]) - max(t["y"][0], s["y"][0]))
+            cover = (ox * oy) / area_t
+            if cover >= _COVER_FRAC:
+                flagged.append((cover, t, s))
+                break
+    issues: list[CritiqueIssue] = []
+    for cover, t, s in sorted(flagged, key=lambda p: -p[0])[:_MAX_COVERED_ISSUES]:
+        lbl = t["label"]
+        issues.append(CritiqueIssue(
+            type="overlap",
+            location=f"{s['kind']} over '{lbl}'",
+            description=(f"A {s['kind']} is drawn on top of the text '{lbl}' (covers ~{cover * 100:.0f}% "
+                        f"of it) — the shape occludes the label."),
+            suggested_fix=(f"Move the {s['kind']} off '{lbl}' (place it in a different cell, or next_to "
+                           f"with buff>=0.3), or move the label — a shape must not sit on top of text."),
+        ))
+    return issues
+
+
+def _tiny_font_issues(texts: list[dict]) -> list[CritiqueIssue]:
+    """Flag SINGLE-LINE text (at any depth) rendered too small to read — usually auto-scaled to fit a
+    cramped region (the place_in_area tradeoff). Multi-line text is skipped (height isn't a per-line proxy)."""
     small = []
-    for it in items:
-        if it["kind"] not in _TEXT_KINDS or not it.get("label") or it.get("nl"):
+    for it in texts:
+        if not it.get("label") or it.get("nl"):
             continue
         h = it["y"][1] - it["y"][0]
         if 0.0 < h < _MIN_TEXT_HEIGHT:
@@ -243,9 +315,21 @@ def _tiny_font_issues(items: list[dict]) -> list[CritiqueIssue]:
     return issues
 
 
+def _texts_of(facts: dict) -> list[dict]:
+    """The text mobjects to compare. New probe emits `texts` (labels at any depth, each tagged with its
+    top-level ancestor `top`). Backward-compat: if absent, derive from top-level text `items`, each its
+    own group — so old callers / unit tests that pass only `items` behave exactly as before."""
+    if "texts" in facts:
+        return [t for t in facts["texts"] if t.get("label")]
+    return [{**it, "top": it["i"]} for it in facts.get("items", [])
+            if it["kind"] in _TEXT_KINDS and it.get("label")]
+
+
 def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
-    """Pure: probe geometry facts -> OFF-FRAME + OVERLAP CritiqueIssues. Unit-testable without Docker."""
+    """Pure: probe geometry facts -> OFF-FRAME + OVERLAP + SHAPE-OVER-TEXT + TINY-FONT CritiqueIssues.
+    Unit-testable without Docker."""
     fx, fy = facts["frame"]
+    texts = _texts_of(facts)
     issues: list[CritiqueIssue] = []
     for it in facts.get("items", []):
         sides = []
@@ -268,8 +352,9 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
                                f"x in [-{fx - 0.5:.1f}, {fx - 0.5:.1f}], y in [-{fy - 0.5:.1f}, {fy - 0.5:.1f}] "
                                f"(keep a ~0.5 safe margin; scale_to_fit_width or next_to/shift it inward)."),
             ))
-    issues.extend(_overlap_issues(facts.get("items", [])))    # overlap + near-touch clearance (Tier 1)
-    issues.extend(_tiny_font_issues(facts.get("items", [])))  # unreadable tiny text (Tier 1)
+    issues.extend(_overlap_issues(texts))                          # cross-group text-vs-text overlap + near-touch
+    issues.extend(_covered_issues(facts.get("items", []), texts))  # a shape drawn on top of a label
+    issues.extend(_tiny_font_issues(texts))                        # unreadable tiny text
     return issues[:_MAX_ISSUES]
 
 
