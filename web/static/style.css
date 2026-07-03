@@ -60,6 +60,16 @@ ol#outline-list .intent { color: var(--muted); }
 .dl-link:hover { text-decoration: underline; }
 .scene .ops { display: flex; gap: 8px; flex-wrap: wrap; }
 .scene .ops button { font-size: 13px; padding: 6px 10px; }
+/* version history + rollback */
+.history-details { margin: 6px 0 2px; }
+.history-details summary { color: var(--muted); cursor: pointer; font-size: 13px; user-select: none; }
+.history-details .history { margin: 8px 0; font-size: 13px; color: var(--muted); }
+.hist-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.hist-row:last-child { border-bottom: 0; }
+.hist-row button { font-size: 12px; padding: 4px 9px; }
 /* --- coarse progress: a filling cylinder, not a wall of logs --- */
 .prog-wrap { display: flex; align-items: center; gap: 26px; }
 .cylinder {

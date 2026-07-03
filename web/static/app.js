@@ -147,10 +147,15 @@ function sceneCard(s) {
       <button class="ghost" data-op="regen">Regenerate</button>
       <button class="ghost" data-op="tweak">Tweak…</button>
       <button class="ghost" data-op="narrate">Edit narration…</button>
+      <button class="ghost" data-op="insert">＋ Insert after</button>
       <button class="ghost" data-op="up">↑</button>
       <button class="ghost" data-op="down">↓</button>
       <button class="ghost" data-op="del">Delete</button>
-    </div>`;
+    </div>
+    <details class="history-details">
+      <summary>🕘 Versions &amp; rollback</summary>
+      <div class="history" data-history></div>
+    </details>`;
   el.querySelector('[data-op=regen]').onclick = () => sceneJob(`/api/projects/${state.pid}/scenes/${s.index}/regenerate`, { quality: quality() });
   el.querySelector('[data-op=tweak]').onclick = () => {
     const instruction = prompt("Tweak this scene (e.g. 'move the cache box left'):");
@@ -163,10 +168,51 @@ function sceneCard(s) {
   };
   el.querySelector('[data-op=dl-script]').onclick = () =>
     downloadFile(`/api/projects/${state.pid}/script?index=${s.index}`, `scene-${s.index}-script.txt`);
+  el.querySelector('[data-op=insert]').onclick = () => {
+    const title = prompt("New scene title (inserted right after this one):");
+    if (!title) return;
+    const intent = prompt("What should this new scene show / explain?") || title;
+    sceneJob(`/api/projects/${state.pid}/scenes/insert`,
+      { pos: s.index + 1, title, intent, quality: quality() });
+  };
   el.querySelector('[data-op=up]').onclick = () => structural("reorder", { frm: s.index, to: Math.max(0, s.index - 1) });
   el.querySelector('[data-op=down]').onclick = () => structural("reorder", { frm: s.index, to: s.index + 1 });
   el.querySelector('[data-op=del]').onclick = () => { if (confirm("Delete this scene?")) structuralDelete(s.index); };
+  wireHistory(el, s.index);
   return el;
+}
+
+// Version history + rollback (synchronous — no render). Loads lazily when the panel is opened.
+function wireHistory(card, index) {
+  const details = card.querySelector('.history-details');
+  const box = details.querySelector('[data-history]');
+  details.addEventListener('toggle', async () => {
+    if (!details.open) return;
+    box.textContent = 'loading…';
+    try {
+      const { versions } = await api("GET", `/api/projects/${state.pid}/scenes/${index}/history`);
+      if (!versions.length) { box.textContent = 'no saved versions yet — edits (tweak / narration / rollback) create restore points.'; return; }
+      box.innerHTML = '';
+      versions.forEach((v) => {
+        const row = document.createElement('div');
+        row.className = 'hist-row';
+        const label = document.createElement('span');
+        label.textContent = `v${v.version}${v.label ? ' · ' + v.label : ''}`;
+        const btn = document.createElement('button');
+        btn.className = 'ghost'; btn.textContent = 'Roll back';
+        btn.onclick = async () => {
+          try {
+            state.project = await api("POST", `/api/projects/${state.pid}/scenes/${index}/rollback`,
+              { version: v.version });
+            log(`rolled scene ${index} back to v${v.version}`);
+            renderScenes();
+          } catch (e) { log("error: " + e.message); }
+        };
+        row.append(label, btn);
+        box.appendChild(row);
+      });
+    } catch (e) { box.textContent = 'error: ' + e.message; }
+  });
 }
 
 async function sceneJob(url, body) {
