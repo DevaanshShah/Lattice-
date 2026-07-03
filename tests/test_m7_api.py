@@ -65,6 +65,19 @@ def client(tmp_path, monkeypatch):
         node.script = node.script or ["n"]
         return node
 
+    def fake_build_scene_decoupled(item, outline, index, *, work_dir, spec=None, base_code=None,
+                                   narration_override=None, **k):
+        # mirror composition.decoupled.build_scene's on-disk outputs for the edit ops
+        wd = Path(work_dir)
+        wd.mkdir(parents=True, exist_ok=True)
+        (wd / "narrated.mp4").write_bytes(b"v2")
+        (wd / "scene.py").write_text(base_code or "class GeneratedScene(LatticeScene):\n    pass\n",
+                                     encoding="utf-8")
+        (wd / "spec.json").write_text((spec or SPEC).model_dump_json(), encoding="utf-8")
+        text = "\n".join(narration_override) if narration_override else "n"
+        (wd / "narration.txt").write_text(text, encoding="utf-8")
+        return wd / "narrated.mp4"
+
     def fake_stitch(mp4s, *, work_dir, out_name="final.mp4", **k):
         p = Path(work_dir) / out_name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -81,6 +94,7 @@ def client(tmp_path, monkeypatch):
         return NarratedResult(True, "code", mp4, srt, [], lines or ["n"])
 
     monkeypatch.setattr("composition.decoupled.build_video", fake_build_video)
+    monkeypatch.setattr("composition.decoupled.build_scene", fake_build_scene_decoupled)
     monkeypatch.setattr("composition.video.build_scene", fake_build_scene)
     monkeypatch.setattr("composition.stitch.stitch", fake_stitch)
     monkeypatch.setattr("editing.tweak.apply_tweak", lambda spec, instruction, **k: spec)
@@ -192,6 +206,34 @@ def test_tweak_and_narration_endpoints_complete(client):
     n = client.post(f"/api/projects/{pid}/scenes/0/narration",
                     json={"lines": ["a new line", "and another"]}).json()
     assert client.get(f"/api/jobs/{n['job_id']}").json()["status"] == "done"
+
+
+@pytest.mark.unit
+def test_edit_ops_use_structural_decoupled(client, monkeypatch):
+    # the whole point of step 2: per-scene edits go through the DECOUPLED STRUCTURAL path (not the
+    # old freehand editing modules). Spy on build_scene to confirm structural=True flows through.
+    pid = _build_project(client)
+    seen = {}
+    import composition.decoupled as cd
+    real = cd.build_scene   # the fixture's fake
+    monkeypatch.setattr("composition.decoupled.build_scene",
+                        lambda item, outline, index, **k: (seen.update(structural=k.get("structural")),
+                                                           real(item, outline, index, **k))[1])
+    job = client.post(f"/api/projects/{pid}/scenes/0/regenerate", json={"quality": "preview"}).json()
+    assert client.get(f"/api/jobs/{job['job_id']}").json()["status"] == "done"
+    assert seen["structural"] is True
+
+
+@pytest.mark.unit
+def test_insert_scene_renders_and_grows_video(client):
+    pid = _build_project(client)
+    before = len(client.get(f"/api/projects/{pid}").json()["scenes"])
+    job = client.post(f"/api/projects/{pid}/scenes/insert",
+                      json={"pos": 1, "title": "New", "intent": "z"}).json()
+    assert client.get(f"/api/jobs/{job['job_id']}").json()["status"] == "done"
+    after = client.get(f"/api/projects/{pid}").json()["scenes"]
+    assert len(after) == before + 1
+    assert after[1]["title"] == "New" and after[1]["built"]
 
 
 @pytest.mark.unit

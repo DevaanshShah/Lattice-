@@ -16,12 +16,12 @@ from uuid import uuid4
 
 from composition import decoupled
 from composition import export as export_mod
-from composition import regen
-from composition.scene_dag import VideoProject
+from composition.scene_dag import SceneNode, VideoProject
 from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.outline import Outline, OutlineItem
-from editing import arrange, history, narration_edit, tweak
+from editing import arrange, history, tweak
+from editing._common import restitch_and_save
 from planner import approval
 from planner import outline as planner_outline
 
@@ -117,34 +117,58 @@ class Engine:
         return built
 
     @staticmethod
-    def _populate_from_decoupled(built: VideoProject, workspace: Path, final: Path | None) -> None:
-        """Fill the VideoProject from the decoupled pipeline's on-disk layout (scenes/scene_<i>/) so
-        the rest of the API (preview, download, script, DTOs) works unchanged. Scene i corresponds to
-        outline.items[i], which is `built.scenes[i]` (index-aligned)."""
+    def _fill_node_from_dir(node: SceneNode, sdir: Path) -> bool:
+        """Load one scene's decoupled outputs (narrated.mp4 / scene.py / spec.json / narration.txt)
+        from `sdir` into the node. Returns True iff a rendered clip exists."""
+        mp4 = Path(sdir) / "narrated.mp4"
+        if not mp4.exists():
+            return False
+        node.mp4 = str(mp4)
+        node.compiled = True
+        scene_py = Path(sdir) / "scene.py"
+        if scene_py.exists():
+            node.code = scene_py.read_text(encoding="utf-8", errors="replace")
+        spec_json = Path(sdir) / "spec.json"
+        if spec_json.exists():
+            from core.schemas.scene_spec import SceneSpec
+            try:
+                node.spec = SceneSpec.model_validate_json(spec_json.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001 — a malformed spec shouldn't fail the whole op
+                pass
+        ntxt = Path(sdir) / "narration.txt"
+        if ntxt.exists():
+            text = ntxt.read_text(encoding="utf-8", errors="replace").strip()
+            node.script = [text] if text else []
+        return True
+
+    def _populate_from_decoupled(self, built: VideoProject, workspace: Path, final: Path | None) -> None:
+        """Fill the VideoProject after a full build from the decoupled layout (scenes/scene_<i>/). Scene
+        i corresponds to outline.items[i] == built.scenes[i] (index-aligned)."""
         scenes_dir = Path(workspace) / "scenes"
         for node in built.scenes:
-            sdir = scenes_dir / f"scene_{node.index}"
-            mp4 = sdir / "narrated.mp4"
-            if mp4.exists():
-                node.mp4 = str(mp4)
-                node.compiled = True
-                scene_py = sdir / "scene.py"
-                if scene_py.exists():
-                    node.code = scene_py.read_text(encoding="utf-8", errors="replace")
-                spec_json = sdir / "spec.json"
-                if spec_json.exists():
-                    from core.schemas.scene_spec import SceneSpec
-                    try:
-                        node.spec = SceneSpec.model_validate_json(spec_json.read_text(encoding="utf-8"))
-                    except Exception:  # noqa: BLE001 — a malformed spec shouldn't fail the whole build
-                        pass
-                ntxt = sdir / "narration.txt"
-                if ntxt.exists():
-                    text = ntxt.read_text(encoding="utf-8", errors="replace").strip()
-                    node.script = [text] if text else []
+            self._fill_node_from_dir(node, scenes_dir / f"scene_{node.index}")
         built.final_mp4 = str(final) if final else None
 
-    # --- single-scene render ops (each touches ONE scene, reuses the rest) -------------------
+    # --- single-scene render ops (each touches ONE scene via the decoupled STRUCTURAL path) ---
+    def _render_node(self, pid: str, project: VideoProject, node: SceneNode, *, quality: str, log,
+                     spec=None, base_code=None, narration_override=None, use_critic: bool = True) -> bool:
+        """Render ONE node through the decoupled STRUCTURAL pipeline into its sid-keyed dir
+        (scenes/scene_<sid>/, matching the versions layout), then load it back into the node. Returns
+        True on success. spec=None -> fresh expand+codegen (regenerate/insert); a given spec drives it
+        (tweak passes a revised spec); base_code+override re-renders identical visuals with new words."""
+        outline = self._outline_of(project)
+        item = outline.items[node.index]
+        sdir = self.workspace(pid) / "scenes" / f"scene_{node.sid}"
+        try:
+            decoupled.build_scene(item, outline, node.index, work_dir=sdir,
+                                  client=self._client_or_default(), structural=True, quality=quality,
+                                  spec=spec, base_code=base_code, narration_override=narration_override,
+                                  use_critic=use_critic)
+        except Exception as e:  # noqa: BLE001 — a failed render must not half-mutate the project
+            (log or (lambda _m: None))(f"[edit] scene {node.index} render failed: {type(e).__name__}: {e}")
+            return False
+        return self._fill_node_from_dir(node, sdir)
+
     def _single_scene_render(self, pid: str, index: int, fn, *, on_scene=None, log=print) -> VideoProject:
         """Shared wrapper: flip the scene's status around an isolated render op."""
         if on_scene:
@@ -159,34 +183,85 @@ class Engine:
                    on_scene=None) -> VideoProject:
         return self._single_scene_render(
             pid, index,
-            lambda p: regen.regenerate_scene(p, index, out_dir=self.workspace(pid), quality=quality,
-                                             client=self._client_or_default(), log=log),
+            lambda p: self._regen_scene(pid, p, index, quality=quality, log=log),
             on_scene=on_scene, log=log)
+
+    def _regen_scene(self, pid: str, project: VideoProject, index: int, *, quality: str, log) -> VideoProject:
+        node = project.scene(index)
+        prior = node.model_copy(deep=True)   # keep the prior good clip if the rebuild fails
+        if self._render_node(pid, project, node, quality=quality, log=log, spec=node.spec):
+            restitch_and_save(project, self.workspace(pid), log=log)
+        else:
+            project.scenes[index] = prior
+            self.save(pid, project)
+        return project
 
     def tweak(self, pid: str, index: int, instruction: str, *, quality: str = "preview", log=print,
               on_scene=None) -> VideoProject:
         return self._single_scene_render(
             pid, index,
-            lambda p: tweak.tweak_scene(p, index, instruction, out_dir=self.workspace(pid),
-                                        quality=quality, client=self._client_or_default(), log=log),
+            lambda p: self._tweak_scene(pid, p, index, instruction, quality=quality, log=log),
             on_scene=on_scene, log=log)
+
+    def _tweak_scene(self, pid: str, project: VideoProject, index: int, instruction: str, *,
+                     quality: str, log) -> VideoProject:
+        node = project.scene(index)
+        if node.spec is None:
+            raise ValueError(f"scene {index} hasn't been generated yet — build it before tweaking")
+        history.snapshot(node, out_dir=self.workspace(pid), label=f"pre-tweak: {instruction[:40]}")
+        prior = node.model_copy(deep=True)
+        revised = tweak.apply_tweak(node.spec, instruction, client=self._client_or_default())  # revise SPEC
+        if self._render_node(pid, project, node, quality=quality, log=log, spec=revised):
+            restitch_and_save(project, self.workspace(pid), log=log)
+        else:
+            project.scenes[index] = prior
+            self.save(pid, project)
+        return project
 
     def edit_narration(self, pid: str, index: int, lines: list[str], *, quality: str = "preview",
                        log=print, on_scene=None) -> VideoProject:
         return self._single_scene_render(
             pid, index,
-            lambda p: narration_edit.edit_narration(p, index, lines, out_dir=self.workspace(pid),
-                                                    quality=quality, client=self._client_or_default(),
-                                                    log=log),
+            lambda p: self._edit_narration(pid, p, index, lines, quality=quality, log=log),
             on_scene=on_scene, log=log)
+
+    def _edit_narration(self, pid: str, project: VideoProject, index: int, lines: list[str], *,
+                        quality: str, log) -> VideoProject:
+        node = project.scene(index)
+        if node.spec is None:
+            raise ValueError(f"scene {index} hasn't been generated yet — build it before editing narration")
+        if not lines or not any(s.strip() for s in lines):
+            raise ValueError("narration cannot be empty")
+        if not node.code:
+            raise ValueError(f"scene {index} has no code to re-render")
+        history.snapshot(node, out_dir=self.workspace(pid), label="pre-narration-edit")
+        prior = node.model_copy(deep=True)
+        # re-render the EXACT visuals with the user's words; no critic so the visuals can't drift
+        if self._render_node(pid, project, node, quality=quality, log=log, spec=node.spec,
+                             base_code=node.code, narration_override=list(lines), use_critic=False):
+            restitch_and_save(project, self.workspace(pid), log=log)
+        else:
+            project.scenes[index] = prior
+            self.save(pid, project)
+        return project
 
     def insert(self, pid: str, pos: int, title: str, intent: str, *, quality: str = "preview",
                log=print, on_scene=None) -> VideoProject:
         if on_scene:
             on_scene(pos, "rendering")
-        project = arrange.insert(self.load(pid), pos, title, intent, out_dir=self.workspace(pid),
-                                 quality=quality, client=self._client_or_default(), log=log)
-        ok = any(s.index == pos and s.mp4 for s in project.scenes)
+        project = self.load(pid)
+        pos = max(0, min(pos, len(project.scenes)))
+        node = SceneNode(index=pos, title=title, intent=intent)   # fresh sid -> own work dir
+        project.scenes.insert(pos, node)
+        project.reindex()
+        if self._render_node(pid, project, node, quality=quality, log=log, spec=None):
+            restitch_and_save(project, self.workspace(pid), log=log)
+            ok = True
+        else:
+            project.scenes.remove(node)   # failure atomicity: undo the insert
+            project.reindex()
+            self.save(pid, project)
+            ok = False
         if on_scene:
             on_scene(pos, "done" if ok else "failed")
         return project

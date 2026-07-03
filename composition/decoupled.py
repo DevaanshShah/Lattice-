@@ -268,7 +268,8 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
 def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: str | Path,
                 client: LLMClient, style=None, use_components: bool = True,
                 use_critic: bool = True, structural: bool = False, quality: str = "preview",
-                spec: SceneSpec | None = None) -> Path:
+                spec: SceneSpec | None = None, base_code: str | None = None,
+                narration_override: list[str] | None = None) -> Path:
     """expand -> silent codegen -> render (+optional vision critic) -> gTTS -> mux. Returns the
     narrated scene mp4. Raises on any failure so the caller's retry can re-attempt the whole scene.
 
@@ -276,14 +277,20 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
     mandates) instead of freehand coordinates — the industry-proven fix for blind spatial placement.
     use_critic: run the gpt-mini vision critic (sees the frames, fixes garbled labels / off-screen /
     overlap that components + bg-injection can't catch). Adds a re-render or two; off = faster.
+    base_code: render THIS exact code instead of generating fresh (used by narration edits to re-render
+    identical visuals with new words — pass with use_critic=False so the critic can't alter the visuals).
+    narration_override: use these lines verbatim as the narration instead of generating it (narration edit).
     """
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
     if spec is None:
         spec = planner_expand.expand(item, outline, index, client=client)
     (wd / "spec.json").write_text(spec.model_dump_json(indent=2), encoding="utf-8")  # for edit ops later
-    code = _silent_codegen(spec, client=client, style=style, use_components=use_components,
-                           structural=structural)
+    if base_code is not None:
+        code = base_code  # re-render the exact existing visuals (narration edit) — no fresh codegen
+    else:
+        code = _silent_codegen(spec, client=client, style=style, use_components=use_components,
+                               structural=structural)
     if not structural:
         code = _enforce_background(code)  # freehand: pin a consistent bg (structural sets it in setup_scene)
     compile_fixer = _make_compile_fixer(spec, style, use_components, client, structural=structural)
@@ -302,9 +309,12 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
     if not ok or not mp4:
         raise RuntimeError(f"render failed for scene {index}")
     video_rel = Path(mp4).resolve().relative_to(wd.resolve()).as_posix()
-    video_duration = _probe_duration(wd, video_rel)  # measured, real -- used to pace narration length
-    narration_text = _scene_narration(item, outline, index, code, client=client,
-                                      target_seconds=video_duration)
+    if narration_override is not None:
+        narration_text = "\n".join(s for s in narration_override if s and s.strip()).strip()
+    else:
+        video_duration = _probe_duration(wd, video_rel)  # measured, real -- used to pace narration length
+        narration_text = _scene_narration(item, outline, index, code, client=client,
+                                          target_seconds=video_duration)
     (wd / "narration.txt").write_text(narration_text, encoding="utf-8")
     clip = tts.synthesize(narration_text, out_dir=wd)
     audio_rel = Path(clip.path).resolve().relative_to(wd.resolve()).as_posix()
