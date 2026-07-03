@@ -1,8 +1,8 @@
 """The engine facade the web layer talks to — a THIN adapter over the M1–M6 modules.
 
 FR-28's rule: the frontend re-implements no scene logic; it calls these methods, which delegate
-straight to the existing engine (planner, composition.video, composition.regen, editing.*,
-composition.export). The only thing this layer adds that the CLI didn't need is MULTI-PROJECT
+straight to the existing engine (planner, composition.decoupled for build, composition.regen,
+editing.*, composition.export). The only thing this layer adds that the CLI didn't need is MULTI-PROJECT
 workspaces: each project lives in its own `out/web/<pid>/` dir (project.json + scenes/ + final.mp4),
 so many users' videos coexist. State persistence is the M6 VideoProject.save/load — unchanged.
 
@@ -14,14 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+from composition import decoupled
 from composition import export as export_mod
-from composition import regen, video
+from composition import regen
 from composition.scene_dag import VideoProject
 from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.outline import Outline, OutlineItem
 from editing import arrange, history, narration_edit, tweak
-from generation import style as style_gen
 from planner import approval
 from planner import outline as planner_outline
 
@@ -96,18 +96,53 @@ class Engine:
 
     def build(self, pid: str, *, keep: list[int] | None = None, quality: str = "preview",
               cap: int | None = None, log=print, on_scene=None) -> VideoProject:
-        """Apply any outline edits, generate the style spec, render all scenes, stitch, persist."""
+        """Apply any outline edits, then render every scene through the DECOUPLED STRUCTURAL pipeline
+        (the finalized path: LatticeScene grid + geometry primitives + grounded/paced narration +
+        silent-render->gTTS->mux reliability), stitch, and persist. Populates the VideoProject so
+        preview/download/script keep working. (`cap` is accepted for API compat; the approved outline
+        already fixes the scene count.)"""
         project = self.load(pid)
         outline = self._outline_of(project)
         if keep is not None:
             outline = approval.apply_edits(outline, keep=keep)   # reorder/cut BEFORE spend
         client = self._client_or_default()
         say = log or (lambda _m: None)
-        say("-> style spec (one per video)")
-        style = style_gen.generate(project.topic, outline, client=client)
-        built = VideoProject.from_outline(outline, style=style)
-        return video.build_project(built, quality=quality, out_dir=self.workspace(pid),
-                                   client=client, cap=cap, log=say, on_scene=on_scene)
+        workspace = self.workspace(pid)
+        built = VideoProject.from_outline(outline)
+        final = decoupled.build_video(
+            project.topic, outline=outline, client=client, quality=quality,
+            out_dir=workspace, out_name="final.mp4", on_scene=on_scene, log=say)
+        self._populate_from_decoupled(built, workspace, final)
+        self.save(pid, built)
+        return built
+
+    @staticmethod
+    def _populate_from_decoupled(built: VideoProject, workspace: Path, final: Path | None) -> None:
+        """Fill the VideoProject from the decoupled pipeline's on-disk layout (scenes/scene_<i>/) so
+        the rest of the API (preview, download, script, DTOs) works unchanged. Scene i corresponds to
+        outline.items[i], which is `built.scenes[i]` (index-aligned)."""
+        scenes_dir = Path(workspace) / "scenes"
+        for node in built.scenes:
+            sdir = scenes_dir / f"scene_{node.index}"
+            mp4 = sdir / "narrated.mp4"
+            if mp4.exists():
+                node.mp4 = str(mp4)
+                node.compiled = True
+                scene_py = sdir / "scene.py"
+                if scene_py.exists():
+                    node.code = scene_py.read_text(encoding="utf-8", errors="replace")
+                spec_json = sdir / "spec.json"
+                if spec_json.exists():
+                    from core.schemas.scene_spec import SceneSpec
+                    try:
+                        node.spec = SceneSpec.model_validate_json(spec_json.read_text(encoding="utf-8"))
+                    except Exception:  # noqa: BLE001 — a malformed spec shouldn't fail the whole build
+                        pass
+                ntxt = sdir / "narration.txt"
+                if ntxt.exists():
+                    text = ntxt.read_text(encoding="utf-8", errors="replace").strip()
+                    node.script = [text] if text else []
+        built.final_mp4 = str(final) if final else None
 
     # --- single-scene render ops (each touches ONE scene, reuses the rest) -------------------
     def _single_scene_render(self, pid: str, index: int, fn, *, on_scene=None, log=print) -> VideoProject:

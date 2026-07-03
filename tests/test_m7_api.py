@@ -31,24 +31,30 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("generation.style.generate",
                         lambda topic, outline, **k: StyleSpec(palette={"primary": "#111"}))
 
-    def fake_build_project(project, *, quality="preview", out_dir, client=None, cap=None,
-                           log=print, on_scene=None):
+    def fake_build_video(prompt, *, outline=None, client=None, quality="preview", out_dir,
+                         out_name="final.mp4", on_scene=None, log=print, **k):
+        # mirror composition.decoupled.build_video's ON-DISK layout so the engine's
+        # _populate_from_decoupled reads it back: scenes/scene_<i>/{narrated.mp4,narration.txt,
+        # scene.py,spec.json}, plus a stitched final.
         out = Path(out_dir)
-        (out / "scenes").mkdir(parents=True, exist_ok=True)
-        for s in project.scenes:
+        items = list(outline.items) if outline is not None else []
+        for i, _item in enumerate(items):
             if on_scene:
-                on_scene(s.index, "rendering")
-            mp4 = out / "scenes" / f"scene_{s.sid}.mp4"
-            mp4.write_bytes(b"v")
-            s.mp4, s.compiled, s.spec, s.script = str(mp4), True, SPEC, ["n"]
-            log(f"built scene {s.index}")
+                on_scene(i, "rendering")
+            sdir = out / "scenes" / f"scene_{i}"
+            sdir.mkdir(parents=True, exist_ok=True)
+            (sdir / "narrated.mp4").write_bytes(b"v")
+            (sdir / "narration.txt").write_text("n", encoding="utf-8")
+            (sdir / "scene.py").write_text("class GeneratedScene(LatticeScene):\n    pass\n",
+                                           encoding="utf-8")
+            (sdir / "spec.json").write_text(SPEC.model_dump_json(), encoding="utf-8")
+            log(f"built scene {i}")
             if on_scene:
-                on_scene(s.index, "done")
-        final = out / "final.mp4"
+                on_scene(i, "done")
+        final = out / "final" / out_name
+        final.parent.mkdir(parents=True, exist_ok=True)
         final.write_bytes(b"f")
-        project.final_mp4 = str(final)
-        project.save(out / "project.json")
-        return project
+        return final
 
     def fake_build_scene(node, project, *, scenes_dir, quality="preview", client=None, log=print):
         Path(scenes_dir).mkdir(parents=True, exist_ok=True)
@@ -74,7 +80,7 @@ def client(tmp_path, monkeypatch):
         srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nx\n", encoding="utf-8")
         return NarratedResult(True, "code", mp4, srt, [], lines or ["n"])
 
-    monkeypatch.setattr("composition.video.build_project", fake_build_project)
+    monkeypatch.setattr("composition.decoupled.build_video", fake_build_video)
     monkeypatch.setattr("composition.video.build_scene", fake_build_scene)
     monkeypatch.setattr("composition.stitch.stitch", fake_stitch)
     monkeypatch.setattr("editing.tweak.apply_tweak", lambda spec, instruction, **k: spec)
@@ -220,10 +226,10 @@ def test_download_before_build_is_409(client):
 def test_quality_flows_through_to_engine(client, monkeypatch):
     pid = client.post("/api/projects", json={"topic": "TCP"}).json()["id"]
     seen = {}
-    import composition.video as cv
-    real = cv.build_project
-    monkeypatch.setattr("composition.video.build_project",
-                        lambda project, **k: (seen.update(quality=k.get("quality")), real(project, **k))[1])
+    import composition.decoupled as cd
+    real = cd.build_video   # the fixture's fake
+    monkeypatch.setattr("composition.decoupled.build_video",
+                        lambda prompt, **k: (seen.update(quality=k.get("quality")), real(prompt, **k))[1])
     client.post(f"/api/projects/{pid}/build", json={"quality": "final"})
     assert seen["quality"] == "final"
 

@@ -267,7 +267,8 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
 # --- one scene, end to end -------------------------------------------------------------------
 def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: str | Path,
                 client: LLMClient, style=None, use_components: bool = True,
-                use_critic: bool = True, structural: bool = False, spec: SceneSpec | None = None) -> Path:
+                use_critic: bool = True, structural: bool = False, quality: str = "preview",
+                spec: SceneSpec | None = None) -> Path:
     """expand -> silent codegen -> render (+optional vision critic) -> gTTS -> mux. Returns the
     narrated scene mp4. Raises on any failure so the caller's retry can re-attempt the whole scene.
 
@@ -280,6 +281,7 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
     wd.mkdir(parents=True, exist_ok=True)
     if spec is None:
         spec = planner_expand.expand(item, outline, index, client=client)
+    (wd / "spec.json").write_text(spec.model_dump_json(indent=2), encoding="utf-8")  # for edit ops later
     code = _silent_codegen(spec, client=client, style=style, use_components=use_components,
                            structural=structural)
     if not structural:
@@ -287,14 +289,14 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
     compile_fixer = _make_compile_fixer(spec, style, use_components, client, structural=structural)
     if use_critic:
         cr = vision_critic.run(
-            code, wd, spec, quality="preview", client=client, vision_confirm=True,
+            code, wd, spec, quality=quality, client=client, vision_confirm=True,
             compile_regen_fn=compile_fixer,
             issue_regen_fn=_make_issue_fixer(spec, style, use_components, client, structural=structural),
             critic_fn=lambda fr: critique(fr, intent=_critic_intent(spec), client=get_critic_client()),
             log=lambda _m: None)
         ok, mp4 = cr.compiled, cr.mp4
     else:
-        rep = compile_repair.repair(code, wd, quality="preview", spec=spec, client=client,
+        rep = compile_repair.repair(code, wd, quality=quality, spec=spec, client=client,
                                     regen_fn=compile_fixer, log=lambda _m: None)
         ok, mp4 = rep.ok, rep.mp4
     if not ok or not mp4:
@@ -312,12 +314,12 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
 
 
 def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_components,
-                      use_critic, structural, retries, on_scene) -> tuple[int, Path | None]:
+                      use_critic, structural, quality, retries, on_scene) -> tuple[int, Path | None]:
     for attempt in range(retries):
         try:
             mp4 = build_scene(item, outline, index, work_dir=Path(scenes_dir) / f"scene_{index}",
                               client=client, style=style, use_components=use_components,
-                              use_critic=use_critic, structural=structural)
+                              use_critic=use_critic, structural=structural, quality=quality)
             if on_scene:
                 on_scene(index, "done")
             return (index, mp4)
@@ -333,24 +335,30 @@ def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_co
 # --- whole video -----------------------------------------------------------------------------
 def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int = 8,
                 workers: int = 3, retries: int = 3, use_components: bool = True,
-                use_critic: bool = True, structural: bool | None = None,
+                use_critic: bool = True, structural: bool | None = None, quality: str = "preview",
+                outline: Outline | None = None,
                 out_dir: str | Path | None = None, out_name: str = "final.mp4",
                 approve_fn=None, on_scene=None, log=print) -> Path | None:
     """Prompt -> outline -> parallel decoupled scenes (with per-scene retry) -> stitch.
     Returns the final stitched mp4 (or None if no scene survived). `on_scene(index, status)` fires
     per scene; `approve_fn(outline)->outline` is the optional approval gate before any render.
     structural: use the LatticeScene grid scaffold. FINALIZED default for the video path = True
-    (renders cleaner than freehand); pass structural=False to A/B the old freehand path."""
+    (renders cleaner than freehand); pass structural=False to A/B the old freehand path.
+    outline: pass an ALREADY-APPROVED outline (e.g. from the web outline-gate) to skip generation +
+    the approve_fn; the scenes are built in the outline's order (scene_i == outline.items[i])."""
     client = client or get_client()
     structural = True if structural is None else structural
     out = Path(out_dir) if out_dir else settings.out_dir / "decoupled"
     out.mkdir(parents=True, exist_ok=True)
     say = log or (lambda _m: None)
 
-    say(f"-> outline for: {prompt!r}")
-    outline = planner_outline.generate(prompt, client=client, max_scenes=max_scenes)
-    if approve_fn is not None:
-        outline = approve_fn(outline)
+    if outline is None:
+        say(f"-> outline for: {prompt!r}")
+        outline = planner_outline.generate(prompt, client=client, max_scenes=max_scenes)
+        if approve_fn is not None:
+            outline = approve_fn(outline)
+    else:
+        say(f"-> using provided outline ({len(outline.items)} scenes)")
     say(f"   {len(outline.items)} scenes")
     style = style_gen_safe(prompt, outline, client)
 
@@ -361,7 +369,8 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
         results = list(ex.map(
             lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
                                          style=style, use_components=use_components, use_critic=use_critic,
-                                         structural=structural, retries=retries, on_scene=on_scene),
+                                         structural=structural, quality=quality, retries=retries,
+                                         on_scene=on_scene),
             list(enumerate(outline.items))))
 
     clips = [mp4 for _, mp4 in sorted(results, key=lambda r: r[0]) if mp4]
