@@ -173,6 +173,17 @@ def test_prompt_reserves_the_title_and_bans_full_frame_width():
 
 
 @pytest.mark.unit
+def test_connect_anchors_at_boundaries_not_centers():
+    # the arrow-through-box defect: Arrow(a.get_center(), b.get_center()) made buff back off from the
+    # CENTER, so on any wide box the arrow speared through the box and its label. connect() must pass
+    # the MOBJECTS so Manim anchors each end at the boundary point facing the other end.
+    src = lattice_scene.LATTICE_SCENE_SRC
+    body = src.split("def connect", 1)[1].split("def ", 1)[0]
+    assert "Arrow(a, b" in body                       # mobjects -> edge-to-edge anchoring
+    assert "get_center(), b.get_center()" not in body  # the center-to-center bug stays dead
+
+
+@pytest.mark.unit
 def test_fit_content_method_in_src():
     src = lattice_scene.LATTICE_SCENE_SRC
     compile(src, "<lattice_scene>", "exec")          # the new method keeps the SRC valid

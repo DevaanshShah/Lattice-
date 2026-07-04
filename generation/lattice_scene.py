@@ -208,10 +208,15 @@ class LatticeScene(Scene):
             lbl.scale_to_fit_width(2 * r - 0.1)
         return VGroup(c, lbl)
 
-    def connect(self, a, b, color=GREY, buff=0.1, **style):
+    def connect(self, a, b, color=GREY, buff=0.15, **style):
+        # Pass the MOBJECTS (not centers): Manim anchors each end at the mobject's boundary point facing
+        # the other end, so the arrow runs EDGE-to-edge + buff. Center-to-center (the old code) made buff
+        # back off from the CENTER, so on any wide box the arrow speared through the box and its label
+        # (a real defect: arrows slashing through "MCP Server"). Raw points still work (pointify passes
+        # them through).
         kw = {"buff": buff, "color": color, "stroke_width": 3}
         kw.update(self._style_kw(style, extra=("max_tip_length_to_length_ratio", "tip_length")))
-        return Arrow(a.get_center(), b.get_center(), **kw)
+        return Arrow(a, b, **kw)
 
     def icon(self, name, color=WHITE, width=1.0):
         """A recognizable line-icon Mobject for a REAL-WORLD entity (server, database, router, cloud,
