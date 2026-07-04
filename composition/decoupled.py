@@ -71,9 +71,20 @@ def mux_audio(work_dir: str | Path, video_rel: str, audio_rel: str, out_rel: str
 
 
 # --- codegen / narration ---------------------------------------------------------------------
+def _cap_overwide_scaling(code: str) -> str:
+    """Deterministic off-frame guard: a model that scales a mobject to ~the full frame width makes it run
+    off BOTH edges (a real defect — a manual title `.scale_to_fit_width(config.frame_width - 1)` was clipped
+    left and right). Cap any full-frame-width fit to a safe content width so nothing bleeds off-screen. Only
+    ever SHRINKS an over-wide element, so it can never break a reference or the render."""
+    return re.sub(r"\.scale_to_fit_width\(\s*(?:config\.)?frame_width\b[^)]*\)",
+                  ".scale_to_fit_width(11.5)", code)
+
+
 def _finalize_code(code: str, *, structural: bool, use_components: bool) -> str:
     """Prepend the base source the generated scene relies on: the LatticeScene grid (structural mode)
-    or the component helpers (freehand + components). Freehand-without-components returns code as-is."""
+    or the component helpers (freehand + components). Freehand-without-components returns code as-is.
+    Also caps any full-frame-width scaling so a stray title/label can't run off the frame edges."""
+    code = _cap_overwide_scaling(code)
     if structural:
         return lattice_scene.LATTICE_SCENE_SRC + "\n\n" + code
     return (COMPONENTS_SRC + "\n\n" + code) if use_components else code
@@ -212,24 +223,48 @@ _NARRATION_META = (
 
 
 def _clean_narration(text: str) -> str:
-    """Strip chatty framing (markdown emphasis, 'Here's the narration:' preamble, 'Let me know...' trailer)
-    so gTTS speaks ONLY the intended words. Line-based + conservative: keeps anything not clearly meta;
-    never returns empty (falls back to the original)."""
+    """Strip chatty framing so gTTS speaks ONLY the intended words. Removes markdown emphasis, [stage
+    directions], `---`/`***` rules, 'Here's the narration:' preambles, and third-person meta ABOUT the
+    narration/animation ('The narration flows naturally with the visuals...'). Line-based + conservative:
+    keeps anything not clearly meta; never returns empty (falls back to the original). This is the deterministic
+    backstop for a chatty model — a real web defect had gTTS read '[As the agent appears]', '---', and a whole
+    'this narration reinforces the visuals' paragraph ALOUD, stretching a 15s scene to 100s."""
     t = text.replace("**", "").replace("*", "").replace("`", "")
+    t = re.sub(r"\[[^\]\n]*\]", " ", t)              # drop [stage directions] (inline or whole-line)
     kept = []
     for ln in t.splitlines():
         s = ln.strip().strip('"“”‘’ ').strip()
         if not s:
             continue
+        if re.fullmatch(r"[-_=~#>·—–\s]{2,}", s):    # markdown rule / separator line (---, ***, ===)
+            continue
         low = s.lower()
         is_meta = (
-            ("narration" in low and (low.endswith(":") or low.startswith(("here", "sure", "okay", "ok"))))
+            # a line that talks ABOUT the narration ('here's the narration:', 'the narration flows...')
+            ("narration" in low and (low.endswith(":") or low.startswith(
+                ("here", "sure", "okay", "ok", "this", "the", "i've", "i have"))))
+            # a line that describes the animation/visuals in the third person (the trailing meta paragraph)
+            or (("animation" in low or "the visuals" in low or "on-screen" in low or "on screen" in low)
+                and any(k in low for k in ("flow", "natural", "reinforce", "conversational", "describ",
+                                           "engaging", "maintain", "tone", "accurately")))
             or any(k in low for k in _NARRATION_META)
             or low.rstrip(".!") in ("sure", "certainly", "of course", "okay", "ok")
         )
         if not is_meta:
             kept.append(s)
-    return " ".join(kept).strip() or text.strip()
+    return re.sub(r"\s{2,}", " ", " ".join(kept)).strip() or text.strip()
+
+
+def _cap_words(text: str, max_words: int) -> str:
+    """Hard length backstop: if a scene's narration blew past its pacing budget (a model that ignored the
+    word ceiling), trim to the last complete sentence at/under `max_words` so the voice can't run for
+    minutes over a frozen final frame. Sentence-aware so it never cuts mid-thought."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    clipped = " ".join(words[:max_words])
+    cut = max(clipped.rfind("."), clipped.rfind("!"), clipped.rfind("?"))
+    return clipped[:cut + 1] if cut >= 40 else clipped
 
 
 def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str, *,
@@ -295,7 +330,11 @@ def _scene_narration(item: OutlineItem, outline: Outline, index: int, code: str,
     )
     raw = client.chat([{"role": "system", "content": system},
                        {"role": "user", "content": user}], max_tokens=400)
-    return _clean_narration(raw)
+    cleaned = _clean_narration(raw)
+    if target_seconds and target_seconds > 0:   # hard backstop past the (soft) prompt ceiling
+        budget = max(_MIN_NARRATION_WORDS, round(target_seconds * _WORDS_PER_SECOND))
+        cleaned = _cap_words(cleaned, int(budget * 1.6))
+    return cleaned
 
 
 # --- one scene, end to end -------------------------------------------------------------------

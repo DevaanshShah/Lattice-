@@ -87,6 +87,40 @@ def test_clean_narration_strips_chat_framing():
 
 
 @pytest.mark.unit
+def test_clean_narration_strips_stage_directions_rules_and_meta_paragraph():
+    # the real RL scene-4 defect: gTTS read '[As the agent appears]', '---', and a whole
+    # 'The narration flows naturally with the visuals...' paragraph ALOUD (190 words -> 100s scene).
+    garbage = (
+        "Here's a natural, engaging narration for this scene:\n\n"
+        "---\n\n"
+        "**Narration:**\n\n"
+        '"Our robot faces a dilemma: exploration versus exploitation."\n'
+        "[As the agent dot appears] Here's our agent, ready to decide.\n"
+        "[Paths start drawing] It must balance trying new routes with proven ones.\n\n"
+        "---\n\n"
+        "The narration flows naturally with the visuals, explaining the concept while using the "
+        "on-screen elements to reinforce the explanation."
+    )
+    out = _clean_narration(garbage)
+    assert out.startswith("Our robot faces a dilemma")
+    assert "exploration versus exploitation" in out
+    for bad in ("[", "]", "---", "Here's a natural", "flows naturally", "on-screen elements", "**"):
+        assert bad not in out
+
+
+@pytest.mark.unit
+def test_cap_words_trims_runaway_to_sentence_boundary():
+    from composition.decoupled import _cap_words
+    long = " ".join(f"Word{i}." if i % 5 == 4 else f"word{i}" for i in range(60))
+    capped = _cap_words(long, 20)
+    assert len(capped.split()) <= 20
+    assert capped.rstrip().endswith(".")           # cut at a sentence boundary, not mid-thought
+    # under the cap -> untouched
+    short = "Just three words."
+    assert _cap_words(short, 20) == short
+
+
+@pytest.mark.unit
 def test_clean_narration_passthrough_clean_text():
     clean = "This scene shows a right triangle. Watch how the squares relate. Next, we prove it."
     assert _clean_narration(clean) == clean

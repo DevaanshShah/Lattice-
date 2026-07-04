@@ -163,6 +163,28 @@ def test_no_hallucinated_method_is_a_real_scaffold_method():
     assert "def cell(" in lattice_scene.LATTICE_SCENE_SRC
 
 
+@pytest.mark.unit
+def test_prompt_reserves_the_title_and_bans_full_frame_width():
+    # the RL scene-4 defect: model added its own Text(...).to_edge(UP).scale_to_fit_width(frame_width)
+    # -> a duplicate title running off both edges. The prompt must forbid both.
+    sp = lattice_scene.structural_system_prompt()
+    assert "TITLE IS RESERVED" in sp
+    assert "to_edge(UP)" in sp and "frame_width" in sp
+
+
+@pytest.mark.unit
+def test_finalize_caps_full_frame_width_scaling():
+    # deterministic off-frame guard: any full-frame-width fit is shrunk to a safe content width
+    from composition.decoupled import _cap_overwide_scaling
+    for bad in ("m.scale_to_fit_width(config.frame_width - 1)",
+                "t.scale_to_fit_width(frame_width)",
+                "x.scale_to_fit_width( config.frame_width * 0.98 )"):
+        out = _cap_overwide_scaling(bad)
+        assert "frame_width" not in out and "scale_to_fit_width(11.5)" in out
+    # a normal explicit width is left alone
+    assert _cap_overwide_scaling("m.scale_to_fit_width(4.0)") == "m.scale_to_fit_width(4.0)"
+
+
 # --- guardrail accepts the subclass --------------------------------------------------------
 
 @pytest.mark.unit

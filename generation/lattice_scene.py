@@ -94,7 +94,11 @@ def scaffold_api_prompt() -> str:
             "cell centre is `self.cell(\"B2\")` (there is NO get_cell_center / cell_center / get_cell):\n"
             + methods
             + "\nEverything else is ordinary Manim. For positions use self.cell(name) / self.place(obj, "
-            "name) / self.place_in_area(...); never guess a self.<name> that isn't listed above.")
+            "name) / self.place_in_area(...); never guess a self.<name> that isn't listed above."
+            "\n\nTITLE IS RESERVED — self.setup_scene(title) ALREADY draws the scene title at the top edge. "
+            "Do NOT create your own title (no second `Text(...).to_edge(UP)`), and never scale any mobject "
+            "to the full frame width (no `.scale_to_fit_width(config.frame_width)`) — that stacks a duplicate "
+            "title and runs it off both edges. Keep all content in the grid area below the title.")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
