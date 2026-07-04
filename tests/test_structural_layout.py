@@ -118,13 +118,13 @@ def test_structural_prompt_injects_icons():
 
 
 @pytest.mark.unit
-def test_icon_names_match_shipped_assets():
-    # DRIFT GUARD: the prompt list MUST equal the SVGs actually bundled, or the model will call icons
-    # that silently fall back to boxes (or ship unused files). Keep ICON_NAMES == assets/icons/*.svg.
+def test_icon_names_derived_from_shipped_assets():
+    # ICON_NAMES is AUTO-DERIVED from assets/icons/*.svg, so it can't drift from the shipped files.
+    # This confirms the derivation resolves the right dir: populated, equals the stems, has known icons.
     from core.config import PROJECT_ROOT
     stems = {p.stem for p in (PROJECT_ROOT / "assets" / "icons").glob("*.svg")}
-    assert set(lattice_scene.ICON_NAMES) == stems, \
-        f"missing files: {set(lattice_scene.ICON_NAMES) - stems}; extra files: {stems - set(lattice_scene.ICON_NAMES)}"
+    assert lattice_scene.ICON_NAMES and set(lattice_scene.ICON_NAMES) == stems
+    assert {"server", "cat", "laptop"} <= set(lattice_scene.ICON_NAMES)
 
 
 # --- guardrail accepts the subclass --------------------------------------------------------

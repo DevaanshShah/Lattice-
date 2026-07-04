@@ -10,26 +10,20 @@ so the geometry is unit-testable without Manim/Docker.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 # Grid geometry — MUST stay in sync with the constants inside LATTICE_SCENE_SRC below.
 GRID_COLS = 8                 # columns 1..8, left -> right
 GRID_ROWS = "ABCDE"           # rows A(top) .. E(bottom)
 _MAIN_X = (-6.0, 6.0)         # main-area x span (frame is ~14.2 wide; this leaves margin)
 _MAIN_Y = (2.3, -3.0)         # main-area y span (sits BELOW the title band)
 
-# Curated Lucide (ISC) line-icons baked into the render image at /opt/icons/<slug>.svg (see
-# assets/icons/). SINGLE SOURCE OF TRUTH: this list feeds the codegen prompt (icon_catalog_prompt);
-# a drift test asserts it equals the set of assets/icons/*.svg stems. The in-container self.icon() is
-# file-driven + falls back, so it needs no copy of this list.
-ICON_NAMES: list[str] = [
-    # systems / networking
-    "server", "database", "cloud", "router", "network", "wifi", "cpu", "hard-drive", "monitor",
-    "laptop", "smartphone", "globe", "lock", "shield", "key", "mail", "folder", "file",
-    "code", "terminal", "settings", "layers", "git-branch", "package",
-    # people / general
-    "user", "users", "camera", "image", "activity", "bell", "calendar", "clock", "map-pin", "box",
-    # real-world objects (CV / examples)
-    "cat", "dog", "car", "plane", "bus", "truck", "bike", "apple", "coffee",
-]
+# Curated Lucide (ISC) line-icons, baked into the render image at /opt/icons/<slug>.svg (Dockerfile).
+# AUTO-DERIVED from the bundled files so adding an icon = drop the SVG in assets/icons/ + rebuild the
+# image — no code edit, no hardcoded list to drift. Feeds the codegen prompt (icon_catalog_prompt); the
+# in-container self.icon() is file-driven + falls back, so it needs no copy of this list.
+_ICON_ASSET_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons"
+ICON_NAMES: list[str] = sorted(p.stem for p in _ICON_ASSET_DIR.glob("*.svg"))
 
 
 def grid_cells() -> dict[str, tuple[float, float]]:
