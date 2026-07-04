@@ -6,4 +6,7 @@
 # `--network=none`, so model-written code has no network and no root from day one.
 FROM manimcommunity/manim:v0.18.1
 WORKDIR /manim
-# Nothing else needed for M0 — the base does items 1–4 of the Phase 0 spec.
+# Curated Lucide (ISC) line-icons for the self.icon("name") scaffold helper. Baked in so the no-network
+# render loads them offline, independent of the work-dir mount. COPY lands them root:root 0644 =
+# world-readable to the non-root manimuser. This is why the image tag is bumped 0.1 -> 0.2.
+COPY assets/icons /opt/icons

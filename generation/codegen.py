@@ -28,7 +28,8 @@ def generate(spec: SceneSpec, *, attempts: int = 3, client: LLMClient | None = N
              style=None) -> str:
     client = client or get_client()
     structural = settings.structural_layout
-    system = load("manim-conventions") + "\n\n---\n\n" + load("lattice-codegen" if structural else "codegen")
+    system = (lattice_scene.structural_system_prompt() if structural   # + icon catalog
+              else load("manim-conventions") + "\n\n---\n\n" + load("codegen"))
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
     user = (
@@ -63,8 +64,8 @@ def generate_narrated(spec: SceneSpec, beats_audio: list[tuple[str, str, float]]
     """
     client = client or get_client()
     structural = settings.structural_layout
-    system = load("manim-conventions") + "\n\n---\n\n" + load(
-        "lattice-codegen-narrated" if structural else "codegen-narrated")
+    system = (lattice_scene.structural_system_prompt(narrated=True) if structural   # + icon catalog
+              else load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated"))
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
     rows = "\n".join(

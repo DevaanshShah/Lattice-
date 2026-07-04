@@ -87,6 +87,46 @@ def test_lattice_scene_src_square_on_segment_takes_away_from():
     assert "away_from" in lattice_scene.LATTICE_SCENE_SRC
 
 
+# --- icon library (self.icon) --------------------------------------------------------------
+
+@pytest.mark.unit
+def test_icon_method_in_src():
+    src = lattice_scene.LATTICE_SCENE_SRC
+    compile(src, "<lattice_scene>", "exec")             # the new method keeps the SRC valid
+    assert "def icon" in src
+    assert "/opt/icons" in src                          # reads the baked icon dir
+    assert "labeled_box(name" in src                    # graceful fallback present
+
+
+@pytest.mark.unit
+def test_icon_names_are_safe_slugs():
+    import re
+    assert lattice_scene.ICON_NAMES                     # non-empty
+    assert all(re.fullmatch(r"[a-z0-9_-]+", n) for n in lattice_scene.ICON_NAMES)  # traversal-safe filenames
+
+
+@pytest.mark.unit
+def test_icon_catalog_prompt_lists_all_names():
+    block = lattice_scene.icon_catalog_prompt()
+    assert all(n in block for n in lattice_scene.ICON_NAMES)
+
+
+@pytest.mark.unit
+def test_structural_prompt_injects_icons():
+    sp = lattice_scene.structural_system_prompt()
+    assert "icon" in sp.lower() and "server" in sp and "setup_scene" in sp
+
+
+@pytest.mark.unit
+def test_icon_names_match_shipped_assets():
+    # DRIFT GUARD: the prompt list MUST equal the SVGs actually bundled, or the model will call icons
+    # that silently fall back to boxes (or ship unused files). Keep ICON_NAMES == assets/icons/*.svg.
+    from core.config import PROJECT_ROOT
+    stems = {p.stem for p in (PROJECT_ROOT / "assets" / "icons").glob("*.svg")}
+    assert set(lattice_scene.ICON_NAMES) == stems, \
+        f"missing files: {set(lattice_scene.ICON_NAMES) - stems}; extra files: {stems - set(lattice_scene.ICON_NAMES)}"
+
+
 # --- guardrail accepts the subclass --------------------------------------------------------
 
 @pytest.mark.unit

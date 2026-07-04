@@ -16,6 +16,12 @@ PLACEMENT — use the grid, not coordinates:
   `self.place_in_area(group, "B2", "D6")`.
 - PREFER the components (they lay out their own labels with no overlap):
   `self.labeled_box(text)`, `self.node(label)`, `self.connect(a, b)`.
+- ICONS — for a RECOGNIZABLE real-world entity (a server, database, router, cloud, user, laptop, camera,
+  cat, car, ...), use `self.icon("name")` instead of a plain box or circle — a labelled box is a
+  meaningless blob for a concrete thing. Place and connect it exactly like a node:
+  `srv = self.place(self.icon("server", color=BLUE), "B2")`. Pass `color=` to tint. Do NOT use an icon
+  for an abstract idea, a math object, or a table cell (an icon of "entropy" or "x_1" is meaningless) —
+  use `labeled_box`/`node`/`Table` there. The exact names that resolve are listed under AVAILABLE ICONS.
 - For MATH labels (subscripts, superscripts, Greek), pass a RAW LaTeX string — the component renders
   it as math: `self.node(r"x_1")`, `self.node(r"\hat{y}")`, `self.labeled_box(r"\sigma")`. Do NOT wrap
   in `$...$` and do NOT pass plain `"x_1"` for a subscript (it would show literally).

@@ -85,7 +85,7 @@ def _silent_codegen(spec: SceneSpec, *, client: LLMClient, style=None, use_compo
     Table/built-ins, named-grid placement); otherwise the freehand codegen prompt (+ optional components)."""
     conventions = load("manim-conventions")
     if structural:
-        system = conventions + "\n\n---\n\n" + load("lattice-codegen")
+        system = lattice_scene.structural_system_prompt()   # conventions + lattice prompt + icon catalog
     else:
         system = conventions + "\n\n---\n\n" + load("codegen")
         if use_components:
@@ -125,7 +125,7 @@ def _make_issue_fixer(spec, style, use_components, client, *, structural: bool =
     critic regen doesn't drop it. Freehand also re-pins the background; structural leaves it to setup_scene."""
     conventions = load("manim-conventions")
     if structural:
-        system = conventions + "\n\n---\n\n" + load("lattice-codegen")
+        system = lattice_scene.structural_system_prompt()   # conventions + lattice prompt + icon catalog
         base_src = lattice_scene.LATTICE_SCENE_SRC
     else:
         system = conventions + "\n\n---\n\n" + load("codegen")
@@ -164,7 +164,7 @@ def _make_compile_fixer(spec, style, use_components, client, *, structural: bool
     """
     conventions = load("manim-conventions")
     if structural:
-        system = conventions + "\n\n---\n\n" + load("lattice-codegen")
+        system = lattice_scene.structural_system_prompt()   # conventions + lattice prompt + icon catalog
         base_src = lattice_scene.LATTICE_SCENE_SRC
     else:
         system = conventions + "\n\n---\n\n" + load("codegen")

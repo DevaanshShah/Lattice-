@@ -16,6 +16,16 @@ GRID_ROWS = "ABCDE"           # rows A(top) .. E(bottom)
 _MAIN_X = (-6.0, 6.0)         # main-area x span (frame is ~14.2 wide; this leaves margin)
 _MAIN_Y = (2.3, -3.0)         # main-area y span (sits BELOW the title band)
 
+# Curated Lucide (ISC) line-icons baked into the render image at /opt/icons/<slug>.svg (see
+# assets/icons/). SINGLE SOURCE OF TRUTH: this list feeds the codegen prompt (icon_catalog_prompt);
+# a drift test asserts it equals the set of assets/icons/*.svg stems. The in-container self.icon() is
+# file-driven + falls back, so it needs no copy of this list.
+ICON_NAMES: list[str] = [
+    "server", "database", "cloud", "router", "network", "wifi", "cpu", "hard-drive", "monitor",
+    "laptop", "smartphone", "globe", "lock", "shield", "key", "mail", "folder", "file", "user",
+    "users", "camera", "image", "cat", "car",
+]
+
 
 def grid_cells() -> dict[str, tuple[float, float]]:
     """Pure mirror of the in-container grid: cell name (e.g. 'C4') -> (x, y) center."""
@@ -48,8 +58,31 @@ def square_corners_away_from(
     return [(ax, ay), (bx, by), (bx + px, by + py), (ax + px, ay + py)]
 
 
+def icon_catalog_prompt() -> str:
+    """A system-prompt addendum listing the bundled icon names, so the codegen model knows exactly which
+    `self.icon("name")` calls resolve (an unknown name silently falls back to a labeled box). Kept here so
+    the list lives in ONE place (ICON_NAMES) and the .md prompt never hardcodes / drifts from the shipped set."""
+    return ("\n\nAVAILABLE ICONS — for a RECOGNIZABLE real-world entity, use `self.icon(\"name\")` instead "
+            "of a plain box/circle (a server, a database, a user, a cat, ...). Names that resolve:\n"
+            + ", ".join(ICON_NAMES)
+            + "\nPlace and connect an icon exactly like a node. Only use names from this list; any other "
+            "name falls back to a labeled box.")
+
+
+def structural_system_prompt(*, narrated: bool = False) -> str:
+    """The full structural codegen system prompt (house conventions + lattice prompt + icon catalog),
+    assembled in ONE place instead of duplicated across the codegen/fix/repair sites."""
+    from prompts.loader import load   # function-local: keep this module import-light for the compile test
+    base = load("manim-conventions") + "\n\n---\n\n" + load(
+        "lattice-codegen-narrated" if narrated else "lattice-codegen")
+    return base + icon_catalog_prompt()
+
+
 LATTICE_SCENE_SRC = '''from manim import *
 import numpy as np
+import os
+import re
+import shutil
 
 
 class LatticeScene(Scene):
@@ -60,6 +93,7 @@ class LatticeScene(Scene):
     GRID_ROWS = "ABCDE"
     MAIN_X = (-6.0, 6.0)
     MAIN_Y = (2.3, -3.0)
+    ICON_DIR = "/opt/icons"        # curated line-icons baked into the render image (see assets/icons/)
 
     def setup_scene(self, title):
         """MUST be the first call in construct(). Renders the title (always, fit to frame) + builds the grid."""
@@ -142,6 +176,30 @@ class LatticeScene(Scene):
         kw = {"buff": buff, "color": color, "stroke_width": 3}
         kw.update(self._style_kw(style, extra=("max_tip_length_to_length_ratio", "tip_length")))
         return Arrow(a.get_center(), b.get_center(), **kw)
+
+    def icon(self, name, color=WHITE, width=1.0):
+        """A recognizable line-icon Mobject for a REAL-WORLD entity (server, database, router, cloud,
+        user, laptop, cat, car, ...), tinted `color` and fit to `width`. Use it wherever a node/box
+        would be a meaningless blob for a concrete thing, then place + connect it like a node. Does NOT
+        place itself (caller uses self.place / self.place_in_area). ROBUST: an unknown/missing/unparseable
+        name falls back to labeled_box(name), so a bad icon never crashes the render."""
+        slug = re.sub(r"[^a-z0-9_-]", "", str(name).lower())   # traversal-safe + case-normalized
+        src = os.path.join(self.ICON_DIR, slug + ".svg")
+        try:
+            if slug and os.path.exists(src):
+                # SVGMobject writes a derived "<slug>_.svg" NEXT TO the source; /opt/icons is read-only
+                # to the render user, so load from the writable work dir (CWD) instead.
+                local = slug + ".svg"
+                if not os.path.exists(local):
+                    shutil.copyfile(src, local)
+                svg = SVGMobject(local)
+                if len(svg.submobjects) or svg.width > 0:      # guard SVGMobject's silent empty-parse
+                    svg.set_stroke(color); svg.set_fill(color)  # line icons: fill=none stays invisible
+                    svg.scale_to_fit_width(width)
+                    return svg
+        except Exception:
+            pass
+        return self.labeled_box(name, color=color)              # unknown/missing -> readable box label
 
     # --- geometry primitives: correctness-by-construction for the math the model reasons badly blind ---
     def square_on_segment(self, p1, p2, away_from=None, color=BLUE, fill_opacity=0.25, outward=True):

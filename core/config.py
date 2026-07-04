@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # --- Manim / render image (Q2: pinned here, referenced everywhere) ---
     manim_version: str = "0.18.1"
     manim_base_image: str = "manimcommunity/manim:v0.18.1"
-    render_image: str = "lattice-render:0.1"
+    render_image: str = "lattice-render:0.2"   # 0.2 bakes in /opt/icons for self.icon() (see Dockerfile)
     render_network: bool = False  # sandbox: NO network unless explicitly enabled (Q5)
     render_timeout_s: int = 600
 

@@ -1,0 +1,10 @@
+# Keep the build context small — the render image only needs assets/icons (COPY'd in the Dockerfile).
+out/
+.git/
+reference/
+New folder/
+**/__pycache__/
+.pytest_cache/
+*.mp4
+*.mp3
+node_modules/
