@@ -21,9 +21,14 @@ _MAIN_Y = (2.3, -3.0)         # main-area y span (sits BELOW the title band)
 # a drift test asserts it equals the set of assets/icons/*.svg stems. The in-container self.icon() is
 # file-driven + falls back, so it needs no copy of this list.
 ICON_NAMES: list[str] = [
+    # systems / networking
     "server", "database", "cloud", "router", "network", "wifi", "cpu", "hard-drive", "monitor",
-    "laptop", "smartphone", "globe", "lock", "shield", "key", "mail", "folder", "file", "user",
-    "users", "camera", "image", "cat", "car",
+    "laptop", "smartphone", "globe", "lock", "shield", "key", "mail", "folder", "file",
+    "code", "terminal", "settings", "layers", "git-branch", "package",
+    # people / general
+    "user", "users", "camera", "image", "activity", "bell", "calendar", "clock", "map-pin", "box",
+    # real-world objects (CV / examples)
+    "cat", "dog", "car", "plane", "bus", "truck", "bike", "apple", "coffee",
 ]
 
 

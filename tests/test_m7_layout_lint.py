@@ -248,6 +248,44 @@ def test_backward_compat_top_level_items_still_work():
     assert len(ov) == 1
 
 
+# --- low-contrast text (legibility) --------------------------------------------------------
+
+def _facts_c(bg, items, texts):
+    return {"ok": True, "frame": FRAME, "bg": bg, "items": items, "texts": texts}
+
+
+@pytest.mark.unit
+def test_dark_text_on_dark_bg_flagged():
+    # the scene-1 "height" defect: dark navy label on the dark scene bg -> ~invisible
+    facts = _facts_c("#101015", [],
+                     [{"top": 0, "kind": "Text", "label": "height", "x": [0, 1], "y": [0, 0.3], "color": "#1b2a4a"}])
+    lc = [i for i in layout_lint.issues_from_facts(facts) if i.type == "low_contrast"]
+    assert lc and "height" in lc[0].location
+
+
+@pytest.mark.unit
+def test_white_text_on_dark_bg_not_flagged():
+    facts = _facts_c("#101015", [],
+                     [{"top": 0, "kind": "Text", "label": "ok", "x": [0, 1], "y": [0, 0.3], "color": "#ffffff"}])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "low_contrast"] == []
+
+
+@pytest.mark.unit
+def test_dark_text_on_light_box_not_flagged():
+    # dark text INSIDE a light filled box reads fine -> the box (not the scene bg) is its background
+    facts = _facts_c("#101015",
+                     [{"i": 1, "kind": "Rectangle", "label": "", "x": [-0.2, 1.2], "y": [-0.2, 0.5], "fill": "#e8e8e8"}],
+                     [{"top": 2, "kind": "Text", "label": "lbl", "x": [0, 1], "y": [0, 0.3], "color": "#111111"}])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "low_contrast"] == []
+
+
+@pytest.mark.unit
+def test_text_without_color_not_flagged_contrast():
+    # backward-compat: old probe facts (no color / no bg) -> the contrast check simply skips
+    facts = _facts([{"i": 0, "kind": "Text", "label": "x", "x": [0, 1], "y": [0, 0.3]}])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "low_contrast"] == []
+
+
 # --- the vision_critic splice: free lint gates the paid vision call -------------------------
 
 def _ok_render(mp4, png):

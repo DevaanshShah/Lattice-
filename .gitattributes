@@ -1,0 +1,3 @@
+# Keep bundled icon SVGs as LF regardless of platform — they're baked into the render image and
+# checked out on Windows would otherwise become CRLF, which can trip SVG parsers on rebuild.
+*.svg text eol=lf

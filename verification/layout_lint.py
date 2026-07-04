@@ -61,6 +61,12 @@ _OCCLUDER_KINDS = {"Circle", "Ellipse", "Arc", "Annulus", "Dot", "AnnotationDot"
 _COVER_FRAC = 0.35        # a shape covering >= this fraction of a text's OWN area occludes it
 _MAX_COVERED_ISSUES = 4
 
+# Low-contrast text (legibility): dark text on a dark fill is ~invisible (a real defect — a dark-on-dark
+# "height" label). Flag only NEAR-invisible cases (WCAG contrast ratio below this) so a merely-muted
+# label isn't nagged. Each text is compared to the fill it sits on, else the scene background.
+_MIN_CONTRAST = 1.8       # WCAG-style ratio; 1.0 == identical, 21 == black-on-white. <1.8 == unreadable.
+_MAX_CONTRAST_ISSUES = 3
+
 # The in-container probe. Runs scene.py headless, applies animation END states, prints one JSON
 # line of top-level mobject bounding boxes. Self-contained (no project imports) — it executes in
 # the render image where only `manim` + stdlib are guaranteed.
@@ -137,6 +143,25 @@ def _bbox(m):
     return [float(ul[0]), float(dr[0])], [float(dr[1]), float(ul[1])]   # x[left,right], y[bottom,top]
 
 
+def _hexcolor(m):
+    """Rendered hex color of a mobject (fill first, then stroke) -> for the contrast check. None on failure."""
+    for getter in ("get_fill_color", "get_color", "get_stroke_color"):
+        try:
+            c = getattr(m, getter)()
+            if c is not None:
+                return c.to_hex() if hasattr(c, "to_hex") else str(c)
+        except Exception:
+            pass
+    return None
+
+
+def _fillop(m):
+    try:
+        return float(m.get_fill_opacity())
+    except Exception:
+        return 0.0
+
+
 _TEXT_KINDS = {"Text", "MarkupText", "Tex", "MathTex", "SingleStringMathTex", "Paragraph", "Title",
                "DecimalNumber", "Integer", "Variable"}
 
@@ -149,7 +174,7 @@ def _collect_texts(top, m, out):
         if _kind(m) in _TEXT_KINDS:
             x, y = _bbox(m)
             out.append({"top": top, "kind": _kind(m), "label": _label(m), "x": x, "y": y,
-                        "fs": _fontsize(m), "nl": ("\n" in _rawtext(m))})
+                        "fs": _fontsize(m), "nl": ("\n" in _rawtext(m)), "color": _hexcolor(m)})
             return
         for s in getattr(m, "submobjects", []):
             _collect_texts(top, s, out)
@@ -161,18 +186,24 @@ try:
     import scene as _mod
     S = _mod.GeneratedScene()
     S.construct()
+    try:
+        _bg = S.camera.background_color
+        _bg = _bg.to_hex() if hasattr(_bg, "to_hex") else str(_bg)
+    except Exception:
+        _bg = "#000000"
     items, texts = [], []
     for i, m in enumerate(S.mobjects):     # top-level mobjects (a group's bbox covers its parts)
         try:
             x, y = _bbox(m)
             items.append({"i": i, "kind": _kind(m), "label": _label(m), "x": x, "y": y,
-                          "fs": _fontsize(m), "nl": ("\n" in _rawtext(m))})
+                          "fs": _fontsize(m), "nl": ("\n" in _rawtext(m)),
+                          "fill": (_hexcolor(m) if _fillop(m) > 0.1 else None)})
         except Exception:
             pass
         _collect_texts(i, m, texts)        # text labels at any depth, tagged with this top index
     print(json.dumps({"ok": True,
                       "frame": [float(config.frame_x_radius), float(config.frame_y_radius)],
-                      "items": items, "texts": texts}))
+                      "bg": _bg, "items": items, "texts": texts}))
 except Exception as e:
     print(json.dumps({"ok": False, "error": str(type(e).__name__) + ": " + str(e)[:200]}))
 '''
@@ -315,6 +346,65 @@ def _tiny_font_issues(texts: list[dict]) -> list[CritiqueIssue]:
     return issues
 
 
+def _rel_lum(hexcol: str) -> float | None:
+    """WCAG relative luminance of a #rrggbb color (0=black, 1=white). None if unparseable."""
+    if not hexcol:
+        return None
+    h = hexcol.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    except (ValueError, IndexError):
+        return None
+    def _lin(c: float) -> float:
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def _contrast_ratio(c1: str, c2: str) -> float | None:
+    l1, l2 = _rel_lum(c1), _rel_lum(c2)
+    if l1 is None or l2 is None:
+        return None
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[CritiqueIssue]:
+    """Flag text that is NEAR-INVISIBLE against its background (dark-on-dark). Each text is compared to
+    the fill of the SMALLEST filled shape it sits inside (its box), else the scene background. Only
+    ratios below _MIN_CONTRAST are flagged, so a merely-muted label isn't nagged."""
+    filled = [it for it in items if it.get("fill")]
+    flagged = []
+    for t in texts:
+        tc = t.get("color")
+        if not tc or not t.get("label"):
+            continue
+        cx = (t["x"][0] + t["x"][1]) / 2.0
+        cy = (t["y"][0] + t["y"][1]) / 2.0
+        bg_col, best_area = bg, None                 # default: the scene background
+        for s in filled:                              # the box the text sits in wins (smallest containing)
+            if s["x"][0] <= cx <= s["x"][1] and s["y"][0] <= cy <= s["y"][1]:
+                area = (s["x"][1] - s["x"][0]) * (s["y"][1] - s["y"][0])
+                if best_area is None or area < best_area:
+                    best_area, bg_col = area, s["fill"]
+        cr = _contrast_ratio(tc, bg_col)
+        if cr is not None and cr < _MIN_CONTRAST:
+            flagged.append((cr, t, bg_col))
+    issues: list[CritiqueIssue] = []
+    for cr, t, bg_col in sorted(flagged, key=lambda p: p[0])[:_MAX_CONTRAST_ISSUES]:
+        lbl = t["label"]
+        issues.append(CritiqueIssue(
+            type="low_contrast",
+            location=f"'{lbl}'",
+            description=(f"Text '{lbl}' ({t['color']}) is nearly invisible on its background ({bg_col}) "
+                        f"— contrast only {cr:.1f}:1."),
+            suggested_fix=(f"Give '{lbl}' a contrasting color (on the dark theme, WHITE or a light accent), "
+                           f"or a lighter background — aim for a contrast ratio of at least 4:1."),
+        ))
+    return issues
+
+
 def _texts_of(facts: dict) -> list[dict]:
     """The text mobjects to compare. New probe emits `texts` (labels at any depth, each tagged with its
     top-level ancestor `top`). Backward-compat: if absent, derive from top-level text `items`, each its
@@ -355,6 +445,8 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
     issues.extend(_overlap_issues(texts))                          # cross-group text-vs-text overlap + near-touch
     issues.extend(_covered_issues(facts.get("items", []), texts))  # a shape drawn on top of a label
     issues.extend(_tiny_font_issues(texts))                        # unreadable tiny text
+    issues.extend(_contrast_issues(texts, facts.get("items", []),  # near-invisible dark-on-dark text
+                                   facts.get("bg", "#000000")))
     return issues[:_MAX_ISSUES]
 
 
