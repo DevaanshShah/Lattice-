@@ -102,7 +102,11 @@ def scaffold_api_prompt() -> str:
             "\n\nFILL THE FRAME — the grid runs rows A (top) to E (bottom). CENTER your content vertically "
             "around the middle (row C, y≈0); do NOT cluster everything in the top rows A/B and leave the "
             "lower half empty. Put a single horizontal flow on row C; spread a few stacked elements across "
-            "rows B–D; use the whole canvas, not just the top strip.")
+            "rows B–D; use the whole canvas, not just the top strip."
+            "\n\nNEVER use Code(...) — for a snippet or request/response line use "
+            "`self.labeled_box(\"get_weather: Berlin\", w=3.5)` or a plain `Text(...)`. Code() blocks "
+            "restyle their own text into the background color and render as EMPTY boxes (a real defect); "
+            "they are banned.")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:

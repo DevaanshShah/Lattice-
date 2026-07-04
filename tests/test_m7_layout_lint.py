@@ -153,6 +153,25 @@ def test_no_snapshots_key_behaves_as_before():
     assert len(ov) == 1
 
 
+@pytest.mark.unit
+def test_unlabeled_dark_on_dark_text_flagged():
+    # the Code() defect: its glyph runs carry no .text label but were painted the same color as their
+    # background -> invisible. Contrast must not require a label.
+    facts = {"ok": True, "frame": FRAME, "items": [
+        {"i": 0, "kind": "Code", "label": "", "x": [-2, 2], "y": [-1, 1], "fill": "#1A1A2E"}],
+        "texts": [{"top": 1, "kind": "Paragraph", "label": "", "x": [-1.8, 1.8], "y": [-0.4, 0.4],
+                   "color": "#1A1A2E"}]}
+    lc = [i for i in layout_lint.issues_from_facts(facts) if i.type == "low_contrast"]
+    assert len(lc) == 1 and "unlabeled" in lc[0].location
+
+
+@pytest.mark.unit
+def test_code_mobject_banned_in_prompt():
+    from generation import lattice_scene
+    sp = lattice_scene.structural_system_prompt()
+    assert "NEVER use Code(" in sp
+
+
 # --- top-heavy / empty-frame layout --------------------------------------------------------
 
 @pytest.mark.unit

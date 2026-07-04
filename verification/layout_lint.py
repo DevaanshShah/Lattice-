@@ -428,8 +428,9 @@ def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[Crit
     flagged = []
     for t in texts:
         tc = t.get("color")
-        if not tc or not t.get("label"):
-            continue
+        if not tc:
+            continue  # NO label requirement: Code()-style glyph runs carry no .text but can still be
+                      # invisible dark-on-dark (a real shipped defect) — kind stands in as the location
         cx = (t["x"][0] + t["x"][1]) / 2.0
         cy = (t["y"][0] + t["y"][1]) / 2.0
         bg_col, best_area = bg, None                 # default: the scene background
@@ -445,7 +446,7 @@ def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[Crit
             flagged.append((cr, t, bg_col))
     issues: list[CritiqueIssue] = []
     for cr, t, bg_col in sorted(flagged, key=lambda p: p[0])[:_MAX_CONTRAST_ISSUES]:
-        lbl = t["label"]
+        lbl = t.get("label") or f"(unlabeled {t['kind']} text)"
         issues.append(CritiqueIssue(
             type="low_contrast",
             location=f"'{lbl}'",
@@ -525,7 +526,9 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
     issues.extend(_overlap_issues([texts, *facts.get("snapshots", [])]))
     issues.extend(_covered_issues(facts.get("items", []), texts))  # a shape drawn on top of a label
     issues.extend(_tiny_font_issues(texts))                        # unreadable tiny text
-    issues.extend(_contrast_issues(texts, facts.get("items", []),  # near-invisible dark-on-dark text
+    # contrast gets the UNFILTERED texts: Code()-style glyph runs have no label but can still be invisible
+    all_texts = facts.get("texts", texts)
+    issues.extend(_contrast_issues(all_texts, facts.get("items", []),  # near-invisible dark-on-dark text
                                    facts.get("bg", "#000000")))
     issues.extend(_centering_issue(facts.get("items", []), [fx, fy]))  # top-heavy / empty-frame layout
     return issues[:_MAX_ISSUES]
