@@ -113,22 +113,35 @@ class LatticeScene(Scene):
         return Text(s, font_size=font_size)
 
     # --- starter components: self-laying-out, own their labels (no sibling collisions) ---
-    def labeled_box(self, text, color=BLUE, w=1.6, h=1.0):
-        box = Rectangle(width=w, height=h, color=color)
+    def _style_kw(self, style, extra=()):
+        # The model naturally passes Manim styling kwargs (fill_color, stroke_color, ...) to these
+        # components; accept the safe ones and DROP anything unknown so a stray kwarg can never raise a
+        # TypeError that kills the render (a real failure: labeled_box("x", corner_radius=..) crashed a scene).
+        ok = ("fill_color", "fill_opacity", "stroke_color", "stroke_width", "stroke_opacity", "color") + tuple(extra)
+        return {k: v for k, v in style.items() if k in ok}
+
+    def labeled_box(self, text, color=BLUE, w=1.6, h=1.0, **style):
+        cr = style.pop("corner_radius", 0.0)   # tolerate corner_radius via RoundedRectangle (0 == sharp)
+        kw = self._style_kw(style); kw.setdefault("color", color)
+        box = RoundedRectangle(width=w, height=h, corner_radius=cr, **kw)
         lbl = self._label(text, 24).move_to(box.get_center())
         if lbl.width > w - 0.2:
             lbl.scale_to_fit_width(w - 0.2)
         return VGroup(box, lbl)
 
-    def node(self, label, color=BLUE, r=0.35):
-        c = Circle(radius=r, color=color)
+    def node(self, label, color=BLUE, r=0.35, **style):
+        style.pop("corner_radius", None)       # circles have no corners -> drop it silently
+        kw = self._style_kw(style); kw.setdefault("color", color)
+        c = Circle(radius=r, **kw)
         lbl = self._label(label, 22).move_to(c.get_center())
         if lbl.width > 2 * r - 0.1:
             lbl.scale_to_fit_width(2 * r - 0.1)
         return VGroup(c, lbl)
 
-    def connect(self, a, b, color=GREY, buff=0.1):
-        return Arrow(a.get_center(), b.get_center(), buff=buff, color=color, stroke_width=3)
+    def connect(self, a, b, color=GREY, buff=0.1, **style):
+        kw = {"buff": buff, "color": color, "stroke_width": 3}
+        kw.update(self._style_kw(style, extra=("max_tip_length_to_length_ratio", "tip_length")))
+        return Arrow(a.get_center(), b.get_center(), **kw)
 
     # --- geometry primitives: correctness-by-construction for the math the model reasons badly blind ---
     def square_on_segment(self, p1, p2, away_from=None, color=BLUE, fill_opacity=0.25, outward=True):
