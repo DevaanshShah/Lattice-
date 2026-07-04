@@ -67,6 +67,12 @@ _MAX_COVERED_ISSUES = 4
 _MIN_CONTRAST = 1.8       # WCAG-style ratio; 1.0 == identical, 21 == black-on-white. <1.8 == unreadable.
 _MAX_CONTRAST_ISSUES = 3
 
+# Top-heavy layout (canvas usage): the blind model clusters content in the top rows (A/B) and leaves the
+# lower half empty (the recurring "empty frame" defect). Flag only CLEARLY top-heavy scenes — content
+# whose vertical CENTER sits above this y — so a legitimately centered single element isn't nagged.
+_TOP_HEAVY_CY = 1.2       # Manim units; rows A~2.3, B~1.2, C~0.05 -> content centered on B/A trips, C-spread doesn't
+_TITLE_BAND = 1.0         # exclude items within this of the top edge (the scaffold title lives there)
+
 # The in-container probe. Runs scene.py headless, applies animation END states, prints one JSON
 # line of top-level mobject bounding boxes. Self-contained (no project imports) — it executes in
 # the render image where only `manim` + stdlib are guaranteed.
@@ -433,6 +439,33 @@ def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[Crit
     return issues
 
 
+def _centering_issue(items: list[dict], frame: list) -> list[CritiqueIssue]:
+    """Flag a CLEARLY top-heavy scene — content clustered in the top rows with the lower half empty (the
+    recurring 'empty frame' defect). Excludes the title band (always at the top) and only fires when the
+    content's vertical center sits above _TOP_HEAVY_CY, so a centered single element / normal layout isn't
+    nagged. One issue per scene (it's a whole-scene property)."""
+    fx, fy = frame
+    content = [it for it in items
+               if (it["y"][0] + it["y"][1]) / 2.0 <= fy - _TITLE_BAND    # drop the title strip
+               and (it["x"][1] - it["x"][0]) > 0 and (it["y"][1] - it["y"][0]) > 0]
+    if not content:
+        return []
+    top = max(it["y"][1] for it in content)
+    bot = min(it["y"][0] for it in content)
+    cy = (top + bot) / 2.0
+    if cy <= _TOP_HEAVY_CY:
+        return []
+    return [CritiqueIssue(
+        type="layout",
+        location="whole scene",
+        description=(f"The content is clustered high in the frame (vertical center y={cy:.1f}); the lower "
+                     f"half of the canvas is empty."),
+        suggested_fix=("Center the content vertically — shift the whole group toward the middle (around "
+                       "row C / y=0) or spread elements down into rows C, D, E, so the frame is used evenly "
+                       "instead of clustered at the top. The title stays at the top; content fills below it."),
+    )]
+
+
 def _texts_of(facts: dict) -> list[dict]:
     """The text mobjects to compare. New probe emits `texts` (labels at any depth, each tagged with its
     top-level ancestor `top`). Backward-compat: if absent, derive from top-level text `items`, each its
@@ -476,6 +509,7 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
     issues.extend(_tiny_font_issues(texts))                        # unreadable tiny text
     issues.extend(_contrast_issues(texts, facts.get("items", []),  # near-invisible dark-on-dark text
                                    facts.get("bg", "#000000")))
+    issues.extend(_centering_issue(facts.get("items", []), [fx, fy]))  # top-heavy / empty-frame layout
     return issues[:_MAX_ISSUES]
 
 

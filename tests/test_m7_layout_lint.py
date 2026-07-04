@@ -153,6 +153,46 @@ def test_no_snapshots_key_behaves_as_before():
     assert len(ov) == 1
 
 
+# --- top-heavy / empty-frame layout --------------------------------------------------------
+
+@pytest.mark.unit
+def test_top_heavy_layout_flagged():
+    # content clustered in the top rows (A/B), lower half empty -> the "empty frame" defect
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "T", "x": [-3, 3], "y": [3.3, 3.7]},     # title (excluded)
+        {"i": 1, "kind": "Square", "label": "", "x": [-1, 1], "y": [1.6, 2.4]},     # content up in row A/B
+        {"i": 2, "kind": "Square", "label": "", "x": [2, 3.5], "y": [1.6, 2.4]},
+    ])
+    lay = [i for i in layout_lint.issues_from_facts(facts) if i.type == "layout"]
+    assert len(lay) == 1 and "lower half" in lay[0].description
+
+
+@pytest.mark.unit
+def test_vertically_centered_not_flagged():
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "T", "x": [-3, 3], "y": [3.3, 3.7]},      # title
+        {"i": 1, "kind": "Square", "label": "", "x": [-1, 1], "y": [-0.8, 0.8]},    # centered content
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "layout"] == []
+
+
+@pytest.mark.unit
+def test_spread_across_rows_not_flagged():
+    facts = _facts([
+        {"i": 0, "kind": "Text", "label": "T", "x": [-3, 3], "y": [3.3, 3.7]},      # title
+        {"i": 1, "kind": "Square", "label": "", "x": [-1, 1], "y": [1.8, 2.3]},     # row A
+        {"i": 2, "kind": "Square", "label": "", "x": [-1, 1], "y": [-2.8, -2.3]},   # row E -> spread, centered
+    ])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "layout"] == []
+
+
+@pytest.mark.unit
+def test_title_only_scene_not_flagged():
+    # only the title (no content below the title band) -> nothing to center, don't nag
+    facts = _facts([{"i": 0, "kind": "Text", "label": "T", "x": [-3, 3], "y": [3.3, 3.7]}])
+    assert [i for i in layout_lint.issues_from_facts(facts) if i.type == "layout"] == []
+
+
 # --- distance-based clearance + tiny font (Tier 1) -----------------------------------------
 
 @pytest.mark.unit

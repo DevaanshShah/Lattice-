@@ -98,7 +98,11 @@ def scaffold_api_prompt() -> str:
             "\n\nTITLE IS RESERVED — self.setup_scene(title) ALREADY draws the scene title at the top edge. "
             "Do NOT create your own title (no second `Text(...).to_edge(UP)`), and never scale any mobject "
             "to the full frame width (no `.scale_to_fit_width(config.frame_width)`) — that stacks a duplicate "
-            "title and runs it off both edges. Keep all content in the grid area below the title.")
+            "title and runs it off both edges. Keep all content in the grid area below the title."
+            "\n\nFILL THE FRAME — the grid runs rows A (top) to E (bottom). CENTER your content vertically "
+            "around the middle (row C, y≈0); do NOT cluster everything in the top rows A/B and leave the "
+            "lower half empty. Put a single horizontal flow on row C; spread a few stacked elements across "
+            "rows B–D; use the whole canvas, not just the top strip.")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
