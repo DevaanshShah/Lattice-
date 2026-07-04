@@ -269,7 +269,9 @@ class LatticeScene(Scene):
                 self.play(grp.animate.scale(s).move_to(CENTER), run_time=run_time)
             else:                                         # already large enough -> only recenter if badly off
                 c = grp.get_center()
-                if abs(float(c[0])) > 2.2 or float(c[1]) > 1.3:
+                # symmetric drift check: recenter content stuck in ANY corner/edge band (a real miss:
+                # low-LEFT content sailed through when only upward drift was tested)
+                if abs(float(c[0])) > 1.8 or abs(float(c[1]) + 0.5) > 1.5:
                     self.play(grp.animate.move_to(CENTER), run_time=run_time)
         except Exception:
             pass
