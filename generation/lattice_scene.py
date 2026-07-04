@@ -237,6 +237,34 @@ class LatticeScene(Scene):
             pass
         return self.labeled_box(name, color=color)              # unknown/missing -> readable box label
 
+    def fit_content(self, max_scale=2.4, run_time=0.5):
+        """Scale + center ALL current content (everything except the title) to fill the main area, so a
+        sparse scene doesn't sit tiny in a sea of black. Called automatically at the end of a scene.
+        SAFE BY CONSTRUCTION: scales the whole group UNIFORMLY (relative placement preserved -> creates no
+        new overlaps), only ever scales UP (never shrinks a good, already-full layout), caps the scale, and
+        fits inside a safe area that cannot reach the frame edge. Fully wrapped -> can never break a render."""
+        try:
+            title = getattr(self, "scene_title", None)
+            content = [m for m in self.mobjects
+                       if m is not title and float(getattr(m, "width", 0)) > 0.01
+                       and float(getattr(m, "height", 0)) > 0.01]
+            if not content:
+                return
+            grp = VGroup(*content)
+            gw, gh = float(grp.width), float(grp.height)
+            if gw <= 0 or gh <= 0:
+                return
+            TARGET_W, TARGET_H, CENTER = 12.4, 5.8, [0.0, -0.5, 0.0]   # safe area below the title strip
+            s = min(TARGET_W / gw, TARGET_H / gh, max_scale)
+            if s > 1.03:                                  # content is small -> grow it to fill + center
+                self.play(grp.animate.scale(s).move_to(CENTER), run_time=run_time)
+            else:                                         # already large enough -> only recenter if badly off
+                c = grp.get_center()
+                if abs(float(c[0])) > 2.2 or float(c[1]) > 1.3:
+                    self.play(grp.animate.move_to(CENTER), run_time=run_time)
+        except Exception:
+            pass
+
     # --- geometry primitives: correctness-by-construction for the math the model reasons badly blind ---
     def square_on_segment(self, p1, p2, away_from=None, color=BLUE, fill_opacity=0.25, outward=True):
         """A square built FLUSH on segment p1->p2 (side length = |p1 p2|), extending to ONE side.

@@ -80,13 +80,40 @@ def _cap_overwide_scaling(code: str) -> str:
                   ".scale_to_fit_width(11.5)", code)
 
 
+def _inject_fit_content(code: str) -> str:
+    """Auto-run the scaffold's fit_content() at the end of every structural scene so sparse content is
+    scaled up + centered to fill the frame — without relying on the model to remember to call it. Renames
+    the model's construct() to _user_construct() and appends a construct() wrapper that runs it then fits.
+
+    Best-effort + heavily guarded: only applies to the exact single-GeneratedScene.construct shape, and
+    skips if any module-level (column-0) code follows construct (so the EOF-appended wrapper can't land
+    outside the class). On any mismatch the code is returned UNCHANGED — never risks breaking the render."""
+    if "fit_content" in code or "_user_construct" in code:      # already present / already injected
+        return code
+    if "class GeneratedScene" not in code or code.count("def construct(self):") != 1:
+        return code
+    m = re.search(r"\n([ \t]+)def construct\(self\):", code)
+    if not m:
+        return code
+    ind = m.group(1)                                            # the method indent (inside the class)
+    tail = code[m.end():]                                       # everything after the construct def line
+    if re.search(r"\n\S", tail):                                # a column-0 line after construct -> unsafe
+        return code
+    renamed = code.replace(f"{ind}def construct(self):", f"{ind}def _user_construct(self):", 1)
+    wrapper = (f"\n{ind}def construct(self):\n"
+               f"{ind}    self._user_construct()\n"
+               f"{ind}    self.fit_content()\n")
+    return renamed.rstrip() + "\n" + wrapper
+
+
 def _finalize_code(code: str, *, structural: bool, use_components: bool) -> str:
     """Prepend the base source the generated scene relies on: the LatticeScene grid (structural mode)
     or the component helpers (freehand + components). Freehand-without-components returns code as-is.
-    Also caps any full-frame-width scaling so a stray title/label can't run off the frame edges."""
+    Caps any full-frame-width scaling, and (structural) auto-appends a fit_content() pass so sparse
+    content fills the frame."""
     code = _cap_overwide_scaling(code)
     if structural:
-        return lattice_scene.LATTICE_SCENE_SRC + "\n\n" + code
+        return lattice_scene.LATTICE_SCENE_SRC + "\n\n" + _inject_fit_content(code)
     return (COMPONENTS_SRC + "\n\n" + code) if use_components else code
 
 

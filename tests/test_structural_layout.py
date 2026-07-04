@@ -173,6 +173,45 @@ def test_prompt_reserves_the_title_and_bans_full_frame_width():
 
 
 @pytest.mark.unit
+def test_fit_content_method_in_src():
+    src = lattice_scene.LATTICE_SCENE_SRC
+    compile(src, "<lattice_scene>", "exec")          # the new method keeps the SRC valid
+    assert "def fit_content" in src
+    assert "max_scale" in src and "scale" in src      # scales the content group
+
+
+@pytest.mark.unit
+def test_inject_fit_content_wraps_construct_and_compiles():
+    from composition.decoupled import _inject_fit_content
+    code = ("from manim import *\n"
+            "class GeneratedScene(LatticeScene):\n"
+            "    def construct(self):\n"
+            "        self.setup_scene('T')\n"
+            "        self.play(Create(self.node('A')))\n"
+            "        self.wait(1)\n")
+    out = _inject_fit_content(code)
+    compile(out, "<gen>", "exec")                     # still valid python
+    assert "def _user_construct(self):" in out        # model's construct renamed
+    assert out.count("def construct(self):") == 1      # exactly one wrapper construct
+    assert "self._user_construct()" in out and "self.fit_content()" in out
+
+
+@pytest.mark.unit
+def test_inject_fit_content_is_graceful_on_odd_shapes():
+    from composition.decoupled import _inject_fit_content
+    # already calls fit_content -> untouched
+    has_fit = "class GeneratedScene(LatticeScene):\n    def construct(self):\n        self.fit_content()\n"
+    assert _inject_fit_content(has_fit) == has_fit
+    # module-level code after construct -> unsafe to EOF-append -> untouched
+    trailing = ("class GeneratedScene(LatticeScene):\n    def construct(self):\n        self.setup_scene('T')\n"
+                "\nif __name__ == '__main__':\n    GeneratedScene().construct()\n")
+    assert _inject_fit_content(trailing) == trailing
+    # no construct at all -> untouched
+    nocon = "class GeneratedScene(LatticeScene):\n    pass\n"
+    assert _inject_fit_content(nocon) == nocon
+
+
+@pytest.mark.unit
 def test_finalize_caps_full_frame_width_scaling():
     # deterministic off-frame guard: any full-frame-width fit is shrunk to a safe content width
     from composition.decoupled import _cap_overwide_scaling
