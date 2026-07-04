@@ -250,6 +250,15 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
             raise HTTPException(404, f"scene {index} not rendered yet")
         return FileResponse(str(mp4), media_type="video/mp4")
 
+    @app.get("/api/projects/{pid}/scenes/{index}/source")
+    def scene_source(pid: str, index: int) -> dict:
+        """Developer inspection: the generated code + the exact codegen prompt + spec + narration."""
+        _load_or_404(pid)
+        try:
+            return engine.scene_source(pid, index)
+        except IndexError as e:
+            raise HTTPException(400, str(e))
+
     @app.get("/api/projects/{pid}/download")
     def download(pid: str, subtitles: str = Query("none", pattern="^(none|burn)$")):
         _load_or_404(pid)

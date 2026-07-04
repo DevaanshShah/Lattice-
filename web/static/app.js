@@ -15,6 +15,7 @@ const state = {
   planning: false, busy: false, downloadOpen: false, subtitles: false,
   historyOpen: false, history: [], sideSearch: "", gallerySearch: "",
   dragFrom: null,
+  dev: { open: false, tab: "log", inspect: null, subtab: "code", source: null, loading: false, autoscroll: true },
 };
 
 const SUGGEST = ["the Fourier series", "how neural networks learn", "how RSA encryption works", "eigenvectors intuitively"];
@@ -42,8 +43,8 @@ async function loadProjects() { try { state.projects = (await api("GET", "/api/p
 function followJob(jobId, onProgress) {
   return new Promise((resolve) => {
     const es = new EventSource(`/api/jobs/${jobId}/stream`);
-    es.addEventListener("progress", (e) => { try { onProgress(JSON.parse(e.data)); } catch {} });
-    es.addEventListener("log", (e) => { try { state.gen.log.push(JSON.parse(e.data).message); } catch {} });
+    es.addEventListener("progress", (e) => { try { const p = JSON.parse(e.data); onProgress(p); refreshDevStatus(p); } catch {} });
+    es.addEventListener("log", (e) => { try { const m = JSON.parse(e.data).message; state.gen.log.push(m); if (state.gen.log.length > 3000) state.gen.log.splice(0, state.gen.log.length - 3000); appendDevLog(m); } catch {} });
     es.addEventListener("done", () => { es.close(); resolve(); });
     es.onerror = () => { es.close(); resolve(); };
   });
@@ -164,8 +165,131 @@ function render() {
   app.innerHTML = topbar() + (
     state.screen === "landing" ? landing() :
     state.screen === "gallery" ? gallery() : studio()
-  );
+  ) + devToggle() + devConsole();
   wire();
+  if (state.dev.open && state.dev.tab === "log") scrollDevLog();
+}
+
+// ---- developer console -------------------------------------------------------------------
+function devToggle() {
+  const active = state.busy || state.phase === "generating";
+  return `<div data-act="dev-toggle" title="Developer console" style="position:fixed;right:18px;bottom:18px;z-index:60;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;cursor:pointer;background:var(--raise2);border:1px solid ${state.dev.open ? "var(--accent)" : "var(--line2)"};box-shadow:0 12px 32px -14px rgba(0,0,0,0.7);${MONO}font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:${state.dev.open ? "var(--accent)" : "var(--muted)"};">
+    <span style="width:7px;height:7px;border-radius:50%;background:${active ? "var(--accent)" : "var(--faint)"};${active ? "animation:lt-pulse 1.2s ease-in-out infinite;" : ""}"></span>Dev</div>`;
+}
+
+function logLineHtml(msg) {
+  const m = String(msg);
+  let c = "var(--muted)";
+  if (/\[llm#\d+\]\s+ok/.test(m)) c = "var(--ok)";
+  else if (/\[llm#\d+\]\s+err|\[error\]|failed|Error/i.test(m)) c = "var(--danger)";
+  else if (/\[llm#\d+\]/.test(m)) c = "var(--accent)";
+  else if (/retry/i.test(m)) c = "#E8A13A";
+  else if (/^\s*->/.test(m) || /^\s{2,}/.test(m)) c = "var(--text)";
+  return `<div style="padding:2px 0;color:${c};white-space:pre-wrap;word-break:break-word;">${esc(m)}</div>`;
+}
+
+function devStatsHtml(p) {
+  const log = state.gen.log;
+  const started = log.filter(l => /\[llm#\d+\]\s+·/.test(l)).length;   // request lines
+  const okd = log.filter(l => /\[llm#\d+\]\s+ok/.test(l)).length;
+  const errd = log.filter(l => /\[llm#\d+\]\s+err/.test(l)).length;
+  const scenes = (p && p.scenes) || state.gen.scenes || {};
+  const chips = Object.entries(scenes).map(([i, st]) => {
+    const done = /done/i.test(st), fail = /fail/i.test(st), rend = /render/i.test(st) || /retry/i.test(st);
+    const col = done ? "var(--ok)" : fail ? "var(--danger)" : rend ? "var(--accent)" : "var(--faint)";
+    return `<span title="Scene ${(+i) + 1}: ${esc(st)}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;border:1px solid var(--line);${MONO}font-size:10.5px;color:${col};"><span style="width:6px;height:6px;border-radius:50%;background:${col};"></span>${pad2((+i) + 1)}</span>`;
+  }).join("");
+  const stat = (n, l, c) => `<div style="text-align:center;"><div style="${MONO}font-size:16px;color:${c};">${n}</div><div style="${MONO}font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);margin-top:2px;">${l}</div></div>`;
+  return `<div id="dev-status">
+    <div style="display:flex;gap:22px;justify-content:flex-start;padding:12px 16px;border-bottom:1px solid var(--line);">
+      ${stat(started, "hits", "var(--accent)")}${stat(okd, "ok", "var(--ok)")}${stat(errd, "err", errd ? "var(--danger)" : "var(--faint)")}
+    </div>
+    ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px;border-bottom:1px solid var(--line);">${chips}</div>` : ""}
+  </div>`;
+}
+
+function devConsole() {
+  if (!state.dev.open) return "";
+  const d = state.dev;
+  const tabBtn = (k, l) => `<div data-act="dev-tab" data-v="${k}" style="${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;padding:6px 2px;color:${d.tab === k ? "var(--text)" : "var(--muted)"};border-bottom:1.5px solid ${d.tab === k ? "var(--accent)" : "transparent"};">${l}</div>`;
+  let inner;
+  if (d.tab === "log") {
+    const lines = state.gen.log.length ? state.gen.log.map(logLineHtml).join("") : `<div style="color:var(--faint);">No activity yet. Start or edit a build and every LLM hit, retry, and render step streams here live.</div>`;
+    inner = `${devStatsHtml(state.project)}
+      <div id="dev-log" class="lt-scroll" style="flex:1;overflow-y:auto;padding:12px 16px;${MONO}font-size:11.5px;line-height:1.5;min-height:0;">${lines}</div>
+      <div style="flex:0 0 auto;display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--line);">
+        <div data-act="dev-clear" class="lt-link" style="${MONO}font-size:11px;color:var(--muted);cursor:pointer;">Clear</div>
+        <div style="flex:1;"></div>
+        <div data-act="dev-autoscroll" class="lt-link" style="${MONO}font-size:11px;color:${d.autoscroll ? "var(--accent)" : "var(--muted)"};cursor:pointer;">${d.autoscroll ? "▾ Auto-scroll on" : "Auto-scroll off"}</div>
+      </div>`;
+  } else {
+    inner = devScenesTab();
+  }
+  return `<div class="lt-snap" style="position:fixed;top:56px;right:0;bottom:0;width:min(560px,94vw);z-index:55;background:var(--bg2);border-left:1px solid var(--line2);display:flex;flex-direction:column;box-shadow:-24px 0 60px -30px rgba(0,0,0,0.8);">
+    <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);">
+      <div style="display:flex;align-items:center;gap:9px;"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent);"></span><span style="${DISPLAY}font-size:15px;font-weight:600;color:var(--text);">Developer console</span></div>
+      <div data-act="dev-toggle" style="width:28px;height:28px;border-radius:6px;display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:14px;">✕</div>
+    </div>
+    <div style="flex:0 0 auto;display:flex;gap:22px;padding:0 16px;border-bottom:1px solid var(--line);">${tabBtn("log", "Live log")}${tabBtn("scenes", "Scenes & prompts")}</div>
+    ${inner}
+  </div>`;
+}
+
+function devScenesTab() {
+  const scenes = (state.project && state.project.scenes) || [];
+  const d = state.dev;
+  if (!scenes.length) return `<div style="padding:20px 16px;${MONO}font-size:12px;color:var(--faint);">No scenes yet — plan and build a video first.</div>`;
+  const list = scenes.map((s, i) => `<div data-act="dev-inspect" data-i="${s.index}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;${d.inspect === s.index ? "background:var(--raise);" : ""}">
+      <span style="${MONO}font-size:11px;color:var(--accent);">${pad2(i + 1)}</span>
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.title)}</span>
+      <span style="width:7px;height:7px;border-radius:50%;background:${s.built ? "var(--ok)" : "var(--faint)"};"></span>
+    </div>`).join("");
+  let detail;
+  if (d.inspect == null) {
+    detail = `<div style="padding:20px 16px;${MONO}font-size:12px;color:var(--faint);">Select a scene to inspect its generated code and the exact prompt the model was given.</div>`;
+  } else if (d.loading) {
+    detail = `<div style="padding:20px 16px;${MONO}font-size:12px;color:var(--muted);">Loading…</div>`;
+  } else if (!d.source) {
+    detail = `<div style="padding:20px 16px;${MONO}font-size:12px;color:var(--danger);">Couldn't load this scene's source.</div>`;
+  } else {
+    const src = d.source;
+    const body = d.subtab === "code" ? (src.code || "(no code — scene not generated yet)")
+      : d.subtab === "system" ? src.system_prompt
+      : d.subtab === "user" ? src.user_prompt
+      : d.subtab === "spec" ? (src.spec || "(no spec)")
+      : (src.narration || []).join("\n") || "(no narration)";
+    const sub = (k, l) => `<div data-act="dev-subtab" data-v="${k}" style="${MONO}font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;padding:5px 9px;border-radius:5px;${d.subtab === k ? "background:var(--accent);color:var(--ink);" : "color:var(--muted);border:1px solid var(--line);"}">${l}</div>`;
+    detail = `<div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);">
+        <span style="${DISPLAY}font-size:14px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(src.title)}</span>
+        <button class="lt-btnp" data-act="dev-rerun" style="padding:6px 12px;border-radius:5px;border:none;background:var(--accent);color:var(--ink);${MONO}font-size:11px;font-weight:600;cursor:pointer;">↻ Rerun</button>
+      </div>
+      <div style="flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;">${sub("code", "Code")}${sub("system", "System prompt")}${sub("user", "User prompt")}${sub("spec", "Spec")}${sub("narr", "Narration")}</div>
+      <pre class="lt-scroll" style="flex:1;overflow:auto;margin:0;padding:12px 14px;${MONO}font-size:11px;line-height:1.55;color:var(--text);white-space:pre;min-height:0;background:var(--bg);border-top:1px solid var(--line);">${esc(body)}</pre>`;
+  }
+  return `<div style="flex:1;display:flex;min-height:0;">
+    <div class="lt-scroll" style="flex:0 0 178px;overflow-y:auto;padding:8px;border-right:1px solid var(--line);min-height:0;">${list}</div>
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;">${detail}</div>
+  </div>`;
+}
+
+function scrollDevLog() { const el = $("dev-log"); if (el && state.dev.autoscroll) el.scrollTop = el.scrollHeight; }
+function appendDevLog(msg) {
+  if (!state.dev.open || state.dev.tab !== "log") return;
+  const el = $("dev-log"); if (!el) return;
+  if (el.children.length === 1 && el.firstChild.style && el.firstChild.style.color === "var(--faint)") el.innerHTML = "";
+  el.insertAdjacentHTML("beforeend", logLineHtml(msg));
+  const s = $("dev-status"); if (s) s.outerHTML = devStatsHtml(state.project);
+  scrollDevLog();
+}
+function refreshDevStatus(p) {
+  if (!state.dev.open || state.dev.tab !== "log") return;
+  const s = $("dev-status"); if (s) s.outerHTML = devStatsHtml(p);
+}
+async function loadSource(index) {
+  state.dev.inspect = index; state.dev.loading = true; state.dev.source = null; render();
+  try { state.dev.source = await api("GET", `/api/projects/${state.project.id}/scenes/${index}/source`); }
+  catch { state.dev.source = null; }
+  state.dev.loading = false; render();
 }
 
 function topbar() {
@@ -291,6 +415,11 @@ function toggle(on) { return `<div style="width:36px;height:21px;border-radius:1
 function segmented(name, opts, cur) { return `<div style="display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;">${opts.map(([k, l], i) => `<div data-act="${name}" data-v="${k}" style="padding:7px 13px;font-size:12.5px;cursor:pointer;${i ? "border-left:1px solid var(--line);" : ""}${cur === k ? "background:var(--accent);color:var(--ink);font-weight:500;" : "color:var(--muted);"}">${l}</div>`).join("")}</div>`; }
 
 function phasePrompt() {
+  if (state.planning) return `<div class="lt-fade" style="max-width:520px;margin:0 auto;padding:110px 32px;display:flex;flex-direction:column;align-items:center;text-align:center;">
+    <div style="width:42px;height:42px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--accent);animation:lt-spin 0.8s linear infinite;"></div>
+    <div style="${DISPLAY}font-size:23px;font-weight:600;color:var(--text);margin-top:26px;letter-spacing:-0.02em;">Sketching your storyboard…</div>
+    <div style="color:var(--muted);font-size:14.5px;margin-top:8px;max-width:38ch;">Reading your idea and planning each scene. This usually takes a few seconds.</div>
+  </div>`;
   return `<div class="lt-fade" style="max-width:720px;margin:0 auto;padding:72px 32px;">
     <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;">Step 1 · The idea</div>
     <h2 style="${DISPLAY}font-size:38px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 10px;line-height:1.02;">What do you want to explain?</h2>
@@ -491,6 +620,13 @@ function handle(act, el) {
     case "dl-toggle": state.downloadOpen = !state.downloadOpen; render(); break;
     case "sub-toggle": state.subtitles = !state.subtitles; render(); break;
     case "do-download": window.open(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}`, "_blank"); state.downloadOpen = false; render(); break;
+    case "dev-toggle": state.dev.open = !state.dev.open; render(); break;
+    case "dev-tab": state.dev.tab = v; render(); break;
+    case "dev-clear": state.gen.log = []; render(); break;
+    case "dev-autoscroll": state.dev.autoscroll = !state.dev.autoscroll; render(); break;
+    case "dev-inspect": if (state.project) loadSource(+el.dataset.i); break;
+    case "dev-subtab": state.dev.subtab = v; render(); break;
+    case "dev-rerun": if (state.dev.source) { const idx = state.dev.inspect; state.dev.tab = "log"; render(); sceneJob(`/api/projects/${pid}/scenes/${idx}/regenerate`, { quality: state.quality }); } break;
   }
 }
 function curIdx() { const s = (state.project.scenes || [])[state.selected]; return s ? s.index : state.selected; }

@@ -24,6 +24,7 @@ from editing import arrange, history, tweak
 from editing._common import restitch_and_save
 from planner import approval
 from planner import outline as planner_outline
+from web.devtrace import traced
 
 
 class ProjectNotFound(KeyError):
@@ -103,10 +104,10 @@ class Engine:
         already fixes the scene count.)"""
         project = self.load(pid)
         outline = self._outline_of(project)
+        say = log or (lambda _m: None)
         if keep is not None:
             outline = approval.apply_edits(outline, keep=keep)   # reorder/cut BEFORE spend
-        client = self._client_or_default()
-        say = log or (lambda _m: None)
+        client = traced(self._client_or_default(), say)          # narrate every LLM hit into the job log
         workspace = self.workspace(pid)
         built = VideoProject.from_outline(outline)
         final = decoupled.build_video(
@@ -161,7 +162,7 @@ class Engine:
         sdir = self.workspace(pid) / "scenes" / f"scene_{node.sid}"
         try:
             decoupled.build_scene(item, outline, node.index, work_dir=sdir,
-                                  client=self._client_or_default(), structural=True, quality=quality,
+                                  client=traced(self._client_or_default(), log), structural=True, quality=quality,
                                   spec=spec, base_code=base_code, narration_override=narration_override,
                                   use_critic=use_critic)
         except Exception as e:  # noqa: BLE001 — a failed render must not half-mutate the project
@@ -299,6 +300,42 @@ class Engine:
             out.extend(s.script or ["(no narration generated yet)"])
             out.append("")
         return "\n".join(out).rstrip() + "\n"
+
+    # --- developer inspection (the exact prompt + generated code for one scene) --------------
+    def scene_source(self, pid: str, index: int) -> dict:
+        """Everything a developer wants to see for ONE scene: the generated Manim code, the scene
+        spec, the narration, and the EXACT system/user prompts the codegen used (reconstructed from
+        the same builders the pipeline calls — structural is the finalized path). Read-only."""
+        from core.schemas.scene_spec import SCENE_CLASS
+        from generation import lattice_scene
+
+        node = self.load(pid).scene(index)
+        spec = node.spec
+        system_prompt = lattice_scene.structural_system_prompt()
+        if spec is not None:
+            user_prompt = ("Scene spec (JSON):\n" + spec.model_dump_json(indent=2)
+                           + f"\n\nGenerate the complete Manim CE file. The Scene subclass MUST be "
+                             f"named `{SCENE_CLASS}`.")
+            spec_json = spec.model_dump_json(indent=2)
+        else:
+            user_prompt = "(scene not generated yet — build it to see the codegen prompt)"
+            spec_json = ""
+        # show just the generated scene, not the ~300-line LatticeScene scaffold prepended to it
+        code = node.code or ""
+        marker = f"class {SCENE_CLASS}"
+        scene_only = code[code.index(marker):] if marker in code else code
+        return {
+            "index": index,
+            "title": node.title,
+            "built": bool(node.mp4),
+            "score": node.score,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "spec": spec_json,
+            "code": scene_only,
+            "code_full": code,
+            "narration": list(node.script),
+        }
 
     def scene_mp4(self, pid: str, index: int) -> Path | None:
         node = self.load(pid).scene(index)
