@@ -97,3 +97,46 @@ def test_issue_fixer_reprepends_scaffold_after_regen():
     out = fixer(STRUCTURAL_CODE, report)
     assert "class LatticeScene(Scene)" in out
     assert out.index("class LatticeScene") < out.index("class GeneratedScene")
+
+
+class _CapturingClient:
+    def __init__(self, reply):
+        self.reply = reply
+        self.user = None
+
+    def chat(self, messages, **kw):
+        self.user = messages[-1]["content"]
+        return self.reply
+
+
+@pytest.mark.unit
+def test_issue_fixer_rebuilds_from_step_zero_not_patching():
+    # measured across real builds: patch-the-broken-code never converges for layout defects. The fixer
+    # must NOT show the broken code (anchoring) — it regenerates FRESH from the spec + defect list.
+    reply = "class GeneratedScene(LatticeScene):\n    def construct(self):\n        self.setup_scene('T')\n"
+    client = _CapturingClient(reply)
+    fixer = _make_issue_fixer(spec=None, style=None, use_components=False,
+                              client=client, structural=True)
+    broken = STRUCTURAL_CODE + "        UNIQUE_BROKEN_MARKER = 1\n"
+    report = CritiqueReport(ok=False, issues=[CritiqueIssue(type="overlap", description="x overlaps y")])
+    fixer(broken, report)
+    assert "UNIQUE_BROKEN_MARKER" not in client.user     # broken code NOT shown to the model
+    assert "CURRENT CODE" not in client.user             # no patch framing
+    assert "FRESH" in client.user                        # step-0 rebuild instruction
+    assert "x overlaps y" in client.user                 # defect list passed as avoid-this guidance
+
+
+@pytest.mark.unit
+def test_issue_fixer_regen_gets_deterministic_guards():
+    # regen candidates must pass through _finalize_code: raw center-arrows rewritten + fit_content injected
+    reply = ("class GeneratedScene(LatticeScene):\n"
+             "    def construct(self):\n"
+             "        self.setup_scene('T')\n"
+             "        a = self.node('A'); b = self.node('B')\n"
+             "        self.add(Arrow(a.get_center(), b.get_center()))\n")
+    fixer = _make_issue_fixer(spec=None, style=None, use_components=False,
+                              client=_FakeClient(reply), structural=True)
+    report = CritiqueReport(ok=False, issues=[CritiqueIssue(type="overlap", description="d")])
+    out = fixer(STRUCTURAL_CODE, report)
+    assert "Arrow(a, b)" in out                          # raw center-arrow rewritten to edge-anchored
+    assert "self.fit_content()" in out                   # auto-fit injected, same as first-shot code

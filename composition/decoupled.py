@@ -169,33 +169,38 @@ def _enforce_background(code: str, color: str = _BG_COLOR) -> str:
 
 
 def _make_issue_fixer(spec, style, use_components, client, *, structural: bool = False):
-    """Custom critic fixer: rewrites the scene to fix the vision critic's issues, then RE-APPLIES the
-    base source the scene depends on (LatticeScene grid in structural mode, else component helpers) so a
-    critic regen doesn't drop it. Freehand also re-pins the background; structural leaves it to setup_scene."""
+    """Custom critic fixer — FRESH REBUILD, not a patch. Measured across many real builds: showing the
+    blind model its own broken code and asking it to 'fix the overlap' almost never converges (it anchors
+    to the broken layout, nudges something, collides elsewhere — or guts the scene). So on visual defects
+    the scene goes back to STEP 0: regenerate from the SPEC (same context/intent), with the defect list as
+    avoid-this guidance and the broken code deliberately NOT shown. The critic loop keeps the best
+    candidate across rolls, so a worse roll never replaces a better one. Output runs through
+    _finalize_code, so regen candidates get the SAME deterministic guards as first-shot code
+    (base re-prepend, arrow rewrite, width cap, fit_content)."""
     conventions = load("manim-conventions")
     if structural:
         system = lattice_scene.structural_system_prompt()   # conventions + lattice prompt + icon catalog
-        base_src = lattice_scene.LATTICE_SCENE_SRC
     else:
         system = conventions + "\n\n---\n\n" + load("codegen")
         if use_components:
             system += "\n\n---\n\n" + COMPONENTS_PROMPT
-        base_src = COMPONENTS_SRC if use_components else None
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
-    intent = f"\n\nScene spec (keep the intent):\n{spec.model_dump_json(indent=2)}" if spec else ""
+    spec_block = (f"Scene spec (JSON):\n{spec.model_dump_json(indent=2)}" if spec
+                  else "Scene spec: (unavailable — rebuild the same scene idea)")
 
-    def fix(code: str, report: CritiqueReport) -> str:
-        scene = code.split(base_src, 1)[-1] if base_src else code  # show just the scene
-        issues = "\n".join(f"- [{i.type}] {i.location}: {i.description} -> FIX: {i.suggested_fix}"
+    def fix(code: str, report: CritiqueReport) -> str:  # noqa: ARG001 — broken code intentionally unused
+        issues = "\n".join(f"- [{i.type}] {i.location}: {i.description}"
                            for i in report.issues) or "- (no specific issues listed)"
-        user = (f"The rendered scene has these visual defects found by a vision critic:\n{issues}\n\n"
-                f"CURRENT CODE:\n{scene}{intent}\n\n"
-                "Apply the fixes (adjust positions/sizes so nothing overlaps or runs off-frame) and "
-                "resend the full corrected file (code only).")
-        fixed = strip_code_fences(client.chat([{"role": "system", "content": system},
+        user = (f"{spec_block}\n\n"
+                f"A previous attempt at this scene had these visual defects:\n{issues}\n\n"
+                f"Do NOT patch that attempt — design the scene layout FRESH from the spec, with a plan "
+                f"that avoids those defect classes (separate cells for every label, nothing off-frame, "
+                f"readable sizes/colors). Generate the complete Manim CE file. The Scene subclass MUST "
+                f"be named `{SCENE_CLASS}`. Code only.")
+        fresh = strip_code_fences(client.chat([{"role": "system", "content": system},
                                                {"role": "user", "content": user}]))
-        out = (base_src + "\n\n" + fixed) if base_src else fixed
+        out = _finalize_code(fresh, structural=structural, use_components=use_components)
         return out if structural else _enforce_background(out)
 
     return fix
