@@ -118,6 +118,13 @@ class LLMClient:
         message — some gateway-routed models (e.g. deepseek v3.2/v4 on AiCredits) intermittently
         500 or return blank content (AiCredits 500-streaks for ~10-20s, so retry persistently).
         4xx (auth/bad request) raise immediately (no point retrying)."""
+        # OpenRouter routes each call to some upstream host; the default pick was landing on SLOW ones
+        # (measured ~18s vs ~13s). Ask OR to prefer highest-throughput providers -> faster + steadier
+        # latency on the same key. No-op for direct providers (DeepSeek/AiCredits) that ignore it.
+        if "openrouter.ai" in (self.base_url or ""):
+            eb = dict(kwargs.get("extra_body") or {})
+            eb.setdefault("provider", {"sort": "throughput"})
+            kwargs["extra_body"] = eb
         last_exc: Exception | None = None
         resp = None
         for i in range(attempts):
