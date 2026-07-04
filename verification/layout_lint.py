@@ -98,6 +98,11 @@ def _apply_end_state(scene, anim):
         pass
 
 
+_SNAP = []   # a text-bbox snapshot AFTER each play() -> catches TRANSIENT overlaps (a moved label that
+             # collides during the animation, before a LATER play removes/merges it — the still-final
+             # frame the probe otherwise reads misses these). Capped so a long scene can't blow up output.
+
+
 def _play(self, *anims, **kw):
     for raw in anims:
         a = raw
@@ -107,6 +112,15 @@ def _play(self, *anims, **kw):
             except Exception:
                 a = raw
         _apply_end_state(self, a)
+    try:
+        if len(_SNAP) < 80:
+            snap = []
+            for i, m in enumerate(self.mobjects):   # _collect_texts is defined below; resolved at call time
+                _collect_texts(i, m, snap)
+            if snap:
+                _SNAP.append(snap)
+    except Exception:
+        pass
 
 
 Scene.play = _play
@@ -203,7 +217,7 @@ try:
         _collect_texts(i, m, texts)        # text labels at any depth, tagged with this top index
     print(json.dumps({"ok": True,
                       "frame": [float(config.frame_x_radius), float(config.frame_y_radius)],
-                      "bg": _bg, "items": items, "texts": texts}))
+                      "bg": _bg, "items": items, "texts": texts, "snapshots": _SNAP}))
 except Exception as e:
     print(json.dumps({"ok": False, "error": str(type(e).__name__) + ": " + str(e)[:200]}))
 '''
@@ -244,32 +258,46 @@ def _edge_gap(a: dict, b: dict) -> tuple[float, float]:
     return gap_x, gap_y
 
 
-def _overlap_issues(texts: list[dict]) -> list[CritiqueIssue]:
+def _overlap_issues(text_frames: list) -> list[CritiqueIssue]:
     """Flag TEXT pairs (labels at ANY depth) that OVERLAP (boxes intersect) OR NEARLY TOUCH (distance-
     based clearance). Pairs from the SAME top-level group are skipped (a component's own parts are
     intended); CROSS-group text collision — a moved box's label landing on another box's label — is the
-    class the narrow top-level-only v1 missed."""
-    texts = [t for t in texts if t.get("label")]
-    flagged = []  # (severity, kind, a, b) — higher severity sorts first
-    for i in range(len(texts)):
-        for j in range(i + 1, len(texts)):
-            a, b = texts[i], texts[j]
-            if a.get("top") is not None and a.get("top") == b.get("top"):
-                continue  # same container (e.g. one component's parts) -> intended, not a defect
-            frac = _overlap_frac(a, b)
-            if frac >= _OVERLAP_MIN_FRAC:
-                flagged.append((1.0 + frac, "overlap", a, b))
-                continue
-            gx, gy = _edge_gap(a, b)
-            gap = None  # near-touch only when ALIGNED on one axis (gap 0) and cramped on the other
-            if gx == 0.0 and 0.0 < gy < _MIN_CLEARANCE:
-                gap = gy
-            elif gy == 0.0 and 0.0 < gx < _MIN_CLEARANCE:
-                gap = gx
-            if gap is not None:
-                flagged.append((1.0 - gap, "touch", a, b))  # smaller gap => higher severity
+    class the narrow top-level-only v1 missed.
+
+    `text_frames` may be a SINGLE frame (list of text dicts) or MANY frames (list of such lists — the
+    per-play snapshots). Scanning every snapshot, not just the final frame, catches a TRANSIENT collision
+    (two labels sliding onto the same cell before a later play merges/removes them — the scene-4 defect).
+    A pair is reported ONCE, at its worst-observed severity."""
+    if text_frames and isinstance(text_frames[0], dict):
+        text_frames = [text_frames]                       # backward-compat: a single frame was passed
+    worst: dict = {}  # frozenset(labels) -> (severity, kind, a, b), keeping the highest severity seen
+    for texts in text_frames:
+        texts = [t for t in (texts or []) if t.get("label")]
+        for i in range(len(texts)):
+            for j in range(i + 1, len(texts)):
+                a, b = texts[i], texts[j]
+                if a.get("top") is not None and a.get("top") == b.get("top"):
+                    continue  # same container (e.g. one component's parts) -> intended, not a defect
+                sev = kind = None
+                frac = _overlap_frac(a, b)
+                if frac >= _OVERLAP_MIN_FRAC:
+                    sev, kind = 1.0 + frac, "overlap"
+                else:
+                    gx, gy = _edge_gap(a, b)
+                    gap = None  # near-touch only when ALIGNED on one axis (gap 0) and cramped on the other
+                    if gx == 0.0 and 0.0 < gy < _MIN_CLEARANCE:
+                        gap = gy
+                    elif gy == 0.0 and 0.0 < gx < _MIN_CLEARANCE:
+                        gap = gx
+                    if gap is not None:
+                        sev, kind = 1.0 - gap, "touch"
+                if kind is None:
+                    continue
+                key = frozenset((a["label"], b["label"]))
+                if key not in worst or sev > worst[key][0]:
+                    worst[key] = (sev, kind, a, b)
     issues: list[CritiqueIssue] = []
-    for _, kind, a, b in sorted(flagged, key=lambda p: -p[0])[:_MAX_OVERLAP_ISSUES]:
+    for _, kind, a, b in sorted(worst.values(), key=lambda p: -p[0])[:_MAX_OVERLAP_ISSUES]:
         la, lb = a["label"], b["label"]
         desc = (f"Text '{la}' and '{lb}' overlap — their bounding boxes intersect." if kind == "overlap"
                 else f"Text '{la}' and '{lb}' nearly touch — the gap between them is tiny (cramped).")
@@ -442,7 +470,8 @@ def issues_from_facts(facts: dict) -> list[CritiqueIssue]:
                                f"x in [-{fx - 0.5:.1f}, {fx - 0.5:.1f}], y in [-{fy - 0.5:.1f}, {fy - 0.5:.1f}] "
                                f"(keep a ~0.5 safe margin; scale_to_fit_width or next_to/shift it inward)."),
             ))
-    issues.extend(_overlap_issues(texts))                          # cross-group text-vs-text overlap + near-touch
+    # scan the final frame AND every per-play snapshot -> catches transient collisions (scene-4 defect)
+    issues.extend(_overlap_issues([texts, *facts.get("snapshots", [])]))
     issues.extend(_covered_issues(facts.get("items", []), texts))  # a shape drawn on top of a label
     issues.extend(_tiny_font_issues(texts))                        # unreadable tiny text
     issues.extend(_contrast_issues(texts, facts.get("items", []),  # near-invisible dark-on-dark text

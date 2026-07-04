@@ -122,6 +122,37 @@ def test_overlap_issues_combined_and_capped():
     assert any(i.type == "overlap" for i in issues)
 
 
+@pytest.mark.unit
+def test_transient_overlap_in_snapshot_flagged():
+    # the scene-4 defect: two labels COLLIDE mid-animation (a per-play snapshot), then a later play
+    # moves/merges them so the FINAL frame is clean. The still-final probe missed it; snapshots catch it.
+    final = [{"top": 0, "kind": "Text", "label": "HTML", "x": [-5, -4], "y": [1, 1.4]},
+             {"top": 1, "kind": "Text", "label": "CSS", "x": [4, 5], "y": [1, 1.4]}]   # apart at the end
+    snap = [{"top": 0, "kind": "Text", "label": "HTML", "x": [0.0, 0.5], "y": [0.0, 0.3]},
+            {"top": 1, "kind": "Text", "label": "CSS", "x": [0.1, 0.6], "y": [0.05, 0.35]}]  # same cell
+    facts = {"ok": True, "frame": FRAME, "items": [], "texts": final, "snapshots": [snap]}
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1 and "HTML" in ov[0].location and "CSS" in ov[0].location
+
+
+@pytest.mark.unit
+def test_transient_overlap_reported_once_across_snapshots():
+    snap = [{"top": 0, "kind": "Text", "label": "A", "x": [0, 0.5], "y": [0, 0.3]},
+            {"top": 1, "kind": "Text", "label": "B", "x": [0.1, 0.6], "y": [0.05, 0.35]}]
+    facts = {"ok": True, "frame": FRAME, "items": [], "texts": [], "snapshots": [snap, snap, snap]}
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1   # the same colliding pair over many snapshots is ONE issue, not three
+
+
+@pytest.mark.unit
+def test_no_snapshots_key_behaves_as_before():
+    # backward-compat: facts without "snapshots" lints exactly as the old single-frame path
+    facts = _facts([{"i": 0, "kind": "Text", "label": "x", "x": [0, 0.5], "y": [0, 0.3]},
+                    {"i": 1, "kind": "Text", "label": "y", "x": [0.1, 0.6], "y": [0.05, 0.35]}])
+    ov = [i for i in layout_lint.issues_from_facts(facts) if i.type == "overlap"]
+    assert len(ov) == 1
+
+
 # --- distance-based clearance + tiny font (Tier 1) -----------------------------------------
 
 @pytest.mark.unit
