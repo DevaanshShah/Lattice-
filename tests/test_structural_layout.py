@@ -127,6 +127,42 @@ def test_icon_names_derived_from_shipped_assets():
     assert {"server", "cat", "laptop"} <= set(lattice_scene.ICON_NAMES)
 
 
+# --- scaffold-API prompt (stops the model inventing methods like get_cell_center) ----------
+
+@pytest.mark.unit
+def test_scaffold_methods_parsed_from_source_not_hardcoded():
+    methods = lattice_scene.scaffold_methods()
+    joined = " ".join(methods)
+    # the real public helpers are listed...
+    for real in ("self.cell(", "self.place(", "self.place_in_area(", "self.node(",
+                 "self.connect(", "self.icon(", "self.setup_scene("):
+        assert real in joined, f"{real} missing from scaffold_methods()"
+    # ...and private/dunder helpers are NOT (they aren't part of the model-facing API)
+    assert not any("_label" in m or "_style_kw" in m for m in methods)
+
+
+@pytest.mark.unit
+def test_scaffold_api_prompt_names_cell_and_warns_off_hallucinations():
+    sp = lattice_scene.scaffold_api_prompt()
+    assert "self.cell(" in sp
+    assert "get_cell_center" in sp          # the prompt explicitly calls out the non-existent method
+    assert "ONLY methods" in sp
+
+
+@pytest.mark.unit
+def test_structural_prompt_includes_scaffold_api():
+    # the block must reach the actual codegen/fixer system prompt, not just exist in isolation
+    sp = lattice_scene.structural_system_prompt()
+    assert "SCAFFOLD METHODS" in sp and "self.cell(" in sp
+
+
+@pytest.mark.unit
+def test_no_hallucinated_method_is_a_real_scaffold_method():
+    # guard the exact bug: get_cell_center must NOT be a defined method on the scaffold source
+    assert "def get_cell_center" not in lattice_scene.LATTICE_SCENE_SRC
+    assert "def cell(" in lattice_scene.LATTICE_SCENE_SRC
+
+
 # --- guardrail accepts the subclass --------------------------------------------------------
 
 @pytest.mark.unit

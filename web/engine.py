@@ -150,6 +150,56 @@ class Engine:
             self._fill_node_from_dir(node, scenes_dir / f"scene_{node.index}")
         built.final_mp4 = str(final) if final else None
 
+    # --- crash recovery (a build killed mid-run leaves clips on disk but an unsaved project) -----
+    def _recover_project(self, pid: str, project: VideoProject) -> bool:
+        """Reconcile project.json with what actually rendered on disk. A build that dies mid-run (e.g.
+        the server is restarted while rendering) leaves finished scene clips in scenes/scene_<n>/ but
+        never updates project.json — so the good scenes look 'unbuilt' and no final.mp4 gets stitched.
+        This fills every unbuilt node from its scene dir (index- or sid-keyed) and, if all scenes are
+        present but the video was never finalized, stitches it. Returns True if anything was recovered."""
+        scenes_dir = self.workspace(pid) / "scenes"
+        changed = False
+        for node in project.scenes:
+            if node.mp4 and Path(node.mp4).exists():
+                continue
+            for cand in (f"scene_{node.index}", f"scene_{node.sid}"):
+                if self._fill_node_from_dir(node, scenes_dir / cand):
+                    changed = True
+                    break
+        if changed:
+            self.save(pid, project)
+        if project.scenes and all(n.mp4 for n in project.scenes):
+            final_ok = bool(project.final_mp4) and Path(project.final_mp4).exists()
+            if not final_ok:
+                try:
+                    restitch_and_save(project, self.workspace(pid), log=lambda _m: None)
+                    changed = True
+                except Exception:  # noqa: BLE001 — recovery is best-effort; a stitch hiccup mustn't crash startup
+                    pass
+        return changed
+
+    def recover_all(self) -> list[str]:
+        """Scan every workspace once (e.g. at server startup) and recover any project left half-built by
+        an interrupted run. Skips already-complete projects cheaply. Returns the recovered project ids."""
+        recovered: list[str] = []
+        for d in sorted(self.root.iterdir() if self.root.exists() else []):
+            if not (d / "project.json").exists():
+                continue
+            try:
+                project = self.load(d.name)
+            except Exception:  # noqa: BLE001 — a half-written project shouldn't break recovery of the rest
+                continue
+            done = (bool(project.final_mp4) and Path(project.final_mp4).exists()
+                    and bool(project.scenes) and all(n.mp4 for n in project.scenes))
+            if done:
+                continue
+            try:
+                if self._recover_project(d.name, project):
+                    recovered.append(d.name)
+            except Exception:  # noqa: BLE001
+                continue
+        return recovered
+
     # --- single-scene render ops (each touches ONE scene via the decoupled STRUCTURAL path) ---
     def _render_node(self, pid: str, project: VideoProject, node: SceneNode, *, quality: str, log,
                      spec=None, base_code=None, narration_override=None, use_critic: bool = True) -> bool:

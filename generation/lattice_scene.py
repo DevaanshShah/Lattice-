@@ -68,13 +68,42 @@ def icon_catalog_prompt() -> str:
             "name falls back to a labeled box.")
 
 
+def scaffold_methods() -> list[str]:
+    """The public method signatures LatticeScene actually provides, PARSED from LATTICE_SCENE_SRC so the
+    list can never drift from the real code. Feeds the 'these are the only methods' prompt block below."""
+    import re
+    seen: list[str] = []
+    for m in re.finditer(r"\n    def (\w+)\(self,?\s*(.*?)\):", LATTICE_SCENE_SRC, re.DOTALL):
+        name, params = m.group(1), " ".join(m.group(2).split())
+        if name.startswith("_"):
+            continue                                  # skip private/dunder helpers
+        sig = f"self.{name}({params})" if params else f"self.{name}()"
+        if sig not in seen:
+            seen.append(sig)
+    return seen
+
+
+def scaffold_api_prompt() -> str:
+    """Authoritative list of the ONLY methods LatticeScene exposes — stops the model inventing scaffold
+    methods that don't exist (a real failure: a scene called `self.get_cell_center(...)`, which isn't a
+    method, and died through 3 compile-repair round-trips). Reaches codegen AND both fixers via
+    structural_system_prompt, so this class of hallucination self-heals instead of burning the scene."""
+    methods = "\n".join(f"  - {s}" for s in scaffold_methods())
+    return ("\n\nSCAFFOLD METHODS — these are the ONLY methods LatticeScene provides. Call the layout/"
+            "component helpers by these EXACT names; do NOT invent scaffold methods. In particular the "
+            "cell centre is `self.cell(\"B2\")` (there is NO get_cell_center / cell_center / get_cell):\n"
+            + methods
+            + "\nEverything else is ordinary Manim. For positions use self.cell(name) / self.place(obj, "
+            "name) / self.place_in_area(...); never guess a self.<name> that isn't listed above.")
+
+
 def structural_system_prompt(*, narrated: bool = False) -> str:
-    """The full structural codegen system prompt (house conventions + lattice prompt + icon catalog),
-    assembled in ONE place instead of duplicated across the codegen/fix/repair sites."""
+    """The full structural codegen system prompt (house conventions + lattice prompt + scaffold-API list
+    + icon catalog), assembled in ONE place instead of duplicated across the codegen/fix/repair sites."""
     from prompts.loader import load   # function-local: keep this module import-light for the compile test
     base = load("manim-conventions") + "\n\n---\n\n" + load(
         "lattice-codegen-narrated" if narrated else "lattice-codegen")
-    return base + icon_catalog_prompt()
+    return base + scaffold_api_prompt() + icon_catalog_prompt()
 
 
 LATTICE_SCENE_SRC = '''from manim import *

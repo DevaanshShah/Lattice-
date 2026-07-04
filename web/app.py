@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -73,7 +74,24 @@ class RollbackReq(BaseModel):
 def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None = None) -> FastAPI:
     engine = engine or Engine()
     queue = queue or jobs_mod.JobQueue(workers=2)
-    app = FastAPI(title="Lattice", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # On boot, heal any project left half-built by an interrupted run (a killed render leaves good
+        # scene clips on disk but an unsaved project). Best-effort + guarded so a fake engine in tests
+        # (no recover_all) or a scan hiccup can never block the server from starting.
+        recover = getattr(engine, "recover_all", None)
+        if callable(recover):
+            try:
+                recovered = recover()
+                if recovered:
+                    print(f"[startup] recovered {len(recovered)} interrupted project(s): "
+                          f"{', '.join(recovered)}")
+            except Exception as e:  # noqa: BLE001
+                print(f"[startup] recovery skipped: {type(e).__name__}: {e}")
+        yield
+
+    app = FastAPI(title="Lattice", version="0.1.0", lifespan=lifespan)
 
     def _load_or_404(pid: str):
         try:
