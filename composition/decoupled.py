@@ -71,6 +71,17 @@ def mux_audio(work_dir: str | Path, video_rel: str, audio_rel: str, out_rel: str
 
 
 # --- codegen / narration ---------------------------------------------------------------------
+def _fix_center_arrows(code: str) -> str:
+    """Deterministic arrow fix for RAW Arrow/Line/DoubleArrow calls that bypass connect(): rewrite
+    `Arrow(a.get_center(), b.get_center(), ...)` -> `Arrow(a, b, ...)`. Passing the MOBJECTS makes Manim
+    anchor each end at the boundary point facing the other end (edge-to-edge + buff) instead of spearing
+    through both boxes from center to center — the same fix connect() got, applied to the escape hatch.
+    Only this exact two-mobject-centers shape is rewritten; point math (e.g. get_center() + UP) is left alone."""
+    return re.sub(
+        r"\b(Arrow|DoubleArrow|Line|DashedLine)\(\s*([A-Za-z_]\w*)\.get_center\(\)\s*,\s*([A-Za-z_]\w*)\.get_center\(\)",
+        r"\1(\2, \3", code)
+
+
 def _cap_overwide_scaling(code: str) -> str:
     """Deterministic off-frame guard: a model that scales a mobject to ~the full frame width makes it run
     off BOTH edges (a real defect — a manual title `.scale_to_fit_width(config.frame_width - 1)` was clipped
@@ -109,9 +120,9 @@ def _inject_fit_content(code: str) -> str:
 def _finalize_code(code: str, *, structural: bool, use_components: bool) -> str:
     """Prepend the base source the generated scene relies on: the LatticeScene grid (structural mode)
     or the component helpers (freehand + components). Freehand-without-components returns code as-is.
-    Caps any full-frame-width scaling, and (structural) auto-appends a fit_content() pass so sparse
-    content fills the frame."""
-    code = _cap_overwide_scaling(code)
+    Caps any full-frame-width scaling, rewrites raw center-to-center arrows to edge-anchored, and
+    (structural) auto-appends a fit_content() pass so sparse content fills the frame."""
+    code = _fix_center_arrows(_cap_overwide_scaling(code))
     if structural:
         return lattice_scene.LATTICE_SCENE_SRC + "\n\n" + _inject_fit_content(code)
     return (COMPONENTS_SRC + "\n\n" + code) if use_components else code

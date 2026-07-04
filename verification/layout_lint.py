@@ -164,14 +164,28 @@ def _bbox(m):
 
 
 def _hexcolor(m):
-    """Rendered hex color of a mobject (fill first, then stroke) -> for the contrast check. None on failure."""
-    for getter in ("get_fill_color", "get_color", "get_stroke_color"):
-        try:
-            c = getattr(m, getter)()
-            if c is not None:
-                return c.to_hex() if hasattr(c, "to_hex") else str(c)
-        except Exception:
-            pass
+    """Rendered hex color of a mobject (fill first, then stroke) -> for the contrast check. None on failure.
+    Reads from the first LEAF submobject with points: a parent Text/Tex VMobject often reports the DEFAULT
+    black (#000000) while its glyphs are actually white — that misread produced 3 phantom low_contrast
+    flags per scene, burning the fixer's budget on fakes while real overlaps shipped."""
+    targets = []
+    try:
+        fam = m.family_members_with_points()
+        if fam:
+            targets.append(fam[0])
+    except Exception:
+        pass
+    targets.append(m)
+    for t in targets:
+        for getter in ("get_fill_color", "get_color", "get_stroke_color"):
+            try:
+                c = getattr(t, getter)()
+                if c is not None:
+                    h = c.to_hex() if hasattr(c, "to_hex") else str(c)
+                    if h and h.lower() not in ("#000000", "#000"):
+                        return h
+            except Exception:
+                pass
     return None
 
 
@@ -408,7 +422,9 @@ def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[Crit
     """Flag text that is NEAR-INVISIBLE against its background (dark-on-dark). Each text is compared to
     the fill of the SMALLEST filled shape it sits inside (its box), else the scene background. Only
     ratios below _MIN_CONTRAST are flagged, so a merely-muted label isn't nagged."""
-    filled = [it for it in items if it.get("fill")]
+    # a text is never its own background: exclude TEXT-kind items (their white glyph fill would compare a
+    # title against ITSELF -> phantom 1.0:1), and below, a text's own top-level ancestor container.
+    filled = [it for it in items if it.get("fill") and it["kind"] not in _TEXT_KINDS]
     flagged = []
     for t in texts:
         tc = t.get("color")
@@ -418,6 +434,8 @@ def _contrast_issues(texts: list[dict], items: list[dict], bg: str) -> list[Crit
         cy = (t["y"][0] + t["y"][1]) / 2.0
         bg_col, best_area = bg, None                 # default: the scene background
         for s in filled:                              # the box the text sits in wins (smallest containing)
+            if s.get("i") == t.get("top"):
+                continue                              # the text's own container/group -> not a background
             if s["x"][0] <= cx <= s["x"][1] and s["y"][0] <= cy <= s["y"][1]:
                 area = (s["x"][1] - s["x"][0]) * (s["y"][1] - s["y"][0])
                 if best_area is None or area < best_area:

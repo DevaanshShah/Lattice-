@@ -173,6 +173,23 @@ def test_prompt_reserves_the_title_and_bans_full_frame_width():
 
 
 @pytest.mark.unit
+def test_raw_center_arrows_rewritten_to_edge_anchored():
+    # the escape hatch: the model sometimes draws Arrow(a.get_center(), b.get_center()) directly,
+    # bypassing connect() — same spear-through-boxes defect. _finalize_code must rewrite it.
+    from composition.decoupled import _fix_center_arrows
+    assert _fix_center_arrows("Arrow(ai_box.get_center(), mcp.get_center(), buff=0.1)") == \
+        "Arrow(ai_box, mcp, buff=0.1)"
+    assert _fix_center_arrows("DoubleArrow(a.get_center(), b.get_center())") == "DoubleArrow(a, b)"
+    assert _fix_center_arrows("Line(x1.get_center(), x2.get_center(), color=RED)") == \
+        "Line(x1, x2, color=RED)"
+    # point MATH is left alone — only the exact two-bare-centers shape is rewritten
+    keep = "Arrow(a.get_center() + UP, b.get_center())"
+    assert _fix_center_arrows(keep) == keep
+    keep2 = "Arrow(start=ORIGIN, end=b.get_center())"
+    assert _fix_center_arrows(keep2) == keep2
+
+
+@pytest.mark.unit
 def test_connect_anchors_at_boundaries_not_centers():
     # the arrow-through-box defect: Arrow(a.get_center(), b.get_center()) made buff back off from the
     # CENTER, so on any wide box the arrow speared through the box and its label. connect() must pass
