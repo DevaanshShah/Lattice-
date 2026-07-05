@@ -106,7 +106,12 @@ def scaffold_api_prompt() -> str:
             "\n\nNEVER use Code(...) — for a snippet or request/response line use "
             "`self.labeled_box(\"get_weather: Berlin\", w=3.5)` or a plain `Text(...)`. Code() blocks "
             "restyle their own text into the background color and render as EMPTY boxes (a real defect); "
-            "they are banned.")
+            "they are banned."
+            "\n\nONE LINE = ONE TEXT — render a code line or phrase as a SINGLE Text/MathTex object. To "
+            "highlight parts, use color spans: `Text('int square(int x)', t2c={'square': GREEN, 'int': "
+            "ORANGE})`, or put a brace/label UNDER the line (`self.braced(line, 'name')`). NEVER assemble "
+            "one line from separately-placed fragments ('int' + 'square' + '(int x)' each placed on its "
+            "own) — the fragments stack into garbled overlap (a real defect).")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:

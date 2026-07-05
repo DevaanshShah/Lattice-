@@ -75,18 +75,25 @@ class Engine:
         return out
 
     # --- planning + build (the outline-approval gate, then render) ---------------------------
-    def plan(self, topic: str, *, max_scenes: int | None = None, log=print) -> tuple[str, VideoProject]:
+    def plan(self, topic: str, *, max_scenes: int | None = None, target_seconds: int | None = None,
+             log=print) -> tuple[str, VideoProject]:
         """Plan an outline and persist a DRAFT project (scenes listed, nothing rendered yet).
 
         Returns (project_id, project). The build step happens later, after the user approves/edits
         the outline — so we never pay to render scenes the user would have cut.
+        target_seconds: the user's duration pick (30s/60s/2min). Sets the outline SCOPE (how many
+        ~15s beats fit) and is persisted so build() paces each scene's animation to budget/n.
         """
         say = log or (lambda _m: None)
-        say(f"-> planning outline for: {topic!r}")
-        outline = planner_outline.generate(topic, max_scenes=max_scenes, client=self._client_or_default())
+        say(f"-> planning outline for: {topic!r}"
+            + (f" (~{target_seconds}s budget)" if target_seconds else ""))
+        outline = planner_outline.generate(topic, max_scenes=max_scenes,
+                                           target_seconds=target_seconds,
+                                           client=self._client_or_default())
         pid = uuid4().hex[:8]
         self.workspace(pid).mkdir(parents=True, exist_ok=True)
         project = VideoProject.from_outline(outline)  # no style/render yet
+        project.target_seconds = target_seconds
         self.save(pid, project)
         say(f"   draft project {pid} with {len(outline.items)} scene(s)")
         return pid, project
@@ -110,8 +117,10 @@ class Engine:
         client = traced(self._client_or_default(), say)          # narrate every LLM hit into the job log
         workspace = self.workspace(pid)
         built = VideoProject.from_outline(outline)
+        built.target_seconds = project.target_seconds
         final = decoupled.build_video(
             project.topic, outline=outline, client=client, quality=quality,
+            target_seconds=project.target_seconds,   # per-scene pacing = budget / n_scenes
             out_dir=workspace, out_name="final.mp4", on_scene=on_scene, log=say)
         self._populate_from_decoupled(built, workspace, final)
         self.save(pid, built)
@@ -403,6 +412,7 @@ def project_dto(pid: str, project: VideoProject) -> dict:
         "id": pid,
         "topic": project.topic,
         "final_ready": bool(project.final_mp4),
+        "target_seconds": project.target_seconds,
         "style": (project.style.model_dump() if project.style else None),
         "scenes": [scene_dto(s) for s in project.scenes],
     }

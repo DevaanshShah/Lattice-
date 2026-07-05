@@ -63,6 +63,7 @@ class VideoProject(BaseModel):
     style: StyleSpec | None = None
     scenes: list[SceneNode] = Field(default_factory=list)
     final_mp4: str | None = None
+    target_seconds: int | None = None   # the user's duration pick (30/60/150); None = no budget
 
     @classmethod
     def from_outline(cls, outline: Outline, style: StyleSpec | None = None) -> "VideoProject":

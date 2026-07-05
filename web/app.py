@@ -34,6 +34,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 class CreateProject(BaseModel):
     topic: str = Field(..., min_length=1)
     max_scenes: int | None = None
+    target_seconds: int | None = Field(None, ge=15, le=600)   # the user's duration pick (30/60/150...)
 
 
 class BuildReq(BaseModel):
@@ -107,7 +108,8 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     # --- projects: plan (outline gate) ----------------------------------------------------
     @app.post("/api/projects")
     def create_project(body: CreateProject) -> dict:
-        pid, project = engine.plan(body.topic, max_scenes=body.max_scenes, log=lambda _m: None)
+        pid, project = engine.plan(body.topic, max_scenes=body.max_scenes,
+                                   target_seconds=body.target_seconds, log=lambda _m: None)
         return project_dto(pid, project)
 
     @app.get("/api/projects")

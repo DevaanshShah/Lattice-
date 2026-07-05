@@ -129,9 +129,13 @@ def _finalize_code(code: str, *, structural: bool, use_components: bool) -> str:
 
 
 def _silent_codegen(spec: SceneSpec, *, client: LLMClient, style=None, use_components: bool = True,
-                    structural: bool = False, attempts: int = 3) -> str:
+                    structural: bool = False, attempts: int = 3,
+                    scene_seconds: float | None = None) -> str:
     """Generate a SILENT scene. structural=True targets the LatticeScene grid scaffold (mandates
-    Table/built-ins, named-grid placement); otherwise the freehand codegen prompt (+ optional components)."""
+    Table/built-ins, named-grid placement); otherwise the freehand codegen prompt (+ optional components).
+    scene_seconds: the user's duration budget for THIS scene (from the 30s/60s/2min pick) — a pacing
+    hint so animation length tracks the requested video length (narration already adapts to whatever
+    renders, so the hint only has to be roughly honored)."""
     conventions = load("manim-conventions")
     if structural:
         system = lattice_scene.structural_system_prompt()   # conventions + lattice prompt + icon catalog
@@ -141,8 +145,14 @@ def _silent_codegen(spec: SceneSpec, *, client: LLMClient, style=None, use_compo
             system += "\n\n---\n\n" + COMPONENTS_PROMPT
     if style is not None:
         system += "\n\n---\n\n" + style.as_prompt()
+    pacing = ""
+    if scene_seconds and scene_seconds > 0:
+        pacing = (f"\n\nPACING: the whole animation should run ≈{scene_seconds:.0f}s — make the "
+                  f"run_time= values and wait() calls sum to roughly that (±20%). Don't rush the beats; "
+                  f"prefer fewer, clearer beats over cramming.")
     user = ("Scene spec (JSON):\n" + spec.model_dump_json(indent=2)
-            + f"\n\nGenerate the complete Manim CE file. The Scene subclass MUST be named `{SCENE_CLASS}`.")
+            + f"\n\nGenerate the complete Manim CE file. The Scene subclass MUST be named `{SCENE_CLASS}`."
+            + pacing)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     raw = ""
     for _ in range(attempts):
@@ -385,7 +395,8 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
                 client: LLMClient, style=None, use_components: bool = True,
                 use_critic: bool = True, structural: bool = False, quality: str = "preview",
                 spec: SceneSpec | None = None, base_code: str | None = None,
-                narration_override: list[str] | None = None) -> Path:
+                narration_override: list[str] | None = None,
+                scene_seconds: float | None = None) -> Path:
     """expand -> silent codegen -> render (+optional vision critic) -> gTTS -> mux. Returns the
     narrated scene mp4. Raises on any failure so the caller's retry can re-attempt the whole scene.
 
@@ -406,7 +417,7 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
         code = base_code  # re-render the exact existing visuals (narration edit) — no fresh codegen
     else:
         code = _silent_codegen(spec, client=client, style=style, use_components=use_components,
-                               structural=structural)
+                               structural=structural, scene_seconds=scene_seconds)
     if not structural:
         code = _enforce_background(code)  # freehand: pin a consistent bg (structural sets it in setup_scene)
     compile_fixer = _make_compile_fixer(spec, style, use_components, client, structural=structural)
@@ -452,12 +463,14 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
 
 
 def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_components,
-                      use_critic, structural, quality, retries, on_scene) -> tuple[int, Path | None]:
+                      use_critic, structural, quality, retries, on_scene,
+                      scene_seconds=None) -> tuple[int, Path | None]:
     for attempt in range(retries):
         try:
             mp4 = build_scene(item, outline, index, work_dir=Path(scenes_dir) / f"scene_{index}",
                               client=client, style=style, use_components=use_components,
-                              use_critic=use_critic, structural=structural, quality=quality)
+                              use_critic=use_critic, structural=structural, quality=quality,
+                              scene_seconds=scene_seconds)
             if on_scene:
                 on_scene(index, "done")
             return (index, mp4)
@@ -474,7 +487,7 @@ def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_co
 def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int = 8,
                 workers: int = 3, retries: int = 3, use_components: bool = True,
                 use_critic: bool = True, structural: bool | None = None, quality: str = "preview",
-                outline: Outline | None = None,
+                outline: Outline | None = None, target_seconds: int | None = None,
                 out_dir: str | Path | None = None, out_name: str = "final.mp4",
                 approve_fn=None, on_scene=None, log=print) -> Path | None:
     """Prompt -> outline -> parallel decoupled scenes (with per-scene retry) -> stitch.
@@ -501,6 +514,11 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
     style = style_gen_safe(prompt, outline, client)
 
     mode = "structural(grid)" if structural else "freehand"
+    # per-scene pacing budget from the user's duration pick (30s/60s/2min) — scope was already set by
+    # the planner (scenes_for_duration); this hint keeps each scene's ANIMATION near budget/n.
+    scene_seconds = (target_seconds / len(outline.items)) if (target_seconds and outline.items) else None
+    if scene_seconds:
+        say(f"   duration budget: ~{target_seconds}s total (~{scene_seconds:.0f}s/scene)")
     say(f"-> building {len(outline.items)} scenes (workers={workers}, retries={retries}, layout={mode})")
     scenes_dir = out / "scenes"
     with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -508,7 +526,7 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
             lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
                                          style=style, use_components=use_components, use_critic=use_critic,
                                          structural=structural, quality=quality, retries=retries,
-                                         on_scene=on_scene),
+                                         on_scene=on_scene, scene_seconds=scene_seconds),
             list(enumerate(outline.items))))
 
     clips = [mp4 for _, mp4 in sorted(results, key=lambda r: r[0]) if mp4]
