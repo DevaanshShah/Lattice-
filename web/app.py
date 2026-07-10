@@ -37,6 +37,18 @@ class CreateProject(BaseModel):
     target_seconds: int | None = Field(None, ge=15, le=600)   # the user's duration pick (30/60/150...)
 
 
+class FromCodeReq(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20_000)    # snippet -> segment-by-segment walkthrough
+    language: str | None = None
+    target_seconds: int | None = Field(None, ge=15, le=600)
+
+
+class FromImageReq(BaseModel):
+    image: str = Field(..., min_length=1)                      # data:image/...;base64,... -> derived topic
+    max_scenes: int | None = None
+    target_seconds: int | None = Field(None, ge=15, le=600)
+
+
 class BuildReq(BaseModel):
     keep: list[int] | None = None         # outline edit: indices to keep, in new order (reorder+cut)
     quality: str = "preview"
@@ -110,6 +122,26 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     def create_project(body: CreateProject) -> dict:
         pid, project = engine.plan(body.topic, max_scenes=body.max_scenes,
                                    target_seconds=body.target_seconds, log=lambda _m: None)
+        return project_dto(pid, project)
+
+    @app.post("/api/projects/from-code")
+    def create_from_code(body: FromCodeReq) -> dict:
+        from planner.code_walkthrough import CodeWalkthroughError
+        try:
+            pid, project = engine.plan_from_code(body.code, body.language,
+                                                 target_seconds=body.target_seconds, log=lambda _m: None)
+        except (ValueError, CodeWalkthroughError) as e:   # empty snippet or an unparseable walkthrough
+            raise HTTPException(422, str(e))
+        return project_dto(pid, project)
+
+    @app.post("/api/projects/from-image")
+    def create_from_image(body: FromImageReq) -> dict:
+        from web.seed import SeedError
+        try:
+            pid, project = engine.plan_from_image(body.image, max_scenes=body.max_scenes,
+                                                  target_seconds=body.target_seconds, log=lambda _m: None)
+        except SeedError as e:   # bad/unsupported/oversize image or empty vision reply
+            raise HTTPException(422, str(e))
         return project_dto(pid, project)
 
     @app.get("/api/projects")

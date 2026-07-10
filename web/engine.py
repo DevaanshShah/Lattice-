@@ -90,12 +90,43 @@ class Engine:
         outline = planner_outline.generate(topic, max_scenes=max_scenes,
                                            target_seconds=target_seconds,
                                            client=self._client_or_default())
+        pid, project = self._persist_new(outline, target_seconds=target_seconds)
+        say(f"   draft project {pid} with {len(outline.items)} scene(s)")
+        return pid, project
+
+    def _persist_new(self, outline: Outline, *, target_seconds: int | None = None) -> tuple[str, VideoProject]:
+        """Materialise a DRAFT project (fresh pid + workspace) from an outline — the shared tail of
+        every planning path (topic / image / code). No style/render yet; the build gate comes later."""
         pid = uuid4().hex[:8]
         self.workspace(pid).mkdir(parents=True, exist_ok=True)
-        project = VideoProject.from_outline(outline)  # no style/render yet
+        project = VideoProject.from_outline(outline)
         project.target_seconds = target_seconds
         self.save(pid, project)
-        say(f"   draft project {pid} with {len(outline.items)} scene(s)")
+        return pid, project
+
+    def plan_from_image(self, image: str, *, target_seconds: int | None = None,
+                        max_scenes: int | None = None, log=print) -> tuple[str, VideoProject]:
+        """Derive a topic from an uploaded image, then plan an outline exactly like a typed topic.
+        The vision step uses the critic client (vision-capable); planning reuses plan() unchanged."""
+        from web import seed
+        say = log or (lambda _m: None)
+        say("-> reading image (vision)")
+        res = seed.from_image(image, client=self._client)   # None -> get_critic_client(); test client honored
+        say(f"   derived topic: {res.topic!r}")
+        return self.plan(res.topic, max_scenes=max_scenes, target_seconds=target_seconds, log=log)
+
+    def plan_from_code(self, code: str, language: str | None = None, *,
+                       target_seconds: int | None = None, log=print) -> tuple[str, VideoProject]:
+        """Plan a segment-by-segment code WALKTHROUGH (overview + one scene per line/block) and persist
+        a draft project. Reuses the outline-approval gate + build path unchanged; only the outline is
+        built differently (planner.code_walkthrough instead of the generic topic planner)."""
+        from planner import code_walkthrough
+        say = log or (lambda _m: None)
+        say(f"-> planning code walkthrough ({language or 'auto'}, {len(code or '')} chars)")
+        outline = code_walkthrough.plan(code, language, client=self._client_or_default(),
+                                        target_seconds=target_seconds)
+        pid, project = self._persist_new(outline, target_seconds=target_seconds)
+        say(f"   draft project {pid} with {len(outline.items)} walkthrough scene(s)")
         return pid, project
 
     def _outline_of(self, project: VideoProject) -> Outline:
