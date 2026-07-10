@@ -19,6 +19,7 @@ from pathlib import Path
 
 from core.config import settings
 from core.schemas.scene_spec import SCENE_CLASS
+from render import exec as exec_mod
 from render import sandbox
 
 
@@ -36,18 +37,11 @@ class WorkerResult:
 
 def _docker_run(work_dir: Path, *tool_args: str, network: bool | None = None,
                 image: str | None = None) -> list[str]:
-    """`docker run` prefix mirroring the sandbox (no-net, image's non-root user), then a tool.
-
-    Lets us run `ffmpeg`/`ffprobe` in the *same* pinned, sandboxed image as `manim` without
-    touching the M0-verified `sandbox.build_command` (which is manim-specific).
+    """Argv for `tool_args[0]` (e.g. `ffmpeg`/`ffprobe`) run against `work_dir`: `docker run`
+    in the same pinned image as `manim` (docker mode) or a direct subprocess (local mode) —
+    see `render.exec`.
     """
-    net = settings.render_network if network is None else network
-    img = image or settings.render_image
-    cmd = ["docker", "run", "--rm"]
-    if not net:
-        cmd.append("--network=none")
-    cmd += ["-v", f"{work_dir.resolve().as_posix()}:/manim", "-w", "/manim", img, *tool_args]
-    return cmd
+    return exec_mod.argv(work_dir, tool_args[0], list(tool_args[1:]), network=network, image=image)
 
 
 def build_probe_command(work_dir: str | Path, mp4_rel: str, **kw) -> list[str]:

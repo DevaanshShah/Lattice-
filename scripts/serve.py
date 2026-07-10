@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     enable_utf8()
     ap = argparse.ArgumentParser(prog="serve", description="Serve the Lattice web UI (M7).")
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--reload", action="store_true", help="auto-reload on code changes (dev)")
     args = ap.parse_args(argv)
 

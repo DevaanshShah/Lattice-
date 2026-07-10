@@ -13,6 +13,9 @@ ON TOP of the day-one no-network + non-root guarantees — `hardening_args` is t
 
 `build_command` / `build_python_command` / `hardening_args` are pure (unit-testable without
 Docker); `render` / `run_python_file` execute them.
+
+Execution itself goes through `render.exec` (docker run vs. local subprocess — see that module's
+docstring); this module only builds argv and owns the docker-specific timeout-kill fallback.
 """
 from __future__ import annotations
 
@@ -22,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.config import settings
+from render import exec as exec_mod
+from render.exec import hardening_args  # re-exported: callers/tests use sandbox.hardening_args
 
 # Manim writes videos under media/videos/<stem>/<RES>/. Map a quality flag -> its RES dir
 # so a render reports only the file it just produced, not stale artifacts from earlier runs.
@@ -48,33 +53,6 @@ class RenderResult:
         return self.returncode == 0
 
 
-def hardening_args(*, network: bool | None = None, name: str | None = None) -> list[str]:
-    """The sandbox flags every container run shares (FR-23). Pure; the single source of truth.
-
-    `--rm` (no leftover writable layer) + `--network=none` (no egress) + resource caps
-    (`--memory`/`--cpus`/`--pids-limit`) + the image's non-root user (or an explicit `--user`).
-    Read-only root FS + an ephemeral `/tmp` tmpfs are opt-in (`render_read_only`) so the verified
-    render path isn't disturbed; the mounted `/manim` volume stays writable regardless.
-    """
-    net = settings.render_network if network is None else network
-    args = ["--rm"]
-    if name:
-        args += ["--name", name]            # so `render` can `docker kill` it on wall-clock timeout
-    if not net:
-        args.append("--network=none")       # no egress (contains network-egress snippets)
-    if settings.render_user:
-        args += ["--user", settings.render_user]  # else the image's non-root default user
-    args += [
-        "--memory", settings.render_memory,
-        "--memory-swap", settings.render_memory,   # no swap escape hatch past the RAM cap
-        "--cpus", settings.render_cpus,
-        "--pids-limit", str(settings.render_pids_limit),  # contains fork bombs
-    ]
-    if settings.render_read_only:
-        args += ["--read-only", "--tmpfs", f"/tmp:rw,size={settings.render_tmpfs_size}"]
-    return args
-
-
 def build_command(
     work_dir: str | Path,
     scene_file: str,
@@ -86,21 +64,19 @@ def build_command(
     image: str | None = None,
     name: str | None = None,
 ) -> list[str]:
-    """Build the `docker run` argv that renders `scene_file::scene_name` in a hardened sandbox.
+    """Build the argv that renders `scene_file::scene_name` in a hardened sandbox (docker mode)
+    or as a direct `manim` subprocess (local mode — see `render.exec`).
 
-    `--network=none` + resource caps unless overridden (the sandbox invariant). `work_dir` is
-    mounted at /manim; Manim writes its `media/` tree there, so outputs land on the host.
+    `--network=none` + resource caps unless overridden (the sandbox invariant, docker mode only).
+    `work_dir` is mounted/used at /manim (docker) or as `cwd` (local); Manim writes its `media/`
+    tree there either way, so outputs land on the host.
     """
-    work_dir = Path(work_dir).resolve()
-    img = image or settings.render_image
-
-    cmd = ["docker", "run", *hardening_args(network=network, name=name)]
-    cmd += ["-v", f"{work_dir.as_posix()}:/manim", "-w", "/manim", img, "manim",
-            settings.quality_flag(quality)]
+    tool_args = [settings.quality_flag(quality)]
     if still:
-        cmd.append("-s")  # save the last frame as a PNG (the vision-critic hook)
-    cmd += [scene_file, scene_name]
-    return cmd
+        tool_args.append("-s")  # save the last frame as a PNG (the vision-critic hook)
+    tool_args += [scene_file, scene_name]
+    return exec_mod.argv(work_dir, "manim", tool_args, network=network, image=image,
+                         hardened=True, name=name)
 
 
 def build_python_command(
@@ -114,12 +90,11 @@ def build_python_command(
     """Build the `docker run` argv that runs an arbitrary python file in the hardened sandbox.
 
     The FR-23 containment harness: `lattice render-sandbox <hostile.py>` runs untrusted code
-    here so the caps (no-net, pids-limit, memory) are what stop it — not the host.
+    here so the caps (no-net, pids-limit, memory) are what stop it — not the host. Docker-only
+    (see `run_python_file`): local mode has no sandbox to speak of, so containment would be a lie.
     """
-    work_dir = Path(work_dir).resolve()
-    img = image or settings.render_image
-    return ["docker", "run", *hardening_args(network=network, name=name),
-            "-v", f"{work_dir.as_posix()}:/manim", "-w", "/manim", img, "python", py_file]
+    return exec_mod.argv(work_dir, "python", [py_file], network=network, image=image,
+                         hardened=True, name=name)
 
 
 def _kill_container(name: str) -> None:
@@ -130,17 +105,19 @@ def _kill_container(name: str) -> None:
         pass  # already gone, or docker unreachable — nothing more we can do
 
 
-def _run_sandboxed(cmd: list[str], name: str, timeout: int) -> tuple[subprocess.CompletedProcess | None, bool]:
-    """Run a named sandbox container; on wall-clock timeout, kill it and report timed_out=True."""
+def _run_sandboxed(cmd: list[str], name: str, timeout: int,
+                   work_dir: str | Path) -> tuple[subprocess.CompletedProcess | None, bool]:
+    """Run the render (docker container or local subprocess, per `exec_mod.run`); on wall-clock
+    timeout, make sure nothing lingers and report timed_out=True. In docker mode the client-side
+    wait is what `exec_mod.run` kills — the container itself needs its own `docker kill`; in
+    local mode `exec_mod.run` already killed the whole process group, so this is a no-op there.
+    """
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True,
-            encoding="utf-8", errors="replace",  # Manim emits UTF-8; don't let Windows cp1252 crash the reader
-            timeout=timeout,
-        )
+        proc = exec_mod.run(cmd, work_dir=work_dir, timeout=timeout)
         return proc, False
     except subprocess.TimeoutExpired:
-        _kill_container(name)  # subprocess.run killed the client; this stops the container itself
+        if settings.exec_mode != "local":
+            _kill_container(name)
         return None, True
 
 
@@ -160,7 +137,7 @@ def render(
         work_dir, scene_file, scene_name,
         quality=quality, still=still, network=network, image=image, name=name,
     )
-    proc, timed_out = _run_sandboxed(cmd, name, timeout or settings.render_timeout_s)
+    proc, timed_out = _run_sandboxed(cmd, name, timeout or settings.render_timeout_s, work_dir)
     if timed_out:
         return RenderResult(124, "", f"wall-clock timeout (> {timeout or settings.render_timeout_s}s); container killed",
                             cmd, [], timed_out=True)
@@ -194,12 +171,19 @@ def run_python_file(
     Copies `py_file` into a private work dir, mounts it, and runs `python` on it under all the
     sandbox caps. A hostile snippet (network egress / fork bomb) is contained by the caps, not
     the host: it exits non-zero (or is killed on timeout), and the host is untouched.
+
+    Docker-only: local mode has no container boundary, so "containment" would be a lie.
     """
+    if settings.exec_mode == "local":
+        raise RuntimeError(
+            "run_python_file (FR-23 containment harness) requires exec_mode='docker' — "
+            "local mode has no sandbox boundary to contain untrusted code"
+        )
     src = Path(py_file).resolve()
     work_dir = src.parent
     name = f"lattice-sandbox-{uuid.uuid4().hex[:12]}"
     cmd = build_python_command(work_dir, src.name, network=network, image=image, name=name)
-    proc, timed_out = _run_sandboxed(cmd, name, timeout or settings.render_timeout_s)
+    proc, timed_out = _run_sandboxed(cmd, name, timeout or settings.render_timeout_s, work_dir)
     if timed_out:
         return RenderResult(124, "", f"wall-clock timeout (> {timeout or settings.render_timeout_s}s); container killed",
                             cmd, [], timed_out=True)

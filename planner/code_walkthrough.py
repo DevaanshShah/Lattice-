@@ -1,14 +1,17 @@
-"""Code snippet -> a segment-by-segment walkthrough Outline (one scene per line/block).
+"""Code snippet -> a segment-by-segment walkthrough manifest (full code + one scene per line/block).
 
-Unlike planner.outline (topic string -> generic outline), this segments a code snippet into an
-ordered teaching sequence and builds the Outline DIRECTLY — each OutlineItem's intent instructs the
-downstream scene generator to render one literal code line as a single Text and teach it. The Outline
-schema is reused unchanged (intents are just strings), so expand/scene_spec/decoupled are untouched.
+The walkthrough is rendered by the DETERMINISTIC scaffold (generation.code_scaffold): the whole snippet
+stays on screen, the active line brightens, an arrow points to a short caption, and narration explains
+it. So this planner's job is purely content: segment the code, and for each segment produce a title, a
+short on-screen `caption`, and the spoken `narration`. Layout is not the model's concern (that is why it
+is reliable on the cheap model).
 
-The rendered-line contract matches generation.lattice_scene: ONE LINE = ONE Text (with t2c token
-colors / a brace), NEVER Code() (which renders as an invisible dark-on-dark box).
+`plan_walkthrough` returns the Walkthrough manifest (persisted as walkthrough.json and consumed by the
+build). `plan` adapts it to an Outline for the existing approval gate (title + caption per scene).
 """
 from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -28,10 +31,10 @@ class CodeWalkthroughError(RuntimeError):
 # --- model output shape (tolerant of drift; extras ignored) --------------------------------
 class _Segment(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    code: str = ""                                   # literal line(s); "" = the overview scene
+    code: str = ""                                   # literal source line(s); "" = the intro/overview scene
     title: str = Field(..., min_length=1)
-    teach: str = Field(..., min_length=1)
-    highlight: list[str] = Field(default_factory=list)
+    caption: str = Field(..., min_length=1)          # short on-screen right-panel text
+    narration: str = Field(..., min_length=1)        # spoken explanation
 
 
 class _Walkthrough(BaseModel):
@@ -41,45 +44,64 @@ class _Walkthrough(BaseModel):
     segments: list[_Segment] = Field(..., min_length=1)
 
 
-def _intent_for(seg: _Segment, language: str | None) -> str:
-    """Compose an OutlineItem.intent that drives one walkthrough scene through expand/scene_spec.
-
-    The layout rules are deliberately strict: the Phase 0 prototype showed freeform annotation
-    (multiple arrows crossing the text, highlight rectangles splitting words) is the main defect,
-    while code-as-Text itself renders fine. So we pin down HOW a line may be emphasised / pointed at.
-    """
-    if not seg.code.strip():
-        # opening overview: explain the whole snippet with a diagram, do NOT dump the code
-        return (f"{seg.teach} This is the opening overview scene: explain what the whole snippet does "
-                f"using a simple labelled diagram (boxes / arrows / a number line); do NOT show the "
-                f"full code listing or any source line.")
-    lang = f"{language} " if language else ""
-    hi = ", ".join(f"`{h}`" for h in seg.highlight if h.strip())
-    hi_clause = (f"Emphasise the token(s) {hi} by COLORING those characters via Text(..., t2c=...). "
-                 if hi else "Color the one or two most important tokens via t2c. ")
-    return (f"Teach this {lang}code line: `{seg.code}`. {seg.teach}\n"
-            f"Layout (follow exactly): render the line as ONE large centered monospace Text "
-            f"(never Code()), with generous empty space around it. {hi_clause}"
-            f"Do NOT draw any rectangle, box, or underline around the text or any substring, and do "
-            f"NOT split the line into separate pieces. If you point at part of the line, use at most "
-            f"ONE short brace or arrow placed clearly BELOW the line with a visible gap; it must not "
-            f"touch, cross, or overlap any character. Keep the scene to this one line's idea.")
+# --- manifest (persisted, consumed by the build) -------------------------------------------
+@dataclass
+class WScene:
+    title: str
+    active: list[int]        # indices into code_lines to highlight ([] = overview: whole code)
+    caption: str
+    narration: str
 
 
-def plan(code: str, language: str | None = None, *, client: LLMClient | None = None,
-         target_seconds: int | None = None, attempts: int = 3) -> Outline:
-    """Segment `code` into a walkthrough Outline (overview + one scene per line/block).
+@dataclass
+class Walkthrough:
+    code_lines: list[str]
+    language: str | None
+    summary: str
+    scenes: list[WScene] = field(default_factory=list)
 
-    target_seconds is accepted for API parity with Engine.plan; segment count is code-driven and
-    clamped to settings.scene_cap (the model is also told the maximum).
-    """
-    code = (code or "").strip()
-    if not code:
-        raise CodeWalkthroughError("code snippet is empty")
-    if len(code) > MAX_CODE_CHARS:
-        raise CodeWalkthroughError(f"code too long ({len(code)} chars; max {MAX_CODE_CHARS})")
+    def to_dict(self) -> dict:
+        return asdict(self)
 
-    client = client or get_client()
+    @classmethod
+    def from_dict(cls, d: dict) -> "Walkthrough":
+        return cls(code_lines=list(d["code_lines"]), language=d.get("language"),
+                   summary=d["summary"], scenes=[WScene(**s) for s in d["scenes"]])
+
+
+def _map_active(code_lines: list[str], segments: list[_Segment]) -> list[list[int]]:
+    """Map each segment's literal code to the line indices it highlights. Cursor-based so repeated
+    lines (two `print(...)`) map in order; overview segments (code="") map to []."""
+    stripped = [ln.strip() for ln in code_lines]
+    cursor, out = 0, []
+    for seg in segments:
+        target = [ln.strip() for ln in seg.code.split("\n") if ln.strip()]
+        if not target:
+            out.append([]); continue
+        found: list[int] = []
+        for scan in (range(cursor, len(stripped)), range(0, len(stripped))):  # from cursor, else anywhere
+            for start in scan:
+                if stripped[start] != target[0]:
+                    continue
+                idxs, j, ok = [start], start + 1, True
+                for t in target[1:]:
+                    while j < len(stripped) and stripped[j] == "":
+                        j += 1
+                    if j < len(stripped) and stripped[j] == t:
+                        idxs.append(j); j += 1
+                    else:
+                        ok = False; break
+                if ok:
+                    found = idxs; break
+            if found:
+                break
+        out.append(found)
+        if found:
+            cursor = found[-1] + 1
+    return out
+
+
+def _request(code: str, language: str | None, *, client: LLMClient, attempts: int) -> _Walkthrough:
     max_segments = settings.scene_cap
     hint = f"Language hint: {language}\n" if language else ""
     messages = [
@@ -92,16 +114,46 @@ def plan(code: str, language: str | None = None, *, client: LLMClient | None = N
         raw = client.chat(messages)
         try:
             wt = _Walkthrough.model_validate(extract_json(raw))
-            segments = wt.segments[:max_segments]  # documented cap, never a silent overrun
-            items = [OutlineItem(title=s.title, intent=_intent_for(s, wt.language or language))
-                     for s in segments]
-            return Outline(topic=wt.summary, items=items)
+            wt.segments = wt.segments[:max_segments]   # documented cap, never a silent overrun
+            return wt
         except (ValueError, ValidationError) as e:
             last = e
             messages.append({"role": "assistant", "content": raw})
             messages.append({"role": "user", "content": (
                 f'That was invalid ({type(e).__name__}). Return ONLY JSON matching '
-                '{"summary":...,"language":...,"segments":[{"code":...,"title":...,"teach":...,'
-                '"highlight":[...]}]} — no prose, no markdown.'
+                '{"summary":...,"language":...,"segments":[{"code":...,"title":...,"caption":...,'
+                '"narration":...}]} — no prose, no markdown.'
             )})
     raise CodeWalkthroughError(f"walkthrough invalid after {attempts} attempts: {last}")
+
+
+def plan_walkthrough(code: str, language: str | None = None, *, client: LLMClient | None = None,
+                     target_seconds: int | None = None, attempts: int = 3) -> Walkthrough:
+    """Segment `code` into the walkthrough manifest (overview + one scene per line/block)."""
+    code = (code or "").strip()
+    if not code:
+        raise CodeWalkthroughError("code snippet is empty")
+    if len(code) > MAX_CODE_CHARS:
+        raise CodeWalkthroughError(f"code too long ({len(code)} chars; max {MAX_CODE_CHARS})")
+
+    client = client or get_client()
+    wt = _request(code, language, client=client, attempts=attempts)
+    code_lines = code.split("\n")
+    active = _map_active(code_lines, wt.segments)
+    scenes = [WScene(title=s.title, active=a, caption=s.caption, narration=s.narration)
+              for s, a in zip(wt.segments, active)]
+    return Walkthrough(code_lines=code_lines, language=wt.language or language,
+                       summary=wt.summary, scenes=scenes)
+
+
+def outline_of(wt: Walkthrough) -> Outline:
+    """Adapt a manifest to an Outline for the approval gate (title + caption per scene)."""
+    return Outline(topic=wt.summary,
+                   items=[OutlineItem(title=s.title, intent=s.caption) for s in wt.scenes])
+
+
+def plan(code: str, language: str | None = None, *, client: LLMClient | None = None,
+         target_seconds: int | None = None, attempts: int = 3) -> Outline:
+    """Back-compat: segment `code` and return just the Outline (approval view)."""
+    return outline_of(plan_walkthrough(code, language, client=client,
+                                       target_seconds=target_seconds, attempts=attempts))

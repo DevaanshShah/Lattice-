@@ -31,6 +31,10 @@ cache/            # content-hash render + TTS cache
 # keep tiny checked-in sample fixtures if any are added under tests/fixtures/
 !tests/fixtures/**
 
+# --- Claude Code runtime (keep settings.json; ignore transient locks) ---
+.claude/scheduled_tasks.lock
+.claude/*.lock
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db

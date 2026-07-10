@@ -11,6 +11,7 @@ methods that don't render (reorder/delete/rollback/history) return immediately.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -123,9 +124,14 @@ class Engine:
         from planner import code_walkthrough
         say = log or (lambda _m: None)
         say(f"-> planning code walkthrough ({language or 'auto'}, {len(code or '')} chars)")
-        outline = code_walkthrough.plan(code, language, client=self._client_or_default(),
-                                        target_seconds=target_seconds)
+        wt = code_walkthrough.plan_walkthrough(code, language, client=self._client_or_default(),
+                                               target_seconds=target_seconds)
+        outline = code_walkthrough.outline_of(wt)
         pid, project = self._persist_new(outline, target_seconds=target_seconds)
+        # the manifest (full code lines + per-scene highlight/caption/narration) drives the scaffold
+        # build; its presence is how build() knows to render the deterministic walkthrough, not freeform.
+        (self.workspace(pid) / "walkthrough.json").write_text(
+            json.dumps(wt.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
         say(f"   draft project {pid} with {len(outline.items)} walkthrough scene(s)")
         return pid, project
 
@@ -140,6 +146,8 @@ class Engine:
         silent-render->gTTS->mux reliability), stitch, and persist. Populates the VideoProject so
         preview/download/script keep working. (`cap` is accepted for API compat; the approved outline
         already fixes the scene count.)"""
+        if (self.workspace(pid) / "walkthrough.json").exists():
+            return self._build_walkthrough(pid, keep=keep, quality=quality, log=log, on_scene=on_scene)
         project = self.load(pid)
         outline = self._outline_of(project)
         say = log or (lambda _m: None)
@@ -155,6 +163,44 @@ class Engine:
             out_dir=workspace, out_name="final.mp4", on_scene=on_scene, log=say)
         self._populate_from_decoupled(built, workspace, final)
         self.save(pid, built)
+        return built
+
+    def _build_walkthrough(self, pid: str, *, keep: list[int] | None = None, quality: str = "preview",
+                           log=print, on_scene=None) -> VideoProject:
+        """Render a code walkthrough via the DETERMINISTIC scaffold (composition.walkthrough): every scene
+        shows the full snippet with one line highlighted + spoken narration. No codegen LLM call — the
+        planner already fixed the content (walkthrough.json), so this is pure render + stitch."""
+        from planner.code_walkthrough import Walkthrough
+        from composition import walkthrough as wt_render
+        say = log or (lambda _m: None)
+        project = self.load(pid)
+        outline = self._outline_of(project)
+        manifest = Walkthrough.from_dict(json.loads(
+            (self.workspace(pid) / "walkthrough.json").read_text(encoding="utf-8")))
+        kept = list(range(len(manifest.scenes))) if keep is None else list(keep)
+        if keep is not None:
+            outline = approval.apply_edits(outline, keep=keep)   # reorder/cut BEFORE spend
+        workspace = self.workspace(pid)
+        built = VideoProject.from_outline(outline)
+        built.target_seconds = project.target_seconds
+        say(f"-> walkthrough build: {len(built.scenes)} scene(s)")
+        for new_i, orig_i in enumerate(kept):
+            if on_scene:
+                on_scene(new_i, "rendering")
+            ok = False
+            if 0 <= orig_i < len(manifest.scenes) and new_i < len(built.scenes):
+                wsc = manifest.scenes[orig_i]
+                sdir = workspace / "scenes" / f"scene_{new_i}"
+                try:
+                    wt_render.render_scene(sdir, lines=manifest.code_lines, active=wsc.active,
+                                           caption=wsc.caption, title=wsc.title,
+                                           narration=wsc.narration, quality=quality, log=say)
+                    ok = self._fill_node_from_dir(built.scenes[new_i], sdir)
+                except Exception as e:  # noqa: BLE001 — one bad scene must not sink the whole build
+                    say(f"[walkthrough] scene {new_i} failed: {type(e).__name__}: {e}")
+            if on_scene:
+                on_scene(new_i, "done" if ok else "failed")
+        restitch_and_save(built, workspace, log=say)   # stitch the narrated clips + persist project.json
         return built
 
     @staticmethod

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     render_network: bool = False  # sandbox: NO network unless explicitly enabled (Q5)
     render_timeout_s: int = 600
 
+    # --- execution mode (PaaS deploy: no docker daemon available) ---
+    # "docker" (default): every render/ffmpeg call is `docker run` in the pinned sandbox image.
+    # "local": run manim/ffmpeg as direct subprocesses (cwd=work_dir, scrubbed env, rlimits) —
+    # for platforms (Railway/Render) that only give you one container, no docker-in-docker.
+    exec_mode: str = "docker"
+
     # --- sandbox hardening (M7 / FR-23): bound model-written code, contain hostile snippets ---
     # These ride on top of the day-one guarantees (--network=none + image's non-root user + --rm).
     render_memory: str = "2g"          # hard RAM cap (container OOM-killed past it)
@@ -40,6 +46,11 @@ class Settings(BaseSettings):
     max_critic_iters: int = 3      # vision-critic <-> fix iterations before best-of-N fallback
     best_of_n: int = 2             # candidates generated when the critic loop doesn't converge
     concurrency_cap: int = 4
+
+    # --- web deploy: concurrency + auth (FR-31, PaaS deploy) ---
+    job_workers: int = 2            # web/jobs.py::JobQueue thread pool (concurrent build jobs)
+    scene_workers: int = 3          # composition.decoupled.build_video per-build scene fan-out
+    web_users: str = ""             # "alice:<sha256hex>,bob:<sha256hex>" — empty = auth OFF (local dev)
 
     # --- vision critic (M2) ---
     critic_frames: int = 2            # keyframes per critique (fewer frames = fewer image tokens)
