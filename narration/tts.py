@@ -49,7 +49,27 @@ def _synth_gtts(text: str, out_path: Path, *, lang: str = "en") -> None:
     gTTS(text=text, lang=lang).save(str(out_path))
 
 
+_KOKORO = None  # Kokoro model is loaded ONCE (a few hundred MB) and reused across every line.
+
+
+def _synth_kokoro(text: str, out_path: Path, *, lang: str = "en") -> None:
+    """Local, offline, free neural TTS (Kokoro-82M via onnxruntime). Writes a WAV. Requires
+    `pip install kokoro-onnx soundfile` and the model files at settings.kokoro_model/kokoro_voices."""
+    import soundfile as sf
+    from kokoro_onnx import Kokoro
+    global _KOKORO
+    if _KOKORO is None:
+        _KOKORO = Kokoro(settings.kokoro_model, settings.kokoro_voices)
+    samples, sr = _KOKORO.create(text, voice=settings.kokoro_voice, speed=1.0,
+                                 lang="en-us" if lang == "en" else lang)
+    sf.write(str(out_path), samples, sr)
+
+
 def _duration(path: Path) -> float:
+    if path.suffix.lower() == ".wav":
+        import soundfile as sf  # pure-python, no network
+        info = sf.info(str(path))
+        return float(info.frames) / float(info.samplerate)
     from mutagen.mp3 import MP3  # pure-python, no network
     return float(MP3(str(path)).info.length)
 
@@ -61,12 +81,15 @@ def synthesize(text: str, *, out_dir: str | Path, engine: str | None = None,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     speech = _for_speech(text)  # phonetic rewrite for the audio; display text stays original
-    key = content_hash("tts-v2", engine, lang, speech)
-    path = out_dir / f"{key}.mp3"
+    key = content_hash("tts-v2", engine, lang, settings.kokoro_voice if engine == "kokoro" else "", speech)
+    ext = "wav" if engine == "kokoro" else "mp3"     # kokoro emits raw samples -> WAV; gtts -> MP3
+    path = out_dir / f"{key}.{ext}"
 
     if not (cache and path.exists()):
         if engine == "gtts":
             _synth_gtts(speech, path, lang=lang)
+        elif engine == "kokoro":
+            _synth_kokoro(speech, path, lang=lang)
         else:
             raise ValueError(f"unknown TTS engine: {engine!r}")
     return Clip(text, path, _duration(path))

@@ -92,7 +92,10 @@ class Settings(BaseSettings):
     prompt_cache_enabled: bool = True                 # mark static system prompt cacheable (Anthropic cache_control)
 
     # --- TTS (Q3; from M4) ---
-    tts_engine: str = "gtts"
+    tts_engine: str = "gtts"                          # "gtts" (free/online) | "kokoro" (free/local)
+    kokoro_model: str = "kokoro-v1.0.onnx"            # path to the Kokoro ONNX model
+    kokoro_voices: str = "voices-v1.0.bin"            # path to the Kokoro voices bin
+    kokoro_voice: str = "af_heart"                    # af_*=female, am_*=male, bf_/bm_=British
 
     # --- paths ---
     out_dir: Path = Field(default=PROJECT_ROOT / "out")

@@ -50,3 +50,7 @@ manimator/
 /test_manim_api.py
 # accidental output-redirect artifact
 *scratchpadtest_manim_api.py
+
+# Kokoro TTS model files (large, local)
+kokoro-v1.0.onnx
+voices-v1.0.bin
