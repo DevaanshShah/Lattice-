@@ -562,23 +562,68 @@ function genInner() {
 }
 function renderGenProgress() { const r = $("gen-root"); if (r) r.innerHTML = genInner(); }
 
+// duration proxy for the timeline (no backend duration yet): narration length ~ scene length.
+function sceneDur(s) {
+  const words = (s.narration || []).join(" ").trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(3, words / 2.6 + 1.0);
+}
+// A Filmora/Kinemaster-style timeline: clips sized to duration on a video track + an audio track, a
+// ruler, and a playhead. Click a clip to select/edit; drag to reorder; per-clip ↻ regenerate / 🗑 delete.
+function timeline(scenes) {
+  const PXPS = 46;                                   // px per second
+  const durs = scenes.map(sceneDur);
+  const starts = []; let acc = 0; for (const d of durs) { starts.push(acc); acc += d; }
+  const total = acc || 1;
+  state.tl = { starts, pxps: PXPS };                 // wire() reads this to move the playhead
+  const W = Math.max(660, total * PXPS + 60);
+  let ticks = "";
+  for (let t = 0; t <= total + 0.01; t += 5) ticks += `<div style="position:absolute;left:${t * PXPS}px;top:0;bottom:0;border-left:1px solid var(--line);"></div><span style="position:absolute;left:${t * PXPS + 4}px;top:3px;${MONO}font-size:9.5px;color:var(--faint);">${fmt(t)}</span>`;
+  const mini = "display:grid;place-items:center;width:22px;height:22px;border-radius:5px;background:rgba(0,0,0,0.62);border:1px solid var(--line2);color:#fff;font-size:11px;cursor:pointer;";
+  const clips = scenes.map((s, i) => {
+    const on = i === state.selected, left = starts[i] * PXPS, w = Math.max(24, durs[i] * PXPS - 4);
+    const acts = on ? `<div style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
+        <span data-act="regen" title="Regenerate scene" style="${mini}">↻</span>
+        <span data-act="delete" title="Delete scene" style="${mini}border-color:rgba(240,85,59,0.5);color:var(--danger);">🗑</span></div>` : "";
+    return `<div draggable="true" data-drag2="${i}" data-act="select" data-i="${i}" style="position:absolute;left:${left}px;width:${w}px;top:0;bottom:0;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid ${on ? "var(--accent)" : "var(--line2)"};background:#0B0B10;">
+      <div style="${thumb(seedOf(s.sid || s.index))}"></div>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.05),rgba(0,0,0,0.6));"></div>
+      <span style="position:absolute;top:5px;left:7px;${MONO}font-size:10px;color:#fff;text-shadow:0 1px 2px #000;">${pad2(i + 1)}</span>
+      <span style="position:absolute;bottom:5px;left:7px;right:7px;font-size:11px;color:#fff;text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.title)}</span>
+      ${s.built ? "" : `<span style="position:absolute;bottom:5px;right:7px;${MONO}font-size:9px;color:var(--danger);">unbuilt</span>`}${acts}
+    </div>`;
+  }).join("");
+  const audio = scenes.map((s, i) => {
+    const left = starts[i] * PXPS, w = Math.max(24, durs[i] * PXPS - 4);
+    let bars = ""; const n = Math.max(3, Math.floor((w - 10) / 5));
+    for (let b = 0; b < n; b++) { const h = 22 + (((s.index + 1) * 7 + b * 13) % 62); bars += `<span style="display:inline-block;width:2px;height:${h}%;margin-right:3px;background:var(--accent);opacity:0.5;border-radius:1px;"></span>`; }
+    return `<div data-act="select" data-i="${i}" title="Narration" style="position:absolute;left:${left}px;width:${w}px;top:0;bottom:0;border-radius:5px;background:var(--raise2);border:1px solid ${i === state.selected ? "var(--accent)" : "var(--line)"};display:flex;align-items:center;padding:0 6px;overflow:hidden;cursor:pointer;">${bars}</div>`;
+  }).join("");
+  return `<div style="margin-top:22px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Timeline · ${scenes.length} scenes · ${fmt(total)}</span>
+      <span style="${MONO}font-size:11px;color:var(--faint);">drag to reorder · click a clip to edit</span>
+    </div>
+    <div class="lt-scroll" style="overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg2);">
+      <div style="position:relative;width:${W}px;min-width:100%;padding:0 0 8px;">
+        <div style="position:relative;height:20px;border-bottom:1px solid var(--line);">${ticks}</div>
+        <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">Video</div>
+        <div style="position:relative;height:56px;margin:0 0 2px;">${clips}<div data-act="insert-end" title="Add scene" style="position:absolute;left:${total * PXPS + 6}px;width:42px;top:0;bottom:0;border:1px dashed var(--line2);border-radius:6px;display:grid;place-items:center;color:var(--muted);cursor:pointer;">＋</div></div>
+        <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">🔊 Narration</div>
+        <div style="position:relative;height:28px;">${audio}</div>
+        <div id="playhead" style="position:absolute;top:20px;bottom:8px;left:${(starts[state.selected] || 0) * PXPS}px;width:2px;background:var(--accent);pointer-events:none;box-shadow:0 0 6px var(--accent);"><div style="position:absolute;top:-3px;left:-4px;width:10px;height:8px;background:var(--accent);border-radius:2px;"></div></div>
+      </div>
+    </div>
+  </div>`;
+}
 function phaseResult() {
   const scenes = (state.project && state.project.scenes) || [];
   const sel = scenes[state.selected] || scenes[0];
   const pid = state.project.id;
   const bust = Date.now();
-  const player = sel && sel.built ? `<video src="/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
-  const film = scenes.map((s, i) => `
-    <div draggable="true" data-drag2="${i}" data-act="select" data-i="${i}" style="flex:0 0 auto;cursor:pointer;padding:3px;border-radius:8px;border:1.5px solid ${i === state.selected ? "var(--accent)" : "transparent"};">
-      <div style="position:relative;width:154px;aspect-ratio:16/9;border-radius:5px;overflow:hidden;background:#0B0B10;"><div style="${thumb(seedOf(s.sid || s.index))}"></div><span style="position:absolute;top:6px;left:7px;font-size:10px;${MONO}color:rgba(236,234,227,0.85);">${pad2(i + 1)}</span>${s.built ? "" : `<span style="position:absolute;bottom:6px;right:7px;font-size:9px;${MONO}color:var(--danger);">unbuilt</span>`}</div>
-      <div style="width:154px;font-size:12px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.title)}</div>
-    </div>`).join("");
+  const player = sel && sel.built ? `<video id="main-player" src="/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
   return `<div class="lt-fade" style="max-width:1140px;margin:0 auto;padding:26px 26px 64px;">
     <div style="width:100%;max-width:calc(54vh * 16 / 9);margin:0 auto;border-radius:8px;overflow:hidden;background:#0B0B10;border:1px solid var(--line);"><div style="position:relative;aspect-ratio:16/9;">${player}</div></div>
-    <div style="margin-top:22px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Timeline · ${scenes.length} scenes</span><span style="${MONO}font-size:11px;color:var(--faint);">Drag to reorder · click to edit</span></div>
-      <div class="lt-scroll" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;">${film}<div data-act="insert-end" style="flex:0 0 auto;width:154px;aspect-ratio:16/9;border-radius:5px;border:1px dashed var(--line2);display:grid;place-items:center;color:var(--muted);font-size:20px;cursor:pointer;">＋</div></div>
-    </div>
+    ${timeline(scenes)}
     ${sel ? editorPanel(sel) : ""}
   </div>`;
 }
@@ -679,6 +724,12 @@ function wire() {
   const li = $("landing-input"); if (li) li.onkeydown = (e) => { if (e.key === "Enter") planTopic(li.value); };
   const tw = $("tweak-input"); if (tw) tw.onkeydown = (e) => { if (e.key === "Enter") handle("tweak"); };
   const mo = $("motion-input"); if (mo) mo.onkeydown = (e) => { if (e.key === "Enter") handle("motion-apply"); };
+  // timeline playhead follows the player: global time = selected scene's start + player currentTime
+  const mv = $("main-player");
+  if (mv && state.tl) {
+    const move = () => { const ph = $("playhead"); if (ph) ph.style.left = (((state.tl.starts[state.selected] || 0) + (mv.currentTime || 0)) * state.tl.pxps) + "px"; };
+    mv.ontimeupdate = move; move();
+  }
   const ss = $("side-search"); if (ss) ss.oninput = (e) => { state.sideSearch = e.target.value; rerenderSidebarList(); };
   const gs = $("gallery-search"); if (gs) gs.oninput = (e) => { state.gallerySearch = e.target.value; render(); const g = $("gallery-search"); if (g) { g.focus(); g.setSelectionRange(g.value.length, g.value.length); } };
   // image seed: file picker + drag-drop on the dropzone
