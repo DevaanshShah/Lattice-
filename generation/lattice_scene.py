@@ -127,7 +127,13 @@ def scaffold_api_prompt() -> str:
             "defect: router / IP / interface cells overlapping). self.table lays cells in aligned columns "
             "with a header rule and outer box, no overlap by construction. Example: t = self.table("
             "[[\"192.168.1.1\",\"eth0\"],[\"192.168.1.2\",\"eth0\"]], col_labels=[\"Host\",\"Iface\"]); "
-            "self.place_in_area(t, \"B2\", \"D5\").")
+            "self.place_in_area(t, \"B2\", \"D5\")."
+            "\n\nFOR A SEQUENCE / FLOW / PIPELINE (A -> B -> C, process steps, packet or data flow) use "
+            "self.flow([\"A\", \"B\", \"C\"]) and place it with self.place_in_area(f, \"B2\", \"D4\"). It "
+            "places auto-sized labeled boxes evenly and connects them with arrows — no overlap (use "
+            "direction=DOWN for a vertical flow). NEVER hand-place a row of labeled_box + self.connect "
+            "calls (they collide/misalign, e.g. Router A/B/C boxes overlapping). Example: f = self.flow("
+            "[\"Router A\", \"Router B\", \"Router C\"]); self.place_in_area(f, \"B2\", \"D4\").")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
@@ -409,4 +415,21 @@ class LatticeScene(Scene):
             grp.add(Line([-W / 2.0, yl, 0], [W / 2.0, yl, 0], color=GREY_B, stroke_width=2))
         grp.add(SurroundingRectangle(grp, color=GREY_B, stroke_width=1.5, buff=0.2))
         return grp
+
+    def flow(self, items, direction=RIGHT, color=BLUE):
+        """A deterministic sequence/flow: labeled boxes placed evenly in a row (or column via direction=
+        DOWN) and connected by arrows — no overlap, no collision math. items: list of label strings (each
+        box auto-sizes to its label). Returns a VGroup; place with self.place_in_area(f, \"B2\", \"D4\").
+        USE for A->B->C flows, process steps, packet / data flow, pipelines — instead of hand-placing
+        boxes + arrows (which collide or misalign; e.g. Router A -> B -> C boxes overlapping)."""
+        nodes = []
+        for it in items:
+            label = str(it[0] if isinstance(it, (tuple, list)) else it)
+            probe = Text(label, font_size=24)
+            nodes.append(self.labeled_box(label, color=color, w=max(1.6, float(probe.width) + 0.5), h=1.0))
+        row = VGroup(*nodes).arrange(direction, buff=1.15)
+        arrows = VGroup()
+        for a, b in zip(nodes[:-1], nodes[1:]):
+            arrows.add(self.connect(a, b, color=GREY_B))
+        return VGroup(row, arrows)
 '''
