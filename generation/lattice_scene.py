@@ -118,7 +118,16 @@ def scaffold_api_prompt() -> str:
             "curve clips off the TOP of the frame (a real defect). self.graph auto-fits the y-range to the "
             "function and returns the whole graph (axes+curve+dots+labels) so it CANNOT run off-frame. "
             "Example: g = self.graph(lambda x: 0.5*(x-1)**2 + 1, [-3, 3], dots=[(-1.5, None)], "
-            "y_label=\"Loss\", x_label=\"Parameter\"); self.place_in_area(g, \"B2\", \"D6\").")
+            "y_label=\"Loss\", x_label=\"Parameter\"); self.place_in_area(g, \"B2\", \"D6\")."
+            "\n\nFOR ANY TABLE / LIST OF RECORDS / SIDE-BY-SIDE COMPARISON use self.table(rows, "
+            "col_labels=[...]) and place it with self.place_in_area(t, \"B2\", \"D5\"). rows is a list of "
+            "row-lists of cell strings. For a comparison (cluttered vs efficient, before vs after), make "
+            "TWO tables and place them in SEPARATE grid areas (left \"B2\",\"C5\" and right \"E2\",\"F5\"). "
+            "NEVER hand-place a grid of labeled_box/Text cells to fake a table — they collide (a real "
+            "defect: router / IP / interface cells overlapping). self.table lays cells in aligned columns "
+            "with a header rule and outer box, no overlap by construction. Example: t = self.table("
+            "[[\"192.168.1.1\",\"eth0\"],[\"192.168.1.2\",\"eth0\"]], col_labels=[\"Host\",\"Iface\"]); "
+            "self.place_in_area(t, \"B2\", \"D5\").")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
@@ -363,4 +372,41 @@ class LatticeScene(Scene):
         if x_label:
             parts.append(self._label(str(x_label), 24).next_to(axes.x_axis, DOWN, buff=0.15))
         return VGroup(*parts)
+
+    def table(self, rows, col_labels=None, color=BLUE, fs=26):
+        """A deterministic grid table — NO overlap by construction. Cells are laid in width-aligned columns
+        and height-aligned rows with padding, a header rule, and an outer box. rows: list of lists of cell
+        strings; col_labels: optional bold header row. Returns a VGroup — place it with
+        self.place_in_area(t, \"B2\", \"D5\") (fit_content shrinks it if large). ALWAYS use this for a table /
+        list of records; for a side-by-side comparison make TWO tables and place them in SEPARATE grid
+        areas. Never hand-place a grid of boxes/Text cells — they collide (routers/IPs overlapping)."""
+        grid = ([[str(c) for c in col_labels]] if col_labels else []) + [[str(c) for c in r] for r in rows]
+        ncol = max((len(r) for r in grid), default=1)
+        grid = [r + [""] * (ncol - len(r)) for r in grid]
+        has_head = col_labels is not None
+
+        def _cell(txt, head):
+            t = txt if txt.strip() else " "
+            return (Text(t, font_size=fs, weight=BOLD, color=color) if head
+                    else Text(t, font_size=fs, color=WHITE))
+        cells = [[_cell(grid[i][j], has_head and i == 0) for j in range(ncol)] for i in range(len(grid))]
+        PADX, PADY = 0.5, 0.32
+        colw = [max(cells[i][j].width for i in range(len(cells))) for j in range(ncol)]
+        rowh = [max(cells[i][j].height for j in range(ncol)) for i in range(len(cells))]
+        xs, x = [], 0.0
+        for w in colw:
+            xs.append(x + w / 2.0); x += w + PADX
+        ys, y = [], 0.0
+        for h in rowh:
+            ys.append(-(y + h / 2.0)); y += h + PADY
+        W, H = x - PADX, y - PADY
+        grp = VGroup()
+        for i in range(len(cells)):
+            for j in range(ncol):
+                grp.add(cells[i][j].move_to([xs[j] - W / 2.0, ys[i] + H / 2.0, 0.0]))
+        if has_head and len(cells) > 1:
+            yl = ys[0] + H / 2.0 - (rowh[0] / 2.0 + PADY / 2.0)
+            grp.add(Line([-W / 2.0, yl, 0], [W / 2.0, yl, 0], color=GREY_B, stroke_width=2))
+        grp.add(SurroundingRectangle(grp, color=GREY_B, stroke_width=1.5, buff=0.2))
+        return grp
 '''
