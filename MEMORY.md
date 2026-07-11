@@ -34,6 +34,26 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 
 <!-- Newest first. Append a dated entry when a phase/milestone/task completes. Format: ### YYYY-MM-DD — what changed and why -->
 
+### 2026-07-12 — Autonomous self-test harness (run-once, no human in the loop)
+- **`python -m scripts.selftest ["<topic>"]`** drives the REAL user path via `web.engine.Engine`
+  (plan → auto-approve the theme/outline gate → build → stitch), then GRADES the rendered output —
+  it does not re-implement the pipeline. Preflight (key/docker/render-image/TTS) fails fast before spend.
+  CRITICAL checks (exit≠0 on fail): project persisted · final.mp4 non-trivial · every scene rendered ·
+  final duration>0. WARN checks: clip length · stitch≈Σscenes · narration present · **no chat/meta leaked
+  into narration** (reuses `decoupled._NARRATION_META`) · word budget · theme applied. Writes
+  `out/selftest/<topic>/report.md` + keeps the workspace. Default = cheap 2-scene preview smoke.
+- **First live run PASSED clean**: binary-search topic, 2/2 scenes, 33.9s, 0 critical / 0 warnings; the
+  build even self-healed (compile-fix + critic-fix recovered scene 0). This replaces the old
+  `scripts.test_video` (which used the LEGACY `composition.video` path and graded nothing).
+- Gap surfaced (not new): cost meter still reports **$0.0000** for `deepseek-chat-v3-0324` — not in
+  `core/llm.py::MODEL_PRICES`, so token counts are real but the dollar figure isn't.
+
+### 2026-07-12 — Web editor upgrade, per-video cost fixes, theme-review gate
+- **Video-editor edit panel** (web): per-scene editor is now a tabbed **Frames · Sound · Motion** control (`web/static/app.js` `editorPanel`/`editTabBar`), mapping to the existing tweak / narration / regenerate endpoints. Utility actions (insert/history/delete) moved to a footer.
+- **Cost fixes** (per-video spend spiked from calls×tokens/scene, NOT model price): **A** — `llm_provider_pin` (`.env` `LATTICE_LLM_PROVIDER_PIN=DeepSeek`) keeps DeepSeek's prefix cache warm instead of `sort:throughput` scattering providers; **B** — paid vision critic now gated to `quality in ("high","final")` in `composition/decoupled.py`, so Draft builds are lint-only. Measured a 2-scene Draft at **$0.0074, 0 vision calls**. Deferred: lower critic/repair caps, add v3-0324 to `MODEL_PRICES` (cost meter reports $0 for the live model).
+- **Theme review gate**: the visual THEME (StyleSpec) is now generated at PLAN time and shown on the outline-review screen ("Step 2 · Review theme & storyboard") so the user checks palette/fonts BEFORE building; `build()` threads the approved theme into `build_video(style=...)` instead of rolling a fresh one. (`web/engine.py`, `composition/decoupled.py`, `themePanel()` in app.js.)
+- Not committed yet at time of writing.
+
 ### 2026-07-11 — Seed inputs, code-walkthrough scaffold, Kokoro TTS, deterministic off-frame guards
 - **Image + code-snippet inputs** (`be8f57e`): new front doors — image→vision→topic (`web/seed.py`); code→segment-by-segment walkthrough. Both land on the existing `/api/projects` outline gate. Frontend gained Describe/Image/Code tabs.
 - **Code-walkthrough deterministic scaffold** (`e65e1b1`): full code stays on screen, the active line highlights, an arrow points to a caption, per-line narration. `generation/code_scaffold.py` + `composition/walkthrough.py` + `planner/code_walkthrough.py` (manifest). Layout fixed in code → reliable on cheap v3, no re-rolls.

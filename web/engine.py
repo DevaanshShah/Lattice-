@@ -100,7 +100,11 @@ class Engine:
         every planning path (topic / image / code). No style/render yet; the build gate comes later."""
         pid = uuid4().hex[:8]
         self.workspace(pid).mkdir(parents=True, exist_ok=True)
-        project = VideoProject.from_outline(outline)
+        # Generate the visual THEME (palette/fonts/object looks) up front so the user reviews it
+        # alongside the outline BEFORE any render — and the approved theme is what build() uses,
+        # instead of the build silently generating a different one. Safe: None if it errors.
+        style = decoupled.style_gen_safe(outline.topic, outline, self._client_or_default())
+        project = VideoProject.from_outline(outline, style=style)
         project.target_seconds = target_seconds
         self.save(pid, project)
         return pid, project
@@ -155,10 +159,11 @@ class Engine:
             outline = approval.apply_edits(outline, keep=keep)   # reorder/cut BEFORE spend
         client = traced(self._client_or_default(), say)          # narrate every LLM hit into the job log
         workspace = self.workspace(pid)
-        built = VideoProject.from_outline(outline)
+        built = VideoProject.from_outline(outline, style=project.style)
         built.target_seconds = project.target_seconds
         final = decoupled.build_video(
             project.topic, outline=outline, client=client, quality=quality,
+            style=project.style,   # render the THEME the user approved, not a freshly-rolled one
             target_seconds=project.target_seconds,   # per-scene pacing = budget / n_scenes
             out_dir=workspace, out_name="final.mp4", on_scene=on_scene, log=say)
         self._populate_from_decoupled(built, workspace, final)

@@ -39,6 +39,11 @@ MODEL_PRICES: dict[str, tuple[float, float]] = {
     "openai/gpt-4o": (2.50, 10.0),
     "deepseek/deepseek-v4-pro": (0.40, 1.20),
     "deepseek/deepseek-chat": (0.28, 0.88),
+    # live product generator (V3-0324). Same model family as deepseek-chat, so priced the same;
+    # tune to your AiCredits key's real per-token rate if it differs. Both id forms so estimate_cost
+    # matches whether the model is referenced with or without the provider prefix.
+    "deepseek/deepseek-chat-v3-0324": (0.28, 0.88),
+    "deepseek-chat-v3-0324": (0.28, 0.88),
     "anthropic/claude-sonnet-4.5": (3.0, 15.0),
     "anthropic/claude-3.5-sonnet": (3.0, 15.0),
 }
@@ -118,12 +123,21 @@ class LLMClient:
         message — some gateway-routed models (e.g. deepseek v3.2/v4 on AiCredits) intermittently
         500 or return blank content (AiCredits 500-streaks for ~10-20s, so retry persistently).
         4xx (auth/bad request) raise immediately (no point retrying)."""
-        # OpenRouter routes each call to some upstream host; the default pick was landing on SLOW ones
-        # (measured ~18s vs ~13s). Ask OR to prefer highest-throughput providers -> faster + steadier
-        # latency on the same key. No-op for direct providers (DeepSeek/AiCredits) that ignore it.
+        # OpenRouter routes each call to some upstream host. Two competing goals:
+        #  - latency: sort:throughput picks the fastest host (but scatters providers per call).
+        #  - COST: a stable provider keeps that host's automatic prefix cache warm, so the big static
+        #    system prompt is billed at the cached rate (~90% off) instead of full price every call.
+        # Pinning a provider (llm_provider_pin) chooses cost; allow_fallbacks keeps reliability.
+        # No-op for direct providers (DeepSeek/AiCredits) that ignore the `provider` field.
         if "openrouter.ai" in (self.base_url or ""):
             eb = dict(kwargs.get("extra_body") or {})
-            eb.setdefault("provider", {"sort": "throughput"})
+            prov = dict(eb.get("provider") or {})
+            if settings.llm_provider_pin:
+                prov.setdefault("order", [settings.llm_provider_pin])
+                prov.setdefault("allow_fallbacks", True)   # warm cache, but don't wedge if the host is down
+            elif settings.llm_provider_sort:
+                prov.setdefault("sort", settings.llm_provider_sort)
+            eb["provider"] = prov
             kwargs["extra_body"] = eb
         last_exc: Exception | None = None
         resp = None

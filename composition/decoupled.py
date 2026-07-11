@@ -422,8 +422,12 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
         code = _enforce_background(code)  # freehand: pin a consistent bg (structural sets it in setup_scene)
     compile_fixer = _make_compile_fixer(spec, style, use_components, client, structural=structural)
     if use_critic:
+        # Paid vision critic is gated by quality: full builds ("high"/"final") get eyes; cheap
+        # iteration builds ("draft"/"preview") run lint-only (FREE geometry lint still catches
+        # off-frame/overlap). This is the dominant per-scene cost lever — see settings.video_vision_confirm.
+        vision_on = settings.video_vision_confirm and quality in ("high", "final")
         cr = vision_critic.run(
-            code, wd, spec, quality=quality, client=client, vision_confirm=True,
+            code, wd, spec, quality=quality, client=client, vision_confirm=vision_on,
             compile_regen_fn=compile_fixer,
             issue_regen_fn=_make_issue_fixer(spec, style, use_components, client, structural=structural),
             critic_fn=lambda fr: critique(fr, intent=_critic_intent(spec), client=get_critic_client()),
@@ -488,7 +492,7 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
                 workers: int = 3, retries: int = 3, use_components: bool = True,
                 use_critic: bool = True, structural: bool | None = None, quality: str = "preview",
                 outline: Outline | None = None, target_seconds: int | None = None,
-                out_dir: str | Path | None = None, out_name: str = "final.mp4",
+                style=None, out_dir: str | Path | None = None, out_name: str = "final.mp4",
                 approve_fn=None, on_scene=None, log=print) -> Path | None:
     """Prompt -> outline -> parallel decoupled scenes (with per-scene retry) -> stitch.
     Returns the final stitched mp4 (or None if no scene survived). `on_scene(index, status)` fires
@@ -511,7 +515,8 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
     else:
         say(f"-> using provided outline ({len(outline.items)} scenes)")
     say(f"   {len(outline.items)} scenes")
-    style = style_gen_safe(prompt, outline, client)
+    # Use the pre-approved theme when the caller passes one (web review gate); else roll one now.
+    style = style if style is not None else style_gen_safe(prompt, outline, client)
 
     mode = "structural(grid)" if structural else "freehand"
     # per-scene pacing budget from the user's duration pick (30s/60s/2min) — scope was already set by

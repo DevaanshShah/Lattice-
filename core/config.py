@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     critic_base_url: str = ""                         # optional: critic on a DIFFERENT provider (e.g. Groq gen + Gemini critic). empty = same as generator
     critic_api_key: str = ""                          # empty = reuse llm_api_key
     prompt_cache_enabled: bool = True                 # mark static system prompt cacheable (Anthropic cache_control)
+    # OpenRouter routing (cost lever): the ~6k static system prompt is re-billed at full input price
+    # on every call UNLESS the upstream provider's automatic prefix cache stays warm. `sort:throughput`
+    # picks the fastest host per call -> scatters providers -> cache never warms. Pin a provider instead
+    # so DeepSeek's context cache hits (~90% off repeated input); fallbacks stay ON for reliability.
+    llm_provider_pin: str = ""                         # e.g. "DeepSeek" — prefer this OpenRouter provider (warm cache)
+    llm_provider_sort: str = "throughput"              # used only when NOT pinning: throughput|price|latency
 
     # --- TTS (Q3; from M4) ---
     tts_engine: str = "gtts"                          # "gtts" (free/online) | "kokoro" (free/local)
