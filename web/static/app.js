@@ -3,8 +3,10 @@
 "use strict";
 
 const state = {
-  screen: "landing",              // landing | studio | gallery
+  screen: "landing",              // landing | studio | gallery | learn
   phase: "prompt",                // prompt | outline | generating | result
+  learnPhase: "input",            // input | generating | watch  (student Learn mode)
+  learnTopic: "",
   inputMode: "describe",          // describe | image | code  (Step-1 seed source)
   theme: "dark",
   projects: [],                   // GET /api/projects
@@ -205,6 +207,7 @@ function render() {
   const app = $("app");
   app.innerHTML = topbar() + (
     state.screen === "landing" ? landing() :
+    state.screen === "learn" ? learnScreen() :
     state.screen === "gallery" ? gallery() : studio()
   ) + devToggle() + devConsole();
   wire();
@@ -347,7 +350,7 @@ function topbar() {
       <span style="${DISPLAY}font-weight:600;font-size:18px;letter-spacing:-0.02em;color:var(--text);">Lattice</span>
     </div>
     <div style="display:flex;align-items:center;gap:26px;">
-      ${tab("home", "Home", state.screen === "landing")}${tab("studio", "Studio", state.screen === "studio")}${tab("gallery", "Gallery", state.screen === "gallery")}
+      ${tab("home", "Home", state.screen === "landing")}${tab("learn", "Learn", state.screen === "learn")}${tab("studio", "Teach", state.screen === "studio")}${tab("gallery", "Gallery", state.screen === "gallery")}
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:14px;">${state.theme === "dark" ? "☾" : "☀"}</div>
@@ -378,7 +381,19 @@ function landing() {
     <div style="position:relative;max-width:1200px;margin:0 auto;padding:64px 40px 0;">
       <div class="lt-fade" style="display:flex;align-items:center;gap:10px;${MONO}font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:26px;"><span style="width:22px;height:1px;background:var(--accent);"></span>Made-to-order explainers</div>
       <h1 class="lt-fade" style="${DISPLAY}font-size:clamp(44px,7.4vw,88px);line-height:0.98;letter-spacing:-0.035em;font-weight:600;margin:0 0 24px;color:var(--text);max-width:14ch;">Turn any idea into an <span style="color:var(--accent);">explainer video</span>.</h1>
-      <p class="lt-fade" style="font-size:19px;line-height:1.5;color:var(--muted);max-width:48ch;margin:0 0 34px;">Describe a concept in a sentence. Lattice storyboards it, animates every idea, and narrates the whole thing — start to finish, no design or editing.</p>
+      <p class="lt-fade" style="font-size:19px;line-height:1.5;color:var(--muted);max-width:48ch;margin:0 0 30px;">Describe a concept in a sentence. Lattice storyboards it, animates every idea, and narrates the whole thing — start to finish, no design or editing.</p>
+      <div class="lt-fade" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:0 0 30px;">
+        <div class="lt-thumb" data-act="go-learn" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
+          <div style="font-size:26px;margin-bottom:10px;">📚</div>
+          <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Learn</div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.45;">Ask about any concept — get a short animated explainer made for you. Just watch.</div>
+        </div>
+        <div class="lt-thumb" data-act="go-teach" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
+          <div style="font-size:26px;margin-bottom:10px;">🎓</div>
+          <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Teach</div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.45;">Build a lesson from a topic, image, or code — then edit scenes, sound, and timing in the studio.</div>
+        </div>
+      </div>
       <div class="lt-fade" style="max-width:640px;">
         <div style="display:flex;align-items:stretch;border:1px solid var(--line2);border-radius:8px;background:var(--raise);overflow:hidden;">
           <input id="landing-input" placeholder="Explain how neural networks learn…" style="flex:1;background:transparent;border:none;outline:none;font-size:16px;color:var(--text);padding:16px 18px;min-width:0;" />
@@ -514,6 +529,30 @@ function phasePrompt() {
   </div>`;
 }
 
+// The AI's chosen visual THEME (palette + fonts + object looks), shown at the review gate so the
+// user checks it BEFORE building. Reads state.project.style (project_dto exposes it).
+function themePanel() {
+  const st = state.project && state.project.style;
+  const wrap = "border:1px solid var(--line2);border-radius:10px;background:var(--raise);padding:16px 18px;margin-bottom:24px;";
+  const head = `<div style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;">Video theme</div>`;
+  if (!st || (!Object.keys(st.palette || {}).length && !st.fonts)) {
+    return `<div style="${wrap}">${head}<div style="${MONO}font-size:12px;color:var(--faint);">Using the default Lattice theme (clean dark, amber accent).</div></div>`;
+  }
+  const swatches = Object.entries(st.palette || {}).map(([name, hex]) => `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="width:22px;height:22px;border-radius:5px;background:${esc(hex)};border:1px solid var(--line2);flex:0 0 auto;"></span>
+      <span style="display:flex;flex-direction:column;line-height:1.2;"><span style="font-size:12.5px;color:var(--text);text-transform:capitalize;">${esc(name)}</span><span style="${MONO}font-size:10px;color:var(--faint);">${esc(hex)}</span></span>
+    </div>`).join("");
+  const objs = Object.keys(st.object_styles || {}).length
+    ? `<div style="margin-top:12px;${MONO}font-size:11px;color:var(--faint);">Objects: <span style="color:var(--muted);">${esc(Object.entries(st.object_styles).map(([k, v]) => `${k} → ${v}`).join(" · "))}</span></div>` : "";
+  const fonts = st.fonts ? `<div style="margin-top:10px;font-size:12.5px;color:var(--muted);"><span style="${MONO}font-size:11px;color:var(--faint);">Type:</span> ${esc(st.fonts)}</div>` : "";
+  return `<div style="${wrap}">${head}
+    <div style="display:flex;flex-wrap:wrap;gap:16px 22px;">${swatches || `<span style="${MONO}font-size:12px;color:var(--faint);">no palette</span>`}</div>
+    ${fonts}${objs}
+    <div style="margin-top:12px;${MONO}font-size:10.5px;color:var(--faint);">This palette + type is applied consistently to every scene.</div>
+  </div>`;
+}
+
 function phaseOutline() {
   const rows = state.outline.map((sc, i) => `
     <div draggable="true" data-drag="${i}" style="display:flex;gap:14px;align-items:flex-start;padding:16px 4px;border-bottom:1px solid var(--line);${sc.enabled ? "" : "opacity:0.45;"}">
@@ -526,9 +565,11 @@ function phaseOutline() {
     </div>`).join("");
   const n = state.outline.filter(o => o.enabled).length;
   return `<div class="lt-fade" style="max-width:780px;margin:0 auto;padding:38px 32px 64px;">
-    <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Step 2 · Review the storyboard</div>
+    <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Step 2 · Review theme &amp; storyboard</div>
     <h2 style="${DISPLAY}font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 8px;line-height:1.03;">Here's the plan for your video</h2>
-    <p style="color:var(--muted);font-size:15px;margin:0 0 28px;">Reorder or drop any scene. Nothing has been made yet.</p>
+    <p style="color:var(--muted);font-size:15px;margin:0 0 24px;">Check the theme and scenes the AI chose. Reorder or drop any scene. Nothing has been made yet.</p>
+    ${themePanel()}
+    <div style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin:6px 0 2px;">Storyboard</div>
     <div style="border-top:1px solid var(--line);">${rows}</div>
     <div data-act="ol-add" style="display:flex;align-items:center;gap:10px;padding:16px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;cursor:pointer;"><span style="color:var(--accent);font-size:15px;">＋</span> Add a scene</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:26px;flex-wrap:wrap;">
@@ -614,6 +655,62 @@ function timeline(scenes) {
       </div>
     </div>
   </div>`;
+}
+// ---- Learn mode (student): prompt -> auto plan+build -> watch (no editing) --------------------
+function startLearn() { state.screen = "learn"; state.learnPhase = "input"; state.learnTopic = ""; render(); }
+async function learnGo(topic) {
+  topic = (topic || "").trim(); if (!topic) return;
+  state.learnTopic = topic; state.screen = "learn"; state.learnPhase = "generating";
+  state.gen = { pct: 0, label: "Planning your lesson", sub: "", scenes: {}, log: [], detailsOpen: false };
+  render();
+  try {
+    const p = await api("POST", "/api/projects", { topic });                       // plan
+    state.project = p;
+    const keep = (p.scenes || []).map(s => s.index);                               // auto-approve every scene
+    const { job_id } = await api("POST", `/api/projects/${p.id}/build`, { keep, quality: state.quality });
+    await followJob(job_id, (pr) => {
+      state.gen.pct = Math.round(pr.pct || (pr.done && pr.total ? pr.done / pr.total * 100 : state.gen.pct));
+      state.gen.label = pr.label || state.gen.label;
+      state.gen.sub = pr.total ? `${pr.done || 0} of ${pr.total} scenes` : state.gen.sub;
+      if (pr.scenes) state.gen.scenes = pr.scenes;
+      renderGenProgress();
+    });
+    state.project = await api("GET", `/api/projects/${p.id}`);
+    state.selected = 0; state.learnPhase = "watch";
+  } catch (e) { alert("Couldn't build the lesson: " + e.message); state.learnPhase = "input"; }
+  render(); loadProjects();
+}
+function learnScreen() {
+  if (state.learnPhase === "generating") {
+    return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div id="gen-root" class="lt-fade" style="max-width:520px;margin:0 auto;padding:80px 32px;display:flex;flex-direction:column;align-items:center;">${genInner()}</div></div>`;
+  }
+  if (state.learnPhase === "watch" && state.project) {
+    const p = state.project, built = (p.scenes || []).filter(s => s.built).length;
+    return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div class="lt-fade" style="max-width:900px;margin:0 auto;padding:40px 32px 80px;">
+      <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Your lesson</div>
+      <h1 style="${DISPLAY}font-size:30px;font-weight:600;letter-spacing:-0.02em;color:var(--text);margin:0 0 20px;line-height:1.1;">${esc(p.topic)}</h1>
+      <div style="border-radius:10px;overflow:hidden;background:#0B0B10;border:1px solid var(--line);"><div style="position:relative;aspect-ratio:16/9;"><video src="/api/projects/${p.id}/final?t=${Date.now()}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;"></video></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:20px;flex-wrap:wrap;">
+        <span style="${MONO}font-size:12px;color:var(--faint);">${built} scenes · narrated</span>
+        <div style="display:flex;gap:10px;">
+          <button class="lt-btnp" data-act="learn-again" style="padding:11px 18px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:14px;cursor:pointer;">Learn something else</button>
+          <button class="lt-btnp" data-act="learn-edit" style="padding:11px 18px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14px;cursor:pointer;">Open in studio to edit →</button>
+        </div>
+      </div>
+    </div></div>`;
+  }
+  return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div class="lt-fade" style="max-width:680px;margin:0 auto;padding:90px 32px;">
+    <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;">Learn</div>
+    <h1 style="${DISPLAY}font-size:44px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 12px;line-height:1.0;">What do you want to learn?</h1>
+    <p style="color:var(--muted);font-size:17px;margin:0 0 30px;max-width:46ch;">Ask about any concept and get a short animated, narrated explainer — made just for you.</p>
+    <div style="border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:18px;">
+      <textarea id="learn-input" placeholder="e.g. How does gradient descent find the minimum? · What is an IP address block? · Explain the Fourier series" style="width:100%;min-height:96px;resize:none;background:transparent;border:none;outline:none;font-size:17px;line-height:1.5;color:var(--text);"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button class="lt-btnp" data-act="learn-go" style="display:flex;align-items:center;gap:8px;padding:13px 26px;border-radius:7px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:15px;cursor:pointer;">Learn this →</button>
+      </div>
+    </div>
+    ${suggestRow("sugg-learn")}
+  </div></div>`;
 }
 function phaseResult() {
   const scenes = (state.project && state.project.scenes) || [];
@@ -722,6 +819,7 @@ function wire() {
   app.onclick = (e) => { const el = e.target.closest("[data-act]"); if (el) handle(el.dataset.act, el); };
   // Enter-to-submit for key inputs
   const li = $("landing-input"); if (li) li.onkeydown = (e) => { if (e.key === "Enter") planTopic(li.value); };
+  const le = $("learn-input"); if (le) le.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); learnGo(le.value); } };
   const tw = $("tweak-input"); if (tw) tw.onkeydown = (e) => { if (e.key === "Enter") handle("tweak"); };
   const mo = $("motion-input"); if (mo) mo.onkeydown = (e) => { if (e.key === "Enter") handle("motion-apply"); };
   // timeline playhead follows the player: global time = selected scene's start + player currentTime
@@ -766,6 +864,7 @@ function handle(act, el) {
   switch (act) {
     case "home": state.screen = "landing"; render(); break;
     case "tab-home": state.screen = "landing"; render(); break;
+    case "tab-learn": state.screen = "learn"; if (state.learnPhase === "generating") state.learnPhase = "input"; render(); break;
     case "tab-studio": state.screen = "studio"; render(); break;
     case "tab-gallery": state.screen = "gallery"; render(); break;
     case "theme": state.theme = state.theme === "dark" ? "light" : "dark"; document.documentElement.setAttribute("data-theme", state.theme); break;
@@ -774,6 +873,12 @@ function handle(act, el) {
     case "landing-go": planTopic($("landing-input").value); break;
     case "sugg-landing": { const el2 = $("landing-input"); if (el2) el2.value = "Explain " + v; break; }
     case "sugg-prompt": { const el2 = $("prompt-text"); if (el2) el2.value = "Explain " + v; break; }
+    case "go-teach": state.screen = "studio"; state.phase = "prompt"; state.project = null; state.outline = []; render(); break;
+    case "go-learn": startLearn(); break;
+    case "learn-go": learnGo($("learn-input").value); break;
+    case "learn-again": state.learnPhase = "input"; state.learnTopic = ""; state.project = null; render(); break;
+    case "learn-edit": state.screen = "studio"; state.phase = "result"; state.selected = 0; render(); break;
+    case "sugg-learn": { const el2 = $("learn-input"); if (el2) el2.value = "Explain " + v; break; }
     case "len": state.length = v; render(); break;
     case "qual": state.quality = v; render(); break;
     case "mode": state.inputMode = v; render(); break;

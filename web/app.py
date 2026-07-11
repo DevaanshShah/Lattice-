@@ -302,6 +302,15 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
             raise HTTPException(404, f"scene {index} not rendered yet")
         return FileResponse(str(mp4), media_type="video/mp4")
 
+    @app.get("/api/projects/{pid}/final")
+    def final_video(pid: str):
+        """Stream the stitched lesson inline (for the Learn watch view — the whole video, not per-scene)."""
+        _load_or_404(pid)
+        mp4 = engine.final_mp4(pid)
+        if not mp4:
+            raise HTTPException(404, "final video not ready yet")
+        return FileResponse(str(mp4), media_type="video/mp4")
+
     @app.get("/api/projects/{pid}/scenes/{index}/source")
     def scene_source(pid: str, index: int) -> dict:
         """Developer inspection: the generated code + the exact codegen prompt + spec + narration."""
