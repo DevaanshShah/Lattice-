@@ -262,8 +262,10 @@ class LatticeScene(Scene):
         """Scale + center ALL current content (everything except the title) to fill the main area, so a
         sparse scene doesn't sit tiny in a sea of black. Called automatically at the end of a scene.
         SAFE BY CONSTRUCTION: scales the whole group UNIFORMLY (relative placement preserved -> creates no
-        new overlaps), only ever scales UP (never shrinks a good, already-full layout), caps the scale, and
-        fits inside a safe area that cannot reach the frame edge. Fully wrapped -> can never break a render."""
+        new overlaps), grows sparse content up to a cap AND shrinks oversized/off-frame content DOWN into a
+        safe area that cannot reach the frame edge (a floor keeps it readable). This is the deterministic
+        off-frame guard: whatever the model draws (a curve with a mismatched y-range, a too-wide table),
+        the final frame is forced inside the safe area. Fully wrapped -> can never break a render."""
         try:
             title = getattr(self, "scene_title", None)
             content = [m for m in self.mobjects
@@ -277,9 +279,10 @@ class LatticeScene(Scene):
                 return
             TARGET_W, TARGET_H, CENTER = 12.4, 5.8, [0.0, -0.5, 0.0]   # safe area below the title strip
             s = min(TARGET_W / gw, TARGET_H / gh, max_scale)
-            if s > 1.03:                                  # content is small -> grow it to fill + center
-                self.play(grp.animate.scale(s).move_to(CENTER), run_time=run_time)
-            else:                                         # already large enough -> only recenter if badly off
+            if s > 1.03 or s < 0.98:                      # grow sparse content OR SHRINK oversized/off-frame
+                s = max(s, 0.35)                          # floor so a wild overshoot never becomes unreadable
+                self.play(grp.animate.scale(s).move_to(CENTER), run_time=run_time)  # <1 => shrink to fit
+            else:                                         # already well-sized -> only recenter if badly off
                 c = grp.get_center()
                 # symmetric drift check: recenter content stuck in ANY corner/edge band (a real miss:
                 # low-LEFT content sailed through when only upward drift was tested)
