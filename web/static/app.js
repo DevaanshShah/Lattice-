@@ -15,6 +15,7 @@ const state = {
   gen: { pct: 0, label: "Warming up", sub: "", scenes: {}, log: [], detailsOpen: false },
   planning: false, busy: false, downloadOpen: false, subtitles: false,
   historyOpen: false, history: [], sideSearch: "", gallerySearch: "",
+  editTab: "frames",              // frames | sound | motion  (video-editor edit mode)
   dragFrom: null,
   dev: { open: false, tab: "log", inspect: null, subtab: "code", source: null, loading: false, autoscroll: true },
 };
@@ -581,10 +582,58 @@ function phaseResult() {
     ${sel ? editorPanel(sel) : ""}
   </div>`;
 }
+// The video-editor edit-mode switch: Frames (visuals) · Sound (narration) · Motion (re-animate).
+const EDIT_TABS = [
+  ["frames", "🎞", "Frames", "Visuals"],
+  ["sound", "🔊", "Sound", "Narration"],
+  ["motion", "🎬", "Motion", "Re-animate"],
+];
+function editTabBar() {
+  return `<div style="display:flex;gap:6px;padding:5px;border:1px solid var(--line2);border-radius:9px;background:var(--raise);margin-bottom:16px;">
+    ${EDIT_TABS.map(([k, ic, l, sub]) => { const on = state.editTab === k; return `<div data-act="edit-tab" data-v="${k}" style="flex:1;display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:6px;cursor:pointer;${on ? "background:var(--accent);" : ""}">
+      <span style="font-size:16px;line-height:1;filter:${on ? "grayscale(1) brightness(0);" : "none"};">${ic}</span>
+      <span style="display:flex;flex-direction:column;line-height:1.15;min-width:0;">
+        <span style="font-size:13.5px;font-weight:600;color:${on ? "var(--ink)" : "var(--text)"};">${l}</span>
+        <span style="${MONO}font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:${on ? "rgba(14,14,18,0.62)" : "var(--faint)"};">${sub}</span>
+      </span></div>`; }).join("")}
+  </div>`;
+}
+function editTabBody(sel) {
+  const primary = "padding:0 18px;height:42px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer;white-space:nowrap;";
+  const hint = `${MONO}font-size:11.5px;line-height:1.5;color:var(--faint);margin-bottom:12px;`;
+  if (state.editTab === "sound") {
+    return `<div class="lt-snap">
+      <div style="${hint}">Edit the spoken narration — one line per beat. Saving re-voices the scene with the new script.</div>
+      <div style="border:1px solid var(--line2);border-radius:8px;background:var(--raise2);padding:12px 14px;">
+        <textarea id="narr-input" placeholder="What the narrator says over this scene…" style="width:100%;min-height:120px;resize:vertical;background:transparent;border:none;outline:none;font-size:14px;line-height:1.6;color:var(--text);">${esc((sel.narration || []).join("\n"))}</textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button class="lt-btnp" data-act="save-narr" style="${primary}">🔊 Save &amp; re-voice</button>
+      </div>
+    </div>`;
+  }
+  if (state.editTab === "motion") {
+    return `<div class="lt-snap">
+      <div style="${hint}">Regenerate the animation for a fresh take on how this scene moves. Leave the box blank for a new roll, or describe the motion you want.</div>
+      <input id="motion-input" placeholder="Optional: e.g. slower reveal, pan across the graph, build up piece by piece" style="width:100%;height:42px;padding:0 13px;border-radius:6px;border:1px solid var(--line2);background:var(--raise2);outline:none;font-size:13.5px;color:var(--text);margin-bottom:12px;" />
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="lt-btnp" data-act="motion-apply" style="${primary}">🎬 Regenerate motion</button>
+      </div>
+    </div>`;
+  }
+  // frames (default): change what's on screen
+  return `<div class="lt-snap">
+    <div style="${hint}">Change what's on screen — colors, labels, what's shown, layout. Describe the change in plain words.</div>
+    <div style="display:flex;gap:8px;">
+      <input id="tweak-input" placeholder="e.g. make the wave amber · label the axes · move the graph up" style="flex:1;height:42px;padding:0 13px;border-radius:6px;border:1px solid var(--line2);background:var(--raise2);outline:none;font-size:13.5px;color:var(--text);min-width:0;" />
+      <button class="lt-btnp" data-act="tweak" style="${primary}">🎞 Apply</button>
+    </div>
+  </div>`;
+}
 function editorPanel(sel) {
   const versions = state.historyOpen ? (state.history || []) : null;
-  const actBtn = "flex:1;min-width:118px;padding:10px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:13px;cursor:pointer;";
-  const danger = "flex:1;min-width:118px;padding:10px;border-radius:6px;border:1px solid rgba(240,85,59,0.32);background:transparent;color:var(--danger);font-weight:500;font-size:13px;cursor:pointer;";
+  const util = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:12.5px;cursor:pointer;";
+  const danger = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid rgba(240,85,59,0.32);background:transparent;color:var(--danger);font-weight:500;font-size:12.5px;cursor:pointer;";
   return `<div class="lt-snap" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
     <div>
       <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video src="/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
@@ -592,21 +641,13 @@ function editorPanel(sel) {
       <div style="${MONO}font-size:11px;color:var(--faint);margin-top:3px;">scene ${state.selected + 1} of ${state.project.scenes.length}</div>
     </div>
     <div style="min-width:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Edit scene</span>${state.busy ? `<span style="${MONO}font-size:11px;color:var(--accent);">working…</span>` : ""}</div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <input id="tweak-input" placeholder="Tell Lattice a change… e.g. make the wave amber" style="flex:1;padding:11px 13px;border-radius:6px;border:1px solid var(--line2);background:var(--raise2);outline:none;font-size:13.5px;color:var(--text);min-width:0;" />
-        <button class="lt-btnp" data-act="tweak" style="padding:0 18px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer;">Apply</button>
-      </div>
-      <div style="border:1px solid var(--line);border-radius:6px;background:var(--raise);padding:12px 14px;margin-bottom:16px;">
-        <div style="${MONO}font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;">Narration</div>
-        <textarea id="narr-input" style="width:100%;min-height:72px;resize:vertical;background:transparent;border:none;outline:none;font-size:13.5px;line-height:1.55;color:var(--text);">${esc((sel.narration || []).join("\n"))}</textarea>
-        <div style="text-align:right;margin-top:6px;"><span data-act="save-narr" class="lt-link" style="${MONO}font-size:11px;color:var(--muted);cursor:pointer;">Save narration →</span></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="lt-act" style="${actBtn}" data-act="regen">↻ Regenerate</button>
-        <button class="lt-act" style="${actBtn}" data-act="insert-after">＋ Insert after</button>
-        <button class="lt-act" style="${actBtn}" data-act="history">↺ History</button>
-        <button style="${danger}" data-act="delete">🗑 Delete</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Edit studio</span>${state.busy ? `<span style="${MONO}font-size:11px;color:var(--accent);display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:lt-pulse 1.2s ease-in-out infinite;"></span>working…</span>` : ""}</div>
+      ${editTabBar()}
+      ${editTabBody(sel)}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+        <button class="lt-act" style="${util}" data-act="insert-after">＋ Insert after</button>
+        <button class="lt-act" style="${util}" data-act="history">↺ History</button>
+        <button class="lt-act" style="${danger}" data-act="delete">🗑 Delete</button>
       </div>
       ${versions ? `<div class="lt-snap" style="margin-top:14px;border:1px solid var(--line);border-radius:6px;overflow:hidden;"><div style="padding:9px 14px;${MONO}font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);background:var(--raise);">Version history</div>${versions.length ? versions.map(v => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);"><div><div style="font-size:13px;color:var(--text);">v${v.version}${v.label ? " · " + esc(v.label) : ""}</div></div><div data-act="rollback" data-v="${v.version}" style="${MONO}font-size:11px;color:var(--accent);padding:5px 10px;border:1px solid var(--line2);border-radius:5px;cursor:pointer;">Restore</div></div>`).join("") : `<div style="padding:12px 14px;${MONO}font-size:12px;color:var(--faint);">No saved versions yet.</div>`}</div>` : ""}
     </div>
@@ -637,6 +678,7 @@ function wire() {
   // Enter-to-submit for key inputs
   const li = $("landing-input"); if (li) li.onkeydown = (e) => { if (e.key === "Enter") planTopic(li.value); };
   const tw = $("tweak-input"); if (tw) tw.onkeydown = (e) => { if (e.key === "Enter") handle("tweak"); };
+  const mo = $("motion-input"); if (mo) mo.onkeydown = (e) => { if (e.key === "Enter") handle("motion-apply"); };
   const ss = $("side-search"); if (ss) ss.oninput = (e) => { state.sideSearch = e.target.value; rerenderSidebarList(); };
   const gs = $("gallery-search"); if (gs) gs.oninput = (e) => { state.gallerySearch = e.target.value; render(); const g = $("gallery-search"); if (g) { g.focus(); g.setSelectionRange(g.value.length, g.value.length); } };
   // image seed: file picker + drag-drop on the dropzone
@@ -696,6 +738,11 @@ function handle(act, el) {
     case "gen-details": state.gen.detailsOpen = !state.gen.detailsOpen; renderGenProgress(); break;
     case "select": state.selected = i; state.historyOpen = false; render(); break;
     case "regen": sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/regenerate`, { quality: state.quality }); break;
+    case "edit-tab": state.editTab = v; render(); break;
+    case "motion-apply": { const t = $("motion-input"); const val = t ? t.value.trim() : "";
+      if (val) sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/tweak`, { instruction: "Re-animate this scene: " + val, quality: state.quality });
+      else sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/regenerate`, { quality: state.quality });
+      break; }
     case "tweak": { const t = $("tweak-input"); const val = t ? t.value.trim() : ""; if (val) sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/tweak`, { instruction: val, quality: state.quality }); break; }
     case "save-narr": { const t = $("narr-input"); const lines = t ? t.value.split("\n").filter(x => x.trim()) : []; if (lines.length) sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/narration`, { lines, quality: state.quality }); break; }
     case "insert-after": promptInsert(state.selected + 1); break;
