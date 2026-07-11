@@ -111,7 +111,14 @@ def scaffold_api_prompt() -> str:
             "highlight parts, use color spans: `Text('int square(int x)', t2c={'square': GREEN, 'int': "
             "ORANGE})`, or put a brace/label UNDER the line (`self.braced(line, 'name')`). NEVER assemble "
             "one line from separately-placed fragments ('int' + 'square' + '(int x)' each placed on its "
-            "own) — the fragments stack into garbled overlap (a real defect).")
+            "own) — the fragments stack into garbled overlap (a real defect)."
+            "\n\nFOR ANY FUNCTION / CURVE / GRAPH use self.graph(fn, x_range, dots=[...], x_label=..., "
+            "y_label=...) and place it with self.place_in_area(g, \"B2\", \"D6\"). NEVER build Axes(...) + "
+            ".plot(...) yourself: the model repeatedly picks a y_range too small for its function so the "
+            "curve clips off the TOP of the frame (a real defect). self.graph auto-fits the y-range to the "
+            "function and returns the whole graph (axes+curve+dots+labels) so it CANNOT run off-frame. "
+            "Example: g = self.graph(lambda x: 0.5*(x-1)**2 + 1, [-3, 3], dots=[(-1.5, None)], "
+            "y_label=\"Loss\", x_label=\"Parameter\"); self.place_in_area(g, \"B2\", \"D6\").")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
@@ -312,4 +319,45 @@ class LatticeScene(Scene):
         br = Brace(mob, direction=direction, color=color)
         lbl = self._label(text, 24).next_to(br, direction, buff=0.1)
         return VGroup(br, lbl)
+
+    def graph(self, fn, x_range, dots=None, x_label=None, y_label=None, color=BLUE, dot_color=RED):
+        """A function plot that CANNOT run off-frame. Builds Axes whose y-range is AUTO-FIT to fn's actual
+        min/max over x_range (so the curve never overshoots its own axes — the recurring 'y_range too small,
+        left arm clips off the top' defect), plots the curve, marks optional dots, and labels the axes.
+        Returns VGroup(axes, curve, dots, labels) — the WHOLE graph, so self.place_in_area(g, "B2","D6")
+        fits the curve too. ALWAYS use this for a function/curve; never raw Axes(...).plot().
+
+        fn: a callable x->y. x_range: [x_min, x_max] (optional step). dots: list of x values OR (x, label)
+        tuples to mark on the curve (label may be math like 'x_0'). x_label/y_label: axis captions."""
+        x0, x1 = float(x_range[0]), float(x_range[1])
+        xstep = float(x_range[2]) if len(x_range) > 2 else max(1.0, round((x1 - x0) / 6.0))
+        ys = []
+        for xv in np.linspace(x0, x1, 60):
+            try:
+                v = float(fn(xv))
+                if v == v and abs(v) != float("inf"):
+                    ys.append(v)
+            except Exception:
+                pass
+        ylo, yhi = (min(ys), max(ys)) if ys else (0.0, 1.0)
+        pad = max(0.15 * (yhi - ylo), 0.5)          # breathing room so the curve isn't flush to the edge
+        ylo, yhi = ylo - pad, yhi + pad
+        axes = Axes(x_range=[x0, x1, xstep], y_range=[ylo, yhi, max((yhi - ylo) / 5.0, 1e-6)],
+                    axis_config={"color": GREY_B}, tips=True)
+        curve = axes.plot(fn, color=color)
+        parts = [axes, curve]
+        for d in (dots or []):
+            dx = float(d[0] if isinstance(d, (tuple, list)) else d)
+            try:
+                dot = Dot(axes.c2p(dx, float(fn(dx))), color=dot_color, radius=0.09)
+            except Exception:
+                continue
+            parts.append(dot)
+            if isinstance(d, (tuple, list)) and len(d) > 1 and d[1]:
+                parts.append(self._label(str(d[1]), 22).next_to(dot, UP, buff=0.12))
+        if y_label:
+            parts.append(self._label(str(y_label), 24).next_to(axes.y_axis, UP, buff=0.15))
+        if x_label:
+            parts.append(self._label(str(x_label), 24).next_to(axes.x_axis, DOWN, buff=0.15))
+        return VGroup(*parts)
 '''
