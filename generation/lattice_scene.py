@@ -133,7 +133,14 @@ def scaffold_api_prompt() -> str:
             "places auto-sized labeled boxes evenly and connects them with arrows — no overlap (use "
             "direction=DOWN for a vertical flow). NEVER hand-place a row of labeled_box + self.connect "
             "calls (they collide/misalign, e.g. Router A/B/C boxes overlapping). Example: f = self.flow("
-            "[\"Router A\", \"Router B\", \"Router C\"]); self.place_in_area(f, \"B2\", \"D4\").")
+            "[\"Router A\", \"Router B\", \"Router C\"]); self.place_in_area(f, \"B2\", \"D4\")."
+            "\n\nFOR A POLICY / ACTION GRID (an arrow showing the best move in each cell — grid-world RL, "
+            "decision grids) use self.policy_grid(arrows, values=...) and place it with self.place_in_area("
+            "g, \"B2\", \"D5\"). arrows is a 2D list of \"up\"/\"down\"/\"left\"/\"right\"/None; values is an "
+            "optional 2D list of numbers shown above each arrow. NEVER draw free-hand arrows between grid "
+            "cells (they cross and tangle). Example: g = self.policy_grid([[\"right\",\"right\",\"down\"],"
+            "[\"up\",None,\"down\"],[\"up\",\"left\",\"left\"]], values=[[1,2,3],[4,0,5],[6,7,8]]); "
+            "self.place_in_area(g, \"B2\", \"D5\").")
 
 
 def structural_system_prompt(*, narrated: bool = False) -> str:
@@ -432,4 +439,33 @@ class LatticeScene(Scene):
         for a, b in zip(nodes[:-1], nodes[1:]):
             arrows.add(self.connect(a, b, color=GREY_B))
         return VGroup(row, arrows)
+
+    def policy_grid(self, arrows, values=None, color=BLUE, arrow_color=YELLOW):
+        """A grid of cells each showing an optimal-action ARROW (and optional value) — for RL policy /
+        grid-world / decision-grid scenes. Every arrow is confined to its OWN cell, so they never cross,
+        tangle, or spear across the grid (the recurring free-hand policy-arrow defect). arrows: a 2D list
+        of \"up\"/\"down\"/\"left\"/\"right\" (or \"u\"/\"d\"/\"l\"/\"r\", or None for no action). values:
+        an optional 2D list of labels (numbers) shown above each arrow. Returns a VGroup; place with
+        self.place_in_area(g, \"B2\", \"D5\")."""
+        D = {"up": UP, "u": UP, "down": DOWN, "d": DOWN, "left": LEFT, "l": LEFT, "right": RIGHT, "r": RIGHT}
+        rows = len(arrows); cols = max((len(r) for r in arrows), default=1)
+        cw, ch, cells = 1.5, 1.15, []
+        for ri in range(rows):
+            for ci in range(cols):
+                box = Rectangle(width=cw, height=ch, color=color, stroke_width=2)
+                c = box.get_center(); parts = [box]
+                v = (str(values[ri][ci]) if values and ri < len(values) and ci < len(values[ri])
+                     and values[ri][ci] not in (None, "") else "")
+                key = (str(arrows[ri][ci]).strip().lower() if ci < len(arrows[ri])
+                       and arrows[ri][ci] is not None else "")
+                has_arr = key in D
+                if v:
+                    parts.append(self._label(v, 20).move_to(c + (UP * 0.24 if has_arr else ORIGIN)))
+                if has_arr:
+                    base = c + (DOWN * 0.16 if v else ORIGIN); vec = D[key]
+                    parts.append(Arrow(base - vec * 0.2, base + vec * 0.2, buff=0, color=arrow_color,
+                                       stroke_width=6, max_tip_length_to_length_ratio=0.6,
+                                       max_stroke_width_to_length_ratio=20))
+                cells.append(VGroup(*parts))
+        return VGroup(*cells).arrange_in_grid(rows=rows, cols=cols, buff=0.14)
 '''
