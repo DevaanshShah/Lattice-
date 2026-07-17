@@ -17,6 +17,7 @@ const state = {
   length: "standard", quality: "high",
   gen: { pct: 0, label: "Warming up", sub: "", scenes: {}, log: [], detailsOpen: false },
   planning: false, busy: false, downloadOpen: false, subtitles: false,
+  format: "youtube",              // youtube (16:9) | reel (9:16) — export reframe, not a re-render
   historyOpen: false, history: [], sideSearch: "", gallerySearch: "",
   editTab: "frames",              // frames | sound | motion  (video-editor edit mode)
   dragFrom: null,
@@ -455,8 +456,12 @@ function studio() {
   let dl = "";
   if (state.phase === "result") {
     dl = `<button class="lt-btnp" data-act="dl-toggle" style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer;">↓ Download</button>`;
+    const reel = state.format === "reel";
     if (state.downloadOpen) dl += `<div class="lt-snap" style="position:absolute;top:48px;right:0;width:248px;background:var(--raise);border:1px solid var(--line2);border-radius:8px;padding:14px;box-shadow:0 24px 60px -24px rgba(0,0,0,0.8);z-index:30;">
       ${label("Export", 10)}
+      ${segmented("fmt", [["youtube", "YouTube"], ["reel", "Reel"]], state.format)}
+      <div style="${MONO}font-size:10.5px;color:var(--faint);margin:7px 2px 2px;">${reel ? "1080&times;1920 &middot; 9:16 &middot; Shorts / TikTok" : "1920&times;1080 &middot; 16:9"}</div>
+      <div style="height:1px;background:var(--line);margin:10px 0 4px;"></div>
       <div data-act="sub-toggle" style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px;cursor:pointer;"><span style="font-size:13.5px;color:var(--text);">Burn in subtitles</span>${toggle(state.subtitles)}</div>
       <div style="height:1px;background:var(--line);margin:8px 0;"></div>
       <div class="lt-btnp" data-act="do-download" style="padding:10px;border-radius:6px;background:var(--accent);color:var(--ink);text-align:center;font-size:13.5px;cursor:pointer;font-weight:600;">Download MP4</div>
@@ -967,7 +972,8 @@ function handle(act, el) {
     case "rollback": structural(`/api/projects/${pid}/scenes/${curIdx()}/rollback`, "POST", { version: +v }); break;
     case "dl-toggle": state.downloadOpen = !state.downloadOpen; render(); break;
     case "sub-toggle": state.subtitles = !state.subtitles; render(); break;
-    case "do-download": window.open(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}`, "_blank"); state.downloadOpen = false; render(); break;
+    case "fmt": state.format = v; render(); break;
+    case "do-download": window.open(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}&format=${state.format}`, "_blank"); state.downloadOpen = false; render(); break;
     case "dev-toggle": state.dev.open = !state.dev.open; render(); break;
     case "dev-tab": state.dev.tab = v; render(); break;
     case "dev-clear": state.gen.log = []; render(); break;

@@ -423,9 +423,10 @@ class Engine:
         return [{"version": v.version, "label": v.label, "score": v.score} for v in node.versions]
 
     # --- export / download (FR-30) ----------------------------------------------------------
-    def export(self, pid: str, *, subtitles: str = "none", log=print) -> dict:
+    def export(self, pid: str, *, subtitles: str = "none", fmt: str = "youtube", log=print) -> dict:
+        # per-format out_name: the two deliverables share a work dir and must not clobber each other
         return export_mod.export(self.load(pid), out_dir=self.workspace(pid) / "export",
-                                 subtitles=subtitles, log=log)
+                                 subtitles=subtitles, fmt=fmt, out_name=f"export-{fmt}.mp4", log=log)
 
     def scene_script(self, pid: str, index: int) -> str:
         """One scene's narration lines as plain text (for per-scene review/download)."""

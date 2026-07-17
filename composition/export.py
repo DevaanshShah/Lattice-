@@ -10,6 +10,20 @@ Per-scene SRTs are relative to each scene's own start; the stitched video plays 
 so the merge offsets scene k's cues by the summed duration of scenes 0..k-1 and renumbers. The
 offset math (`merge_srt`) and the ffmpeg argv (`build_burn_command`) are pure and unit-tested;
 `export` does the file/probe/render work (needs the container).
+
+Two delivery FORMATS, both derived from the SAME 16:9 build:
+- "youtube": the 1920x1080 render as-is (the historical behaviour).
+- "reel": 1080x1920 for Shorts/Reels/TikTok, produced by ONE ffmpeg pass that scales the finished
+  video to the phone's width and pads above/below with the scene background colour.
+
+Reframing at export (rather than rendering a native 9:16 frame) is deliberate. The whole grid
+scaffold in `generation/lattice_scene.py` is dimensioned for Manim's 14.22x8.0 landscape frame
+(`_MAIN_X`, `_MAIN_Y`, the 12.4x5.8 `fit_content` safe area, the title width caps), and layout
+quality has repeatedly proven to be the pipeline's most fragile property. A portrait frame would
+re-open that whole failure class AND cost a second LLM build per format. Padding costs one ffmpeg
+pass, no tokens, and cannot regress a scene that already rendered correctly. The trade is that the
+diagram occupies a band in the middle rather than the full height — the freed space is where the
+burned captions go, which is the conventional explainer-reel layout anyway.
 """
 from __future__ import annotations
 
@@ -24,6 +38,88 @@ from render import sandbox
 _TS = re.compile(
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})"
 )
+
+FORMATS = ("youtube", "reel")
+REEL_W, REEL_H = 1080, 1920           # the 9:16 canvas Shorts/Reels/TikTok all expect
+_REEL_SUB_STYLE = "FontSize=17,MarginV=300"  # lift captions off the bottom edge, into the pad band
+_HEX = re.compile(r"^#?([0-9a-fA-F]{6})$")
+
+
+def nominal_bg() -> str:
+    """The scene background as an ffmpeg colour (`0xRRGGBB`) — the FALLBACK pad colour.
+
+    Imported lazily: `composition.decoupled` pulls in the LLM/codegen stack, and export is used on
+    paths (captions, sidecar SRT) that have no business paying for that.
+    """
+    from composition.decoupled import BG_COLOR
+    m = _HEX.match(BG_COLOR)
+    return f"0x{m.group(1).upper()}" if m else "0x000000"
+
+
+def sample_bg(work_dir: str | Path, in_rel: str, *, network: bool | None = None,
+              image: str | None = None) -> str:
+    """The colour the finished video's background ACTUALLY decodes to, as `0xRRGGBB`.
+
+    NOT the same as the nominal `#101015` the scenes are painted with: h264 stores luma in limited
+    range, so that constant round-trips through encode/decode ~7/255 darker, around `#090A0F`.
+    Padding with the nominal colour therefore leaves a visibly LIGHTER band above and below the
+    video. Sampling the top-left corner of a frame one second in (the grid scaffold keeps all
+    content inside a margin, so the corner is always background) makes the pad match whatever the
+    encoder actually produced, and self-corrects if the background ever changes. Falls back to
+    `nominal_bg()` if the probe fails — a faint seam beats a failed export.
+    """
+    img = image or settings.render_image
+    cmd = ["docker", "run", *sandbox.hardening_args(network=network)]
+    cmd += ["-v", f"{Path(work_dir).resolve().as_posix()}:/manim", "-w", "/manim", img,
+            "ffmpeg", "-loglevel", "error", "-ss", "1", "-i", in_rel,
+            "-vf", "crop=16:16:0:0", "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=settings.render_timeout_s)
+        px = proc.stdout
+        if proc.returncode != 0 or len(px) < 3:
+            return nominal_bg()
+        n = len(px) // 3
+        r, g, b = (round(sum(px[i::3]) / n) for i in range(3))
+        return f"0x{r:02X}{g:02X}{b:02X}"
+    except (OSError, subprocess.SubprocessError):
+        return nominal_bg()
+
+
+def build_filters(fmt: str, *, srt_rel: str | None = None, bg: str | None = None) -> str:
+    """The ffmpeg `-vf` chain for one export format (pure). Empty string = no video pass needed.
+
+    For "reel" the video is scaled to the full 1080 width and centred in a 1080x1920 canvas; the
+    `-2` height keeps the aspect and rounds to an even number (libx264 rejects odd dimensions).
+    `bg` is the pad colour — pass `sample_bg()`'s result so the band matches the video's own pixels.
+    Padding happens BEFORE the subtitle filter so the captions are laid onto the tall frame and can
+    sit in the bottom band rather than being scaled down along with the video.
+    """
+    if fmt not in FORMATS:
+        raise ValueError(f"unknown export format: {fmt!r}")
+    parts: list[str] = []
+    if fmt == "reel":
+        parts.append(f"scale={REEL_W}:-2")
+        parts.append(f"pad={REEL_W}:{REEL_H}:(ow-iw)/2:(oh-ih)/2:color={bg or nominal_bg()}")
+    if srt_rel:
+        # only the reel needs restyling; the 16:9 burn stays byte-identical to what it always was
+        parts.append(f"subtitles={srt_rel}:force_style='{_REEL_SUB_STYLE}'"
+                     if fmt == "reel" else f"subtitles={srt_rel}")
+    return ",".join(parts)
+
+
+def build_export_command(work_dir: str | Path, in_rel: str, out_rel: str, *, vf: str,
+                         network: bool | None = None, image: str | None = None,
+                         name: str | None = None) -> list[str]:
+    """ffmpeg argv applying the `vf` chain to `in_rel` -> `out_rel` (re-encodes video, copies audio).
+
+    Runs in the same pinned, hardened sandbox image as every other container step.
+    """
+    img = image or settings.render_image
+    cmd = ["docker", "run", *sandbox.hardening_args(network=network, name=name)]
+    cmd += ["-v", f"{Path(work_dir).resolve().as_posix()}:/manim", "-w", "/manim", img,
+            "ffmpeg", "-loglevel", "error", "-y", "-i", in_rel,
+            "-vf", vf, "-c:a", "copy", out_rel]
+    return cmd
 
 
 def _to_seconds(h: str, m: str, s: str, ms: str) -> float:
@@ -87,16 +183,10 @@ def merge_srt(scenes: list[tuple[str, float]]) -> str:
 def build_burn_command(work_dir: str | Path, in_rel: str, srt_rel: str, out_rel: str, *,
                        network: bool | None = None, image: str | None = None,
                        name: str | None = None) -> list[str]:
-    """ffmpeg argv that burns `srt_rel` into `in_rel`, writing `out_rel` (re-encodes video, copies audio).
-
-    Runs in the same pinned, hardened sandbox image as every other container step.
-    """
-    img = image or settings.render_image
-    cmd = ["docker", "run", *sandbox.hardening_args(network=network, name=name)]
-    cmd += ["-v", f"{Path(work_dir).resolve().as_posix()}:/manim", "-w", "/manim", img,
-            "ffmpeg", "-loglevel", "error", "-y", "-i", in_rel,
-            "-vf", f"subtitles={srt_rel}", "-c:a", "copy", out_rel]
-    return cmd
+    """ffmpeg argv that burns `srt_rel` into `in_rel`, writing `out_rel` — the 16:9 subtitle pass."""
+    return build_export_command(work_dir, in_rel, out_rel,
+                                vf=build_filters("youtube", srt_rel=srt_rel),
+                                network=network, image=image, name=name)
 
 
 def _probe_duration(mp4: str | Path) -> float:
@@ -125,14 +215,20 @@ def merged_captions(project: VideoProject) -> str:
 
 
 def export(project: VideoProject, *, out_dir: str | Path, subtitles: str = "none",
-           out_name: str = "export.mp4", log=print) -> dict:
+           fmt: str = "youtube", out_name: str = "export.mp4", log=print) -> dict:
     """Produce the downloadable artifact(s). Returns {'mp4': path, 'srt': path|None}.
 
-    subtitles: "none" -> the final MP4 as-is; "separate" -> MP4 + a sidecar merged .srt;
-    "burn" -> a new MP4 with captions rendered in.
+    subtitles: "none" -> no captions; "separate" -> a sidecar merged .srt alongside the MP4;
+    "burn" -> the captions rendered into the pixels.
+    fmt: "youtube" -> the 16:9 render as-is; "reel" -> reframed to 1080x1920.
+
+    A video pass only runs when the request actually changes pixels, so "youtube"+"none" still
+    hands back the existing final.mp4 without re-encoding it.
     """
     if subtitles not in ("none", "separate", "burn"):
         raise ValueError(f"unknown subtitles mode: {subtitles!r}")
+    if fmt not in FORMATS:
+        raise ValueError(f"unknown export format: {fmt!r}")
     if not project.final_mp4 or not Path(project.final_mp4).exists():
         raise FileNotFoundError("no final video to export — build the project first")
 
@@ -141,31 +237,31 @@ def export(project: VideoProject, *, out_dir: str | Path, subtitles: str = "none
     say = log or (lambda _m: None)
     final = Path(project.final_mp4)
 
-    if subtitles == "none":
-        return {"mp4": str(final), "srt": None}
+    srt_path: Path | None = None
+    if subtitles in ("separate", "burn"):
+        say("-> merging per-scene captions into one track")
+        srt_path = out / "captions.srt"
+        srt_path.write_text(merged_captions(project), encoding="utf-8")
 
-    say("-> merging per-scene captions into one track")
-    merged = merged_captions(project)
-    srt_path = out / "captions.srt"
-    srt_path.write_text(merged, encoding="utf-8")
+    # only re-encode when the request actually changes pixels
+    if fmt == "youtube" and subtitles != "burn":
+        return {"mp4": str(final), "srt": str(srt_path) if srt_path else None}
 
-    if subtitles == "separate":
-        return {"mp4": str(final), "srt": str(srt_path)}
-
-    # burn: ffmpeg subtitles pass, in the work dir so relative paths resolve in-container
     import shutil
     import uuid
 
-    say("-> burning captions into the video")
+    say(f"-> encoding the {fmt} export" + (" with captions burned in" if subtitles == "burn" else ""))
     work = out
-    in_rel = "burn_in.mp4"
+    in_rel = "export_in.mp4"
     shutil.copy2(final, work / in_rel)
-    (work / "burn.srt").write_text(merged, encoding="utf-8")
+    # the SRT lives in the work dir too, so the filter can name it relatively (resolves in-container)
+    vf = build_filters(fmt, srt_rel=(srt_path.name if subtitles == "burn" else None),
+                       bg=(sample_bg(work, in_rel) if fmt == "reel" else None))
     name = f"lattice-export-{uuid.uuid4().hex[:12]}"
-    cmd = build_burn_command(work, in_rel, "burn.srt", out_name, name=name)
+    cmd = build_export_command(work, in_rel, out_name, vf=vf, name=name)
     proc = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
                           timeout=settings.render_timeout_s)
-    burned = work / out_name
-    if proc.returncode != 0 or not burned.exists():
-        raise RuntimeError(f"subtitle burn-in failed: {proc.stderr[-800:]}")
-    return {"mp4": str(burned), "srt": str(srt_path)}
+    produced = work / out_name
+    if proc.returncode != 0 or not produced.exists():
+        raise RuntimeError(f"{fmt} export failed: {proc.stderr[-800:]}")
+    return {"mp4": str(produced), "srt": str(srt_path) if srt_path else None}

@@ -57,3 +57,90 @@ def test_export_unknown_subtitle_mode_rejected(tmp_path):
     proj = VideoProject(topic="x")
     with pytest.raises(ValueError):
         export.export(proj, out_dir=tmp_path, subtitles="rainbow")
+
+
+@pytest.mark.unit
+def test_export_unknown_format_rejected(tmp_path):
+    from composition.scene_dag import VideoProject
+    proj = VideoProject(topic="x")
+    with pytest.raises(ValueError):
+        export.export(proj, out_dir=tmp_path, fmt="imax")
+
+
+# --- format reframe (FR-30) — the -vf chain is pure, the encode itself is integration ----------
+
+@pytest.mark.unit
+def test_youtube_needs_no_video_pass():
+    # the 16:9 render already IS the deliverable — an empty chain is what skips the re-encode
+    assert export.build_filters("youtube") == ""
+
+
+@pytest.mark.unit
+def test_reel_scales_to_phone_width_then_pads_to_9_16():
+    vf = export.build_filters("reel")
+    assert vf.startswith(f"scale={export.REEL_W}:-2,")     # -2 = keep aspect, force an even height
+    assert f"pad={export.REEL_W}:{export.REEL_H}:" in vf   # 1080x1920
+    assert "(ow-iw)/2:(oh-ih)/2" in vf                     # centred, so no edge is favoured
+
+
+@pytest.mark.unit
+def test_reel_pads_with_the_sampled_color_not_the_nominal_one():
+    """The seam guard. The scenes are painted #101015, but h264's limited-range encode makes that
+    decode ~#090A0F — padding with the nominal constant leaves a visibly lighter band (measured
+    7/255). Sampling the real frame closed it to 1/255, so the sampled colour MUST win."""
+    vf = export.build_filters("reel", bg="0x090A0F")
+    assert "color=0x090A0F" in vf
+    assert "color=0x101015" not in vf
+
+
+@pytest.mark.unit
+def test_reel_pad_falls_back_to_the_nominal_background():
+    from composition import decoupled
+    assert export.nominal_bg() == "0x" + decoupled.BG_COLOR.lstrip("#").upper()
+    assert f"color={export.nominal_bg()}" in export.build_filters("reel")   # bg=None -> fallback
+
+
+@pytest.mark.unit
+def test_sample_bg_falls_back_instead_of_raising(tmp_path, monkeypatch):
+    # a failed probe must degrade to a faint seam, never to a failed export
+    def boom(*a, **k):
+        raise OSError("no docker")
+    monkeypatch.setattr(export.subprocess, "run", boom)
+    assert export.sample_bg(tmp_path, "missing.mp4") == export.nominal_bg()
+
+
+@pytest.mark.unit
+def test_sample_bg_averages_the_corner_patch_to_a_hex_color(tmp_path, monkeypatch):
+    class Proc:
+        returncode = 0
+        stdout = bytes([9, 10, 15] * 256)   # a 16x16 rgb24 patch of the real decoded background
+    monkeypatch.setattr(export.subprocess, "run", lambda *a, **k: Proc())
+    assert export.sample_bg(tmp_path, "in.mp4") == "0x090A0F"
+
+
+@pytest.mark.unit
+def test_reel_pads_before_burning_so_captions_land_on_the_tall_frame():
+    vf = export.build_filters("reel", srt_rel="c.srt")
+    assert vf.index("pad=") < vf.index("subtitles=")   # order is the whole point
+    assert "force_style" in vf                          # captions restyled for the 9:16 canvas
+
+
+@pytest.mark.unit
+def test_youtube_burn_chain_is_unchanged_by_the_format_work():
+    # the pre-existing 16:9 burn must stay byte-identical — no force_style, no scaling
+    assert export.build_filters("youtube", srt_rel="subs.srt") == "subtitles=subs.srt"
+
+
+@pytest.mark.unit
+def test_build_filters_rejects_unknown_format():
+    with pytest.raises(ValueError):
+        export.build_filters("imax")
+
+
+@pytest.mark.unit
+def test_build_export_command_is_hardened_and_copies_audio(tmp_path):
+    cmd = export.build_export_command(tmp_path, "in.mp4", "out.mp4", vf="scale=1080:-2", name="lattice-e")
+    assert cmd[:2] == ["docker", "run"]
+    assert "--network=none" in cmd
+    assert cmd[cmd.index("-vf") + 1] == "scale=1080:-2"
+    assert cmd[cmd.index("-c:a") + 1] == "copy"

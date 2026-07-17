@@ -321,13 +321,14 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
             raise HTTPException(400, str(e))
 
     @app.get("/api/projects/{pid}/download")
-    def download(pid: str, subtitles: str = Query("none", pattern="^(none|burn)$")):
+    def download(pid: str, subtitles: str = Query("none", pattern="^(none|burn)$"),
+                 fmt: str = Query("youtube", alias="format", pattern="^(youtube|reel)$")):
         _load_or_404(pid)
         try:
-            res = engine.export(pid, subtitles=subtitles, log=lambda _m: None)
+            res = engine.export(pid, subtitles=subtitles, fmt=fmt, log=lambda _m: None)
         except FileNotFoundError as e:
             raise HTTPException(409, str(e))
-        return FileResponse(res["mp4"], media_type="video/mp4", filename=f"{pid}.mp4")
+        return FileResponse(res["mp4"], media_type="video/mp4", filename=f"{pid}-{fmt}.mp4")
 
     @app.get("/api/projects/{pid}/script")
     def script(pid: str, index: int | None = Query(None)):

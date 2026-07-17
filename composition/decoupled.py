@@ -166,10 +166,11 @@ def _silent_codegen(spec: SceneSpec, *, client: LLMClient, style=None, use_compo
     return _finalize_code(code, structural=structural, use_components=use_components)
 
 
-_BG_COLOR = "#101015"
+BG_COLOR = "#101015"  # single source: also the pad color for vertical export (composition/export.py)
+_BG_COLOR = BG_COLOR  # back-compat alias
 
 
-def _enforce_background(code: str, color: str = _BG_COLOR) -> str:
+def _enforce_background(code: str, color: str = BG_COLOR) -> str:
     """Deterministically pin a consistent background: strip any model-set background_color line and
     inject ours as the first statement of construct(). Kills the navy/black inconsistency for free,
     without relying on the model to set it the same way every scene."""

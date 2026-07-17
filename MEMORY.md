@@ -34,6 +34,30 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 
 <!-- Newest first. Append a dated entry when a phase/milestone/task completes. Format: ### YYYY-MM-DD — what changed and why -->
 
+### 2026-07-17 — Direct export presets: YouTube (16:9) + Reel (9:16), reframed at export
+- **Two delivery formats from ONE build.** `GET /api/projects/{pid}/download?format=youtube|reel`
+  (+ the existing `subtitles=none|burn`). "youtube" = the finished `final.mp4` handed back untouched,
+  **no re-encode**; "reel" = one ffmpeg pass → 1080x1920. UI: a format segmented control in the
+  download dropdown (`app.js` `studio()`, `state.format`).
+- **Reframe, NOT a native vertical render — deliberate.** A portrait Manim frame would mean redoing
+  every landscape constant in the grid scaffold (`_MAIN_X/_MAIN_Y`, the 12.4x5.8 `fit_content` safe
+  area, title caps, the `11.5` width-cap regex, the prompt's "8 cols / rows A–E" rules), would
+  re-open the layout failure class this project has spent months closing by construction, AND would
+  cost a second LLM build per format. It would also trip `sandbox._RES_BY_FLAG` (maps `-qh` →
+  literal `"1080p60"` to FIND the output; passing `-r` makes Manim write elsewhere → silent
+  no-output). Padding costs one ffmpeg pass, zero tokens, and cannot regress a scene that rendered
+  correctly. Trade: the diagram is a centre band; the freed space is where burned captions go.
+- **Seam bug found by looking at the rendered frame, not the code** (exactly the `judge-by-rendered-frames`
+  lesson). Padding with the nominal `#101015` produced a visibly LIGHTER band: h264's limited-range
+  encode makes that constant *decode* as ~`#090A0F` (7/255 off). Forcing `in_range/out_range=tv` did
+  nothing (the mismatch is on source decode, not pad conversion); a blurred-cover bg was still 3/255
+  off at ~3x CPU. Fix = `export.sample_bg()` samples the video's OWN corner and pads with that →
+  **seam 7/255 → 1/255**. Self-corrects for future/per-project backgrounds; falls back to nominal.
+- `build_filters()` / `build_export_command()` are pure + unit-tested (16 tests); `build_burn_command`
+  now delegates and the 16:9 burn chain is asserted byte-identical. `decoupled._BG_COLOR` → public
+  `BG_COLOR` (single source, aliased for back-compat). Verified live on a real 264s build: 1920x1080
+  → 1080x1920, duration preserved, youtube path returns `final.mp4` itself.
+
 ### 2026-07-12 — Autonomous self-test harness (run-once, no human in the loop)
 - **`python -m scripts.selftest ["<topic>"]`** drives the REAL user path via `web.engine.Engine`
   (plan → auto-approve the theme/outline gate → build → stitch), then GRADES the rendered output —
