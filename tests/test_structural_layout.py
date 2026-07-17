@@ -137,8 +137,14 @@ def test_scaffold_methods_parsed_from_source_not_hardcoded():
     for real in ("self.cell(", "self.place(", "self.place_in_area(", "self.node(",
                  "self.connect(", "self.icon(", "self.setup_scene("):
         assert real in joined, f"{real} missing from scaffold_methods()"
-    # ...and private/dunder helpers are NOT (they aren't part of the model-facing API)
-    assert not any("_label" in m or "_style_kw" in m for m in methods)
+    # ...and private/dunder helpers are NOT (they aren't part of the model-facing API).
+    # Check the method NAME, not a substring of the whole signature: `"_label" in m` also matches the
+    # legitimate public params x_label= / y_label= / col_labels=, so it failed on self.graph() and
+    # self.table() even though the parser had excluded _label() and _style_kw() correctly.
+    names = [m.split("(", 1)[0] for m in methods]
+    assert not [n for n in names if n.startswith("self._")], f"private helper exposed: {names}"
+    for private in ("self._label", "self._style_kw"):
+        assert private not in names
 
 
 @pytest.mark.unit
