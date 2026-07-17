@@ -58,7 +58,12 @@ ul.bul li{font-size:17px;color:var(--muted);line-height:1.5;}
 ul.bul .lab{font-weight:700;}
 ul.bul .dot{color:var(--faint);margin-right:9px;}
 .kicker{font-family:Georgia,serif;font-size:19px;color:var(--amber);font-weight:600;}
-.foot{position:absolute;bottom:26px;left:0;right:0;text-align:center;font-size:12.5px;color:var(--faint);}
+/* the Lattice mark — baked into the screenshot, so it costs nothing: no overlay pass, no re-encode */
+.foot{position:absolute;bottom:22px;right:26px;display:flex;align-items:center;gap:7px;opacity:.5;}
+.foot .glyph{width:15px;height:15px;position:relative;border:1.2px solid var(--amber);border-radius:2px;}
+.foot .glyph i{position:absolute;background:var(--amber);}
+.foot .glyph i.v{top:0;bottom:0;width:1px;} .foot .glyph i.h{left:0;right:0;height:1px;}
+.foot .word{font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.02em;}
 /* focus states: the element being SPOKEN lights up, everything else recedes. One frame per narration
    beat, held for that beat's measured audio length -> the highlight tracks the voice exactly. */
 .dim{opacity:.3;filter:saturate(.3);}
@@ -186,8 +191,17 @@ def slide_html(s: Slide, focus: int = -1) -> str:
     return f'<div class="slide">{head}{inner}</div>'
 
 
+def brand_html(word: str = "Lattice") -> str:
+    """The Lattice mark: the grid glyph + wordmark, in CSS. Free — it lands in the screenshot Chrome
+    is already taking, so there is no overlay filter and no extra encode anywhere in the deck path."""
+    rules = ('<i class="v" style="left:33%"></i><i class="v" style="left:66%"></i>'
+             '<i class="h" style="top:33%"></i><i class="h" style="top:66%"></i>')
+    return (f'<div class="foot"><div class="glyph">{rules}</div>'
+            f'<div class="word">{escape(word)}</div></div>')
+
+
 def page_html(s: Slide, footer: str = "", focus: int = -1) -> str:
     """A standalone 1280x720 page for headless Chrome to screenshot."""
-    foot = f'<div class="foot">{escape(footer)}</div>' if footer else ""
+    foot = brand_html(footer) if footer else ""
     return (f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>'
             f'<body>{slide_html(s, focus)}{foot}</body></html>')

@@ -169,6 +169,30 @@ class LatticeScene(Scene):
     MAIN_Y = (2.3, -3.0)
     ICON_DIR = "/opt/icons"        # curated line-icons baked into the render image (see assets/icons/)
 
+    def _watermark(self):
+        """The Lattice mark, bottom-right. Drawn WITH the frame, so it costs nothing: no extra encode,
+        no export pass. Living in the scaffold means the model can't move, restyle or forget it — the
+        same reason the scaffold owns layout. Excluded from fit_content() (see there) or it would be
+        scaled and dragged around with the content on every scene."""
+        c = "#F2B441"
+        s = 0.30
+        box = Square(side_length=s, stroke_width=1.5, stroke_color=c, fill_opacity=0)
+        rules = VGroup(*[Line([box.get_left()[0] + s * f, box.get_bottom()[1], 0],
+                              [box.get_left()[0] + s * f, box.get_top()[1], 0],
+                              stroke_width=1.0, stroke_color=c) for f in (1 / 3, 2 / 3)],
+                       *[Line([box.get_left()[0], box.get_bottom()[1] + s * f, 0],
+                              [box.get_right()[0], box.get_bottom()[1] + s * f, 0],
+                              stroke_width=1.0, stroke_color=c) for f in (1 / 3, 2 / 3)])
+        word = Text("Lattice", font_size=15, weight=BOLD, color=c)
+        glyph = VGroup(box, rules)
+        # NOT mark.set_opacity(): in Manim that sets fill AND stroke, so it overrides fill_opacity=0
+        # and the outlined grid fills in as a solid grey block. Stroke for the glyph, fill for the text.
+        glyph.set_fill(opacity=0).set_stroke(color=c, opacity=0.5)
+        word.set_opacity(0.5)
+        mark = VGroup(glyph, word).arrange(RIGHT, buff=0.13)
+        mark.to_corner(DR, buff=0.28)
+        return mark
+
     def setup_scene(self, title):
         """MUST be the first call in construct(). Renders the title (always, fit to frame) + builds the grid."""
         self.camera.background_color = "#101015"
@@ -176,6 +200,8 @@ class LatticeScene(Scene):
         if self.scene_title.width > 12.5:
             self.scene_title.scale_to_fit_width(12.5)
         self.add(self.scene_title)
+        self.watermark = self._watermark()
+        self.add(self.watermark)
         self.grid = {}
         rows, cols = self.GRID_ROWS, self.GRID_COLS
         for ri, row in enumerate(rows):
@@ -290,8 +316,10 @@ class LatticeScene(Scene):
         the final frame is forced inside the safe area. Fully wrapped -> can never break a render."""
         try:
             title = getattr(self, "scene_title", None)
+            mark = getattr(self, "watermark", None)     # excluded, or the brand drifts + scales per scene
             content = [m for m in self.mobjects
-                       if m is not title and float(getattr(m, "width", 0)) > 0.01
+                       if m is not title and m is not mark
+                       and float(getattr(m, "width", 0)) > 0.01
                        and float(getattr(m, "height", 0)) > 0.01]
             if not content:
                 return
