@@ -6,6 +6,7 @@ needs no compile-repair, no layout lint, and no vision critic: there is no gener
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from core.llm import LLMClient, get_client
@@ -14,6 +15,74 @@ from generation.slide_deck import Slide
 from prompts.loader import load
 
 _KINDS = {"title", "cards", "chips", "bullets", "math"}
+
+# --- script lint: the filler ban, enforced deterministically ---------------------------------
+# The prompt asks for no filler; a prompt alone drifts. These are free, text-only checks whose error
+# feeds straight back into the plan retry loop — the same "system owns quality" move as layout_lint,
+# except it costs nothing and never gives a false positive on a real sentence.
+_FILLER = re.compile(
+    r"\b(in this (slide|video|section)|let'?s (take a look|dive|move on|explore|begin|start)"
+    r"|as you can see|as we can see|it'?s important to note|in today'?s video|welcome back"
+    r"|first,? we have|simply put|at the end of the day|that'?s where \w+ comes in"
+    r"|stay tuned|without further ado|hope you (enjoyed|liked)|don'?t forget to"
+    r"|amazing|revolutionary|game[- ]chang\w*|incredibly powerful)\b", re.I)
+
+_MAX_WORDS = 32          # a beat longer than this is a paragraph, not a spoken line
+_NORM = re.compile(r"[^a-z0-9 ]+")
+
+
+def _norm(s: str) -> str:
+    return " ".join(_NORM.sub(" ", str(s).lower()).split())
+
+
+def _elements(sd: dict) -> list[str]:
+    """The slide's focusable elements, as the text a beat would be restating."""
+    kind = sd.get("kind")
+    if kind == "cards":
+        return [f"{c.get('label','')} {c.get('sub','')}" for c in sd.get("cards") or []]
+    if kind == "chips":
+        return [str(c) for c in sd.get("chips") or []]
+    if kind == "bullets":
+        return [f"{b.get('label','')} {b.get('text','')}" for b in sd.get("bullets") or []]
+    return []
+
+
+def _lint_beats(sd: dict, i: int) -> None:
+    """Reject filler, over-long beats, out-of-range focus, and narration that just reads the slide."""
+    beats = sd.get("beats")
+    if not isinstance(beats, list) or not beats:
+        raise ValueError(f"slide {i}: 'beats' is required — every slide needs narration")
+    els = _elements(sd)
+    for j, b in enumerate(beats):
+        if not isinstance(b, dict):
+            raise ValueError(f"slide {i} beat {j}: must be an object with 'say' and 'focus'")
+        say = str(b.get("say", "")).strip()
+        if not say:
+            raise ValueError(f"slide {i} beat {j}: 'say' is empty")
+        hit = _FILLER.search(say)
+        if hit:
+            raise ValueError(f"slide {i} beat {j}: banned filler phrase {hit.group(0)!r} in "
+                             f"{say!r} — say a fact about the topic instead")
+        if len(say.split()) > _MAX_WORDS:
+            raise ValueError(f"slide {i} beat {j}: {len(say.split())} words (max {_MAX_WORDS}) — "
+                             f"split it into separate beats")
+        try:
+            foc = int(b.get("focus", -1))
+        except (TypeError, ValueError):
+            raise ValueError(f"slide {i} beat {j}: 'focus' must be an integer index or -1")
+        if foc >= len(els):
+            raise ValueError(f"slide {i} beat {j}: focus {foc} but the slide has {len(els)} "
+                             f"focusable elements (use 0..{len(els)-1}, or -1)")
+        b["focus"] = foc
+        if foc >= 0 and _norm(say) == _norm(els[foc]):     # narration must ADD to the slide, not read it
+            raise ValueError(f"slide {i} beat {j}: {say!r} just restates the element it points at — "
+                             f"say why it matters or what breaks without it")
+    # Every element must get spoken about, or it sits dimmed for the whole slide with nothing said
+    # about it — the model reliably forgets this on `bullets`, so it is enforced here, not asked for.
+    missing = [k for k in range(len(els)) if k not in {int(b.get("focus", -1)) for b in beats}]
+    if missing:
+        raise ValueError(f"slide {i}: elements {missing} are never focused by any beat — give each "
+                         f"one its own beat with \"focus\" set to its index, in order")
 
 
 class SlidePlanError(RuntimeError):
@@ -60,6 +129,7 @@ def _validate(data: dict) -> Deck:
                 safe_expr(str(sd.get("fn", "")))
             except MathSceneError as e:
                 raise ValueError(f"slide {i}: bad fn — {e}")
+        _lint_beats(sd, i)
         slides.append(Slide.from_dict(sd))
     return Deck(title=str(data.get("title") or slides[0].title or "Untitled"), slides=slides)
 

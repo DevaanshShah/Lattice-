@@ -44,12 +44,14 @@ def _ffmpeg() -> str:
     return shutil.which("ffmpeg") or "ffmpeg"
 
 
-def render_slide(slide: Slide, out_png: str | Path, *, footer: str = "", timeout: int = 60) -> Path:
-    """Rasterise ONE slide to a PNG via headless Chrome. Deterministic: same input -> same pixels."""
+def render_slide(slide: Slide, out_png: str | Path, *, footer: str = "", focus: int = -1,
+                 timeout: int = 60) -> Path:
+    """Rasterise ONE slide to a PNG via headless Chrome. Deterministic: same input -> same pixels.
+    `focus` lights up the element the narrator is speaking about and dims the rest."""
     out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     html = out_png.with_suffix(".html")
-    html.write_text(page_html(slide, footer=footer), encoding="utf-8")
+    html.write_text(page_html(slide, footer=footer, focus=focus), encoding="utf-8")
     cmd = [chrome_path(), "--headless=new", "--disable-gpu", "--hide-scrollbars",
            f"--window-size={W},{H}", f"--screenshot={out_png}", html.resolve().as_uri()]
     subprocess.run(cmd, capture_output=True, timeout=timeout)
@@ -114,24 +116,75 @@ def render_math_slide(slide, work_dir: str | Path, *, seconds: float = 7.0,
 
 
 def _norm_clip(src: str | Path, out: str | Path, *, seconds: float | None = None,
-               fps: int = 30, timeout: int = 300) -> Path:
-    """Normalise a PNG (held for `seconds`) OR an mp4 to ONE uniform clip (same size/fps/codec) so the
-    Chrome slides and the Manim scene can be concatenated together."""
+               fps: int = 30, audio: str | Path | None = None, timeout: int = 300) -> Path:
+    """Normalise a PNG (held for `seconds`) OR an mp4 to ONE uniform clip — same size, fps, codec, and
+    ALWAYS an audio stream — so Chrome slides and Manim scenes concat and crossfade together.
+    `audio` is that clip's narration; silence fills in when there is none. The audio is `apad`ded and
+    trimmed with -shortest, so the clip is exactly as long as its video regardless of track length."""
     src, out = Path(src), Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     is_img = src.suffix.lower() in (".png", ".jpg", ".jpeg")
     cmd = [_ffmpeg(), "-y"]
     if is_img:
         cmd += ["-loop", "1", "-t", f"{float(seconds or 4.0):.3f}"]
-    cmd += ["-i", str(src),
-            "-vf", (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+    cmd += ["-i", str(src)]
+    if audio:
+        cmd += ["-i", str(audio)]
+    else:                                    # every clip needs a track or acrossfade has nothing to join
+        cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+    cmd += ["-vf", (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
                     f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,fps={fps},format=yuv420p"),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-an", str(out)]
+            "-af", "apad", "-shortest",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", str(out)]
     res = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if res.returncode != 0 or not out.exists():
         raise SlideRenderError(f"clip normalise failed ({src.name}): "
                                f"{(res.stderr or b'').decode('utf-8', 'replace')[-240:]}")
     return out
+
+
+def _probe_duration(path: str | Path) -> float:
+    """Exact clip length — the crossfade offsets must be computed from what ffmpeg actually wrote."""
+    probe = shutil.which("ffprobe") or "ffprobe"
+    res = subprocess.run([probe, "-v", "error", "-show_entries", "format=duration",
+                          "-of", "default=nw=1:nk=1", str(path)], capture_output=True, timeout=60)
+    try:
+        return float((res.stdout or b"").decode().strip())
+    except ValueError:
+        raise SlideRenderError(f"could not probe duration of {Path(path).name}")
+
+
+def _xfade_chain(clips: list[Path], out_mp4: Path, *, dur: float = 0.45, timeout: int = 600) -> Path:
+    """Concat clips with a crossfade at every seam (video xfade + audio acrossfade, kept in step).
+
+    Each xfade overlaps the pair by `dur`, so the running stream is `dur` shorter per seam — hence the
+    offset for seam i is (sum of clip lengths before it) - i*dur. acrossfade shortens the audio by the
+    same amount at the same seam, which is what keeps voice and picture locked together."""
+    if len(clips) == 1:
+        shutil.copyfile(clips[0], out_mp4)
+        return out_mp4
+    durs = [_probe_duration(c) for c in clips]
+    dur = max(0.05, min(dur, min(durs) * 0.4))   # a fade longer than a clip would eat it whole
+    cmd = [_ffmpeg(), "-y"]
+    for c in clips:
+        cmd += ["-i", str(c)]
+    steps, offset = [], 0.0
+    v_prev, a_prev = "[0:v]", "[0:a]"
+    for i in range(1, len(clips)):
+        offset += durs[i - 1] - dur
+        v_out, a_out = f"[v{i}]", f"[a{i}]"
+        steps.append(f"{v_prev}[{i}:v]xfade=transition=fade:duration={dur:.3f}:"
+                     f"offset={max(offset, 0.0):.3f}{v_out}")
+        steps.append(f"{a_prev}[{i}:a]acrossfade=d={dur:.3f}:c1=tri:c2=tri{a_out}")
+        v_prev, a_prev = v_out, a_out
+    cmd += ["-filter_complex", ";".join(steps), "-map", v_prev, "-map", a_prev,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "160k", str(out_mp4)]
+    res = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    if res.returncode != 0 or not out_mp4.exists():
+        raise SlideRenderError(f"xfade failed: {(res.stderr or b'').decode('utf-8', 'replace')[-300:]}")
+    return out_mp4
 
 
 def _concat_clips(clips: list[Path], out_mp4: Path, *, audio=None, timeout: int = 300) -> Path:
@@ -141,9 +194,10 @@ def _concat_clips(clips: list[Path], out_mp4: Path, *, audio=None, timeout: int 
                    encoding="utf-8")
     cmd = [_ffmpeg(), "-y", "-f", "concat", "-safe", "0", "-i", str(lst)]
     if audio:
-        cmd += ["-i", str(audio), "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest"]
+        cmd += ["-i", str(audio), "-map", "0:v", "-map", "1:a",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest"]
     else:
-        cmd += ["-c:v", "copy"]
+        cmd += ["-c", "copy"]
     cmd += [str(out_mp4)]
     res = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if res.returncode != 0 or not out_mp4.exists():
@@ -151,20 +205,68 @@ def _concat_clips(clips: list[Path], out_mp4: Path, *, audio=None, timeout: int 
     return out_mp4
 
 
+_BEAT_PAD = 0.4     # a breath after each spoken sentence, so beats don't run together
+
+
+def _slide_clip(slide: Slide, out_dir: Path, idx: int, *, footer: str, seconds: float, fps: int,
+                narrate: bool, tts_engine: str | None, math_quality: str) -> Path:
+    """One slide -> one narrated clip.
+
+    The sync trick: each beat's audio is synthesized FIRST and measured, then its frame is held for
+    exactly that long. Because the track is built from the beats, the highlight cannot drift out of
+    step with the voice — no forced alignment, no timing model, nothing to get wrong.
+    Beats hard-cut into each other (the highlight should snap, not dissolve); only slide seams fade."""
+    from narration.tts import synthesize
+    audio_dir = out_dir / "audio"
+    dst = out_dir / f"clip_{idx:02d}.mp4"
+
+    if slide.kind == "math":                       # narration plays over the whole Manim animation
+        script = slide.script()
+        clip = synthesize(script, out_dir=audio_dir, engine=tts_engine) if (narrate and script) else None
+        secs = (clip.duration + 1.2) if clip else max(6.0, seconds + 3.0)
+        mp4 = render_math_slide(slide, out_dir / f"math_{idx:02d}", seconds=secs, quality=math_quality)
+        return _norm_clip(mp4, dst, fps=fps, audio=clip.path if clip else None)
+
+    beats = list(slide.beats) if (narrate and slide.beats) else []
+    if not beats:                                  # silent deck: one static frame, fixed duration
+        png = render_slide(slide, out_dir / f"slide_{idx:02d}.png", footer=footer)
+        return _norm_clip(png, dst, seconds=seconds, fps=fps)
+
+    parts: list[Path] = []
+    for j, b in enumerate(beats):
+        say = str(b.get("say", "")).strip()
+        if not say:
+            continue
+        clip = synthesize(say, out_dir=audio_dir, engine=tts_engine)
+        png = render_slide(slide, out_dir / f"slide_{idx:02d}_{j:02d}.png", footer=footer,
+                           focus=int(b.get("focus", -1)))
+        parts.append(_norm_clip(png, out_dir / f"beat_{idx:02d}_{j:02d}.mp4",
+                                seconds=clip.duration + _BEAT_PAD, fps=fps, audio=clip.path))
+    if not parts:
+        png = render_slide(slide, out_dir / f"slide_{idx:02d}.png", footer=footer)
+        return _norm_clip(png, dst, seconds=seconds, fps=fps)
+    return _concat_clips(parts, dst)
+
+
 def build_deck(slides: list[Slide], out_dir: str | Path, *, seconds: float = 4.0, audio=None,
-               footer: str = "", math_quality: str = "final", fps: int = 30) -> Path:
+               footer: str = "", math_quality: str = "final", fps: int = 30,
+               narrate: bool = True, tts_engine: str | None = None,
+               transition: float = 0.45) -> Path:
     """HYBRID build: each slide goes to Chrome (fast, free, deterministic) EXCEPT kind="math", which
-    goes to Manim (the ~20% CSS can't do). Everything is normalised to one clip format and concatenated.
-    Returns the final mp4."""
+    goes to Manim (the ~20% CSS can't do). Slides are narrated beat-by-beat with the spoken element
+    highlighted, then crossfaded together. Returns the final mp4.
+
+    narrate=False falls back to fixed-duration silent frames; `audio` then muxes a single track over
+    the whole deck (music). `transition=0` hard-cuts."""
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
-    clips: list[Path] = []
-    for i, s in enumerate(slides):
-        dst = out_dir / f"clip_{i:02d}.mp4"
-        if s.kind == "math":
-            mp4 = render_math_slide(s, out_dir / f"math_{i:02d}",
-                                    seconds=max(6.0, seconds + 3.0), quality=math_quality)
-            clips.append(_norm_clip(mp4, dst, fps=fps))
-        else:
-            png = render_slide(s, out_dir / f"slide_{i:02d}.png", footer=footer)
-            clips.append(_norm_clip(png, dst, seconds=seconds, fps=fps))
-    return _concat_clips(clips, out_dir / "deck.mp4", audio=audio)
+    clips = [_slide_clip(s, out_dir, i, footer=footer, seconds=seconds, fps=fps, narrate=narrate,
+                         tts_engine=tts_engine, math_quality=math_quality)
+             for i, s in enumerate(slides)]
+    out = out_dir / "deck.mp4"
+    if transition > 0 and len(clips) > 1:
+        faded = _xfade_chain(clips, out_dir / "faded.mp4", dur=transition)
+        if not audio:
+            shutil.move(str(faded), str(out))
+            return out
+        return _concat_clips([faded], out, audio=audio)
+    return _concat_clips(clips, out, audio=audio)

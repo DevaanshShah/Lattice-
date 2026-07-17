@@ -59,6 +59,15 @@ ul.bul .lab{font-weight:700;}
 ul.bul .dot{color:var(--faint);margin-right:9px;}
 .kicker{font-family:Georgia,serif;font-size:19px;color:var(--amber);font-weight:600;}
 .foot{position:absolute;bottom:26px;left:0;right:0;text-align:center;font-size:12.5px;color:var(--faint);}
+/* focus states: the element being SPOKEN lights up, everything else recedes. One frame per narration
+   beat, held for that beat's measured audio length -> the highlight tracks the voice exactly. */
+.dim{opacity:.3;filter:saturate(.3);}
+.card.on{transform:translateY(-3px) scale(1.035);
+         border-color:color-mix(in srgb, var(--c) 85%, transparent);
+         box-shadow:0 0 46px -4px color-mix(in srgb, var(--c) 72%, transparent);}
+.chip.on,.idchip.on{background:#26263a;border-color:#4a4a68;transform:scale(1.06);}
+ul.bul li.on{color:var(--ink);}
+ul.bul li.on .dot{color:var(--amber);}
 """
 
 _COLORS = ("blue", "purple", "green", "amber", "cyan", "red")
@@ -88,48 +97,66 @@ class Slide:
     note: str = ""
     bullets: list = field(default_factory=list)    # [{label, text, color}]
     kicker: str = ""
+    # narration split into beats: [{"say": "<one spoken sentence>", "focus": <element index|-1>}].
+    # One rendered frame per beat, held for that beat's measured TTS duration.
+    beats: list = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Slide":
         known = {f for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in d.items() if k in known})
 
+    def script(self) -> str:
+        """The slide's narration as one string (used for the math scene, which has no beat frames)."""
+        return " ".join(str(b.get("say", "")).strip() for b in self.beats).strip()
 
-def _cards_html(s: Slide) -> str:
+
+def _fx(i: int, focus: int) -> str:
+    """Class for element `i` given the focused index: lit, dimmed, or neutral (focus < 0)."""
+    if focus < 0:
+        return ""
+    return " on" if i == focus else " dim"
+
+
+def _cards_html(s: Slide, focus: int = -1) -> str:
     parts = []
     for i, c in enumerate(s.cards):
         col = _c(str(c.get("color", "")), i)
-        parts.append(f'<div class="card" style="--c:var(--{col})">'
+        parts.append(f'<div class="card{_fx(i, focus)}" style="--c:var(--{col})">'
                      f'<div class="t">{escape(str(c.get("label", "")))}</div>'
                      f'<div class="s">{escape(str(c.get("sub", "")))}</div></div>')
     row = f'<span class="arrow">&#8594;</span>'.join(parts)
     out = f'<div class="row">{row}</div>'
     if s.subboxes:
-        subs = "".join(f'<div class="subbox"><div class="a">{escape(str(b.get("a", "")))}</div>'
-                       f'<div class="b">{escape(str(b.get("b", "")))}</div></div>' for b in s.subboxes)
+        subs = "".join(f'<div class="subbox{_fx(i, focus)}"><div class="a">{escape(str(b.get("a", "")))}</div>'
+                       f'<div class="b">{escape(str(b.get("b", "")))}</div></div>'
+                       for i, b in enumerate(s.subboxes))
         out += f'<div class="row" style="gap:16px;margin-top:-16px;">{subs}</div>'
     return out
 
 
-def _chips_html(s: Slide) -> str:
+def _chips_html(s: Slide, focus: int = -1) -> str:
     out = ""
     if s.lead:
         out += f'<div class="lead">{escape(s.lead)}</div>'
     if s.chips:
         out += '<div class="row" style="gap:12px;">' + "".join(
-            f'<div class="chip">{escape(str(t))}</div>' for t in s.chips) + "</div>"
+            f'<div class="chip{_fx(i, focus)}">{escape(str(t))}</div>'
+            for i, t in enumerate(s.chips)) + "</div>"
     if s.ids:
         out += '<div class="row" style="gap:12px;"><span class="tick">&#8595;</span></div>'
         out += '<div class="row" style="gap:12px;">' + "".join(
-            f'<div class="idchip">{escape(str(t))}</div>' for t in s.ids) + "</div>"
+            f'<div class="idchip{_fx(i, focus)}">{escape(str(t))}</div>'
+            for i, t in enumerate(s.ids)) + "</div>"
     if s.note:
         out += f'<div class="note">{escape(s.note)}</div>'
     return out
 
 
-def _bullets_html(s: Slide) -> str:
+def _bullets_html(s: Slide, focus: int = -1) -> str:
     lis = "".join(
-        f'<li><span class="dot">&#8226;</span><span class="lab" style="color:var(--{_c(str(b.get("color", "")), i)})">'
+        f'<li class="{_fx(i, focus).strip()}"><span class="dot">&#8226;</span>'
+        f'<span class="lab" style="color:var(--{_c(str(b.get("color", "")), i)})">'
         f'{escape(str(b.get("label", "")))}:</span> {escape(str(b.get("text", "")))}</li>'
         for i, b in enumerate(s.bullets))
     out = f'<ul class="bul">{lis}</ul>'
@@ -138,9 +165,10 @@ def _bullets_html(s: Slide) -> str:
     return out
 
 
-def slide_html(s: Slide) -> str:
-    """The inner markup for one slide (no <html>/<style>). `math` slides never reach here — the deck
-    builder routes them to generation.math_scene (Manim) because CSS cannot plot a function."""
+def slide_html(s: Slide, focus: int = -1) -> str:
+    """The inner markup for one slide (no <html>/<style>). `focus` is the index of the element the
+    narrator is speaking about right now — it lights up and the rest dim. -1 = no highlight.
+    `math` slides never reach here — the deck builder routes them to generation.math_scene."""
     if s.kind == "math":
         raise ValueError("math slides render via generation.math_scene, not HTML")
     if s.kind == "title":
@@ -150,16 +178,16 @@ def slide_html(s: Slide) -> str:
         return f'<div class="slide">{body}</div>'
     head = f'<h2>{escape(s.title)}</h2>' if s.title else ""
     if s.kind == "cards":
-        inner = _cards_html(s)
+        inner = _cards_html(s, focus)
     elif s.kind == "chips":
-        inner = _chips_html(s)
+        inner = _chips_html(s, focus)
     else:
-        inner = _bullets_html(s)
+        inner = _bullets_html(s, focus)
     return f'<div class="slide">{head}{inner}</div>'
 
 
-def page_html(s: Slide, footer: str = "") -> str:
-    """A standalone 1200x675 page for headless Chrome to screenshot."""
+def page_html(s: Slide, footer: str = "", focus: int = -1) -> str:
+    """A standalone 1280x720 page for headless Chrome to screenshot."""
     foot = f'<div class="foot">{escape(footer)}</div>' if footer else ""
     return (f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>'
-            f'<body>{slide_html(s)}{foot}</body></html>')
+            f'<body>{slide_html(s, focus)}{foot}</body></html>')
