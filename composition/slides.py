@@ -208,6 +208,34 @@ def _concat_clips(clips: list[Path], out_mp4: Path, *, audio=None, timeout: int 
 _BEAT_PAD = 0.4     # a breath after each spoken sentence, so beats don't run together
 
 
+def _mix_music(video: Path, music: str | Path, out_mp4: Path, *, gain: float = 0.20,
+               duck: bool = True, timeout: int = 600) -> Path:
+    """Lay a music bed UNDER the finished narration (never over it).
+
+    The bed is looped to the video's length and side-chained to the voice: whenever narration is
+    present the compressor pulls the music down, and it swells back in the gaps. That is why this
+    mixes instead of replacing the track — a bed that competes with the voice is worse than silence.
+
+    amix MUST be duration=shortest, not `first`: `first` means the first INPUT, which is the
+    -stream_loop'd music — i.e. infinite, and the render never terminates.
+    """
+    cmd = [_ffmpeg(), "-y", "-i", str(video), "-stream_loop", "-1", "-i", str(music)]
+    bed = f"[1:a]volume={gain:.3f},afade=t=in:d=1.5[m]"
+    if duck:
+        # asplit: the voice is BOTH the compressor's trigger and the thing mixed back in
+        chain = (f"[0:a]asplit=2[voice][key];{bed};"
+                 f"[m][key]sidechaincompress=threshold=0.02:ratio=6:attack=15:release=350[bed];"
+                 f"[bed][voice]amix=inputs=2:duration=shortest:normalize=0[a]")
+    else:
+        chain = f"{bed};[m][0:a]amix=inputs=2:duration=shortest:normalize=0[a]"
+    cmd += ["-filter_complex", chain, "-map", "0:v", "-map", "[a]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", str(out_mp4)]
+    res = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    if res.returncode != 0 or not out_mp4.exists():
+        raise SlideRenderError(f"music mix failed: {(res.stderr or b'').decode('utf-8', 'replace')[-300:]}")
+    return out_mp4
+
+
 def _slide_clip(slide: Slide, out_dir: Path, idx: int, *, footer: str, seconds: float, fps: int,
                 narrate: bool, tts_engine: str | None, math_quality: str) -> Path:
     """One slide -> one narrated clip.
@@ -251,22 +279,28 @@ def _slide_clip(slide: Slide, out_dir: Path, idx: int, *, footer: str, seconds: 
 def build_deck(slides: list[Slide], out_dir: str | Path, *, seconds: float = 4.0, audio=None,
                footer: str = "", math_quality: str = "final", fps: int = 30,
                narrate: bool = True, tts_engine: str | None = None,
-               transition: float = 0.45) -> Path:
+               transition: float = 0.45, music: str | Path | None = None,
+               music_gain: float = 0.20) -> Path:
     """HYBRID build: each slide goes to Chrome (fast, free, deterministic) EXCEPT kind="math", which
     goes to Manim (the ~20% CSS can't do). Slides are narrated beat-by-beat with the spoken element
     highlighted, then crossfaded together. Returns the final mp4.
 
-    narrate=False falls back to fixed-duration silent frames; `audio` then muxes a single track over
-    the whole deck (music). `transition=0` hard-cuts."""
+    `music` lays a ducked bed under the narration. `narrate=False` gives fixed-duration silent frames,
+    and `audio` then REPLACES the whole track (kept for the silent path). `transition=0` hard-cuts."""
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     clips = [_slide_clip(s, out_dir, i, footer=footer, seconds=seconds, fps=fps, narrate=narrate,
                          tts_engine=tts_engine, math_quality=math_quality)
              for i, s in enumerate(slides)]
     out = out_dir / "deck.mp4"
+    stitched = out if not music else out_dir / "voice.mp4"
     if transition > 0 and len(clips) > 1:
         faded = _xfade_chain(clips, out_dir / "faded.mp4", dur=transition)
-        if not audio:
-            shutil.move(str(faded), str(out))
-            return out
-        return _concat_clips([faded], out, audio=audio)
-    return _concat_clips(clips, out, audio=audio)
+        if audio:
+            _concat_clips([faded], stitched, audio=audio)
+        else:
+            shutil.move(str(faded), str(stitched))
+    else:
+        _concat_clips(clips, stitched, audio=audio)
+    if music:
+        _mix_music(stitched, music, out, gain=music_gain)
+    return out
