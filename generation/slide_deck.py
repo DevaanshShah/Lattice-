@@ -71,8 +71,14 @@ def _c(name: str, i: int = 0) -> str:
 
 @dataclass
 class Slide:
-    kind: str                       # title | cards | chips | bullets
+    kind: str                       # title | cards | chips | bullets | math (math routes to Manim)
     title: str = ""
+    # --- math-slide fields (kind="math"): rendered by generation.math_scene, NOT by this HTML path ---
+    fn: str = ""                    # f(x) expression, e.g. "0.5*(x-1)**2 + 1"
+    x_range: list = field(default_factory=list)   # [x_min, x_max]
+    dots: list = field(default_factory=list)      # x values to mark on the curve
+    x_label: str = ""
+    y_label: str = ""
     subtitle: str = ""
     cards: list = field(default_factory=list)      # [{label, sub, color}]
     subboxes: list = field(default_factory=list)   # [{a, b}] under the cards
@@ -133,7 +139,10 @@ def _bullets_html(s: Slide) -> str:
 
 
 def slide_html(s: Slide) -> str:
-    """The inner markup for one slide (no <html>/<style>)."""
+    """The inner markup for one slide (no <html>/<style>). `math` slides never reach here — the deck
+    builder routes them to generation.math_scene (Manim) because CSS cannot plot a function."""
+    if s.kind == "math":
+        raise ValueError("math slides render via generation.math_scene, not HTML")
     if s.kind == "title":
         body = f'<h1 class="hero">{escape(s.title)}</h1>'
         if s.subtitle:

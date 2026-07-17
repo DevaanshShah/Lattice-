@@ -29,6 +29,16 @@ SLIDE KINDS — use the one that fits the content:
     "kicker":"<3-6 punchy words>"}
    ALWAYS the last slide.
 
+5. {"kind":"math","title":"<title>","fn":"<f(x) expression in x>","x_range":[<min>,<max>],
+    "dots":[<x values to mark>],"x_label":"<x axis>","y_label":"<y axis>"}
+   For a REAL MATHEMATICAL CURVE the viewer should watch move — a loss curve descending, a function's
+   shape, growth/decay, a probability curve. This slide is ANIMATED (the curve is plotted and a dot
+   rolls along it), so use it only when the topic genuinely has a function to plot.
+   `fn` MUST be plain math in x: + - * / ** ( ) and optionally np.sin np.cos np.tan np.exp np.log
+   np.sqrt np.abs np.pi — NO other names, no lambda, no imports. Example: "0.5*(x-1)**2 + 1".
+   Use AT MOST ONE math slide, and ONLY if a function is truly central to the topic.
+   NEVER use it for diagrams, pipelines, architectures, or anything without a real f(x).
+
 RULES:
 - 4-6 slides, in teaching order: title -> the core stages -> a concrete worked example -> summary.
 - Text must be SHORT. Labels 1-3 words; `sub` <= 6 words; bullet text one clause. Long strings break

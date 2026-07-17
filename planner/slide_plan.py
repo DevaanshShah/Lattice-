@@ -13,7 +13,7 @@ from core.textutil import extract_json
 from generation.slide_deck import Slide
 from prompts.loader import load
 
-_KINDS = {"title", "cards", "chips", "bullets"}
+_KINDS = {"title", "cards", "chips", "bullets", "math"}
 
 
 class SlidePlanError(RuntimeError):
@@ -51,6 +51,15 @@ def _validate(data: dict) -> Deck:
                 sd.pop("ids")
         if kind == "bullets" and not sd.get("bullets"):
             raise ValueError(f"slide {i}: 'bullets' needs at least one bullet")
+        if kind == "math":
+            from generation.math_scene import MathSceneError, safe_expr
+            xr = sd.get("x_range")
+            if not (isinstance(xr, list) and len(xr) >= 2):
+                raise ValueError(f"slide {i}: 'math' needs x_range [min, max]")
+            try:                                   # reject anything but a plain f(x) expression
+                safe_expr(str(sd.get("fn", "")))
+            except MathSceneError as e:
+                raise ValueError(f"slide {i}: bad fn — {e}")
         slides.append(Slide.from_dict(sd))
     return Deck(title=str(data.get("title") or slides[0].title or "Untitled"), slides=slides)
 
