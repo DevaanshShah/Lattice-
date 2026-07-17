@@ -46,7 +46,11 @@ NARRATION — every slide MUST have `beats`. This is the lesson; the slides are 
 - `focus` is the 0-based index of the card / chip / bullet that sentence is ABOUT. That element lights
   up while the sentence is spoken and the others dim, so the viewer's eye is always on the thing being
   explained. Use -1 for a sentence about the whole slide (and always on `title` / `math` slides).
-- Walk the elements IN ORDER: a slide with 3 cards has at least 3 beats, focusing 0, then 1, then 2.
+- Every CARD and every BULLET must get its own beat, in order: focus 0, then 1, then 2. A slide with 4
+  cards has at least 4 beats. One you never speak about just sits there dimmed.
+- `chips` are the exception: they are a sequence of small items, so the ROW is one idea. Narrate it as
+  one — do NOT describe each chip in turn ("here is the word I, here is the word love" is filler).
+  Use focus -1 there, or focus a single chip if one genuinely deserves the callout.
 - 1 sentence per beat, <= 25 words. Spoken English — say "x squared", never "x^2".
 
 SCRIPT RULES — this is the difference between a lesson and content-farm filler. Follow them exactly.

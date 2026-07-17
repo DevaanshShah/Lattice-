@@ -28,6 +28,7 @@ _FILLER = re.compile(
     r"|amazing|revolutionary|game[- ]chang\w*|incredibly powerful)\b", re.I)
 
 _MAX_WORDS = 32          # a beat longer than this is a paragraph, not a spoken line
+_COVER = {"cards", "bullets"}   # kinds where every element must be spoken about (see _lint_beats)
 _NORM = re.compile(r"[^a-z0-9 ]+")
 
 
@@ -77,12 +78,16 @@ def _lint_beats(sd: dict, i: int) -> None:
         if foc >= 0 and _norm(say) == _norm(els[foc]):     # narration must ADD to the slide, not read it
             raise ValueError(f"slide {i} beat {j}: {say!r} just restates the element it points at — "
                              f"say why it matters or what breaks without it")
-    # Every element must get spoken about, or it sits dimmed for the whole slide with nothing said
-    # about it — the model reliably forgets this on `bullets`, so it is enforced here, not asked for.
-    missing = [k for k in range(len(els)) if k not in {int(b.get("focus", -1)) for b in beats}]
-    if missing:
-        raise ValueError(f"slide {i}: elements {missing} are never focused by any beat — give each "
-                         f"one its own beat with \"focus\" set to its index, in order")
+    # A card or bullet is its own teaching unit, so one left unspoken sits dimmed with nothing said
+    # about it — the model reliably forgets this, so it is enforced rather than asked for.
+    # `chips` are deliberately exempt: they are a SEQUENCE of small items (tokens, ids) where the row
+    # is the single idea. Demanding a sentence per chip would force exactly the deletable filler the
+    # script rules ban — "here is the word I, here is the word love".
+    if sd.get("kind") in _COVER:
+        missing = [k for k in range(len(els)) if k not in {int(b.get("focus", -1)) for b in beats}]
+        if missing:
+            raise ValueError(f"slide {i}: elements {missing} are never focused by any beat — give each "
+                             f"one its own beat with \"focus\" set to its index, in order")
 
 
 class SlidePlanError(RuntimeError):
@@ -134,8 +139,12 @@ def _validate(data: dict) -> Deck:
     return Deck(title=str(data.get("title") or slides[0].title or "Untitled"), slides=slides)
 
 
-def plan_deck(topic: str, *, client: LLMClient | None = None, attempts: int = 3) -> Deck:
-    """Topic -> Deck. Retries with the validation error fed back, like planner.outline."""
+def plan_deck(topic: str, *, client: LLMClient | None = None, attempts: int = 4) -> Deck:
+    """Topic -> Deck. Retries with the validation error fed back, like planner.outline.
+
+    4 attempts, not 3: measured over 6 topics the loop converges in 1.33 calls on average (6/6), but
+    the tail is a hard 422 for the user, and a retry only costs ~$0.0004 and only happens on failure.
+    """
     topic = (topic or "").strip()
     if not topic:
         raise SlidePlanError("topic is empty")
