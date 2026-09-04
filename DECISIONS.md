@@ -10,6 +10,23 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-09-04 — In `jobs._run`, attribution wraps cancellation (and a cancelled job is still recorded)
+
+**Context.** Merging the two sessions' work put two context managers on the same block: the other
+session's `usage.bind(...)` (so every model call inside is billed to the right user) and this
+session's `cancel.scope(job.token)` (so the work is stoppable).
+
+**Decision.** `usage.bind` outermost, `cancel.scope` inside it, and `usage.record("job", ...)`
+stays at the end of the `usage.bind` block — where a `Cancelled` unwind still reaches it.
+
+**Why not the alternative.** The other order would let a stop unwind past the ledger write, so
+exactly the jobs worth measuring — the ones somebody killed after four minutes of renders — would
+be the ones missing from the numbers. Cancellation has to be visible in the spend record, not a
+hole in it.
+
+**Consequence.** `usage.record` now sees `status="cancelled"` as well as done/failed; anything
+reading the ledger should expect that third value.
+
 ### 2026-09-04 — Image leaves the Teach front door; Code stays. Learn answers both in text
 
 **Context.** Teach step 1 offered three doors: Describe, Image, Code. The question was whether

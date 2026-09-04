@@ -34,6 +34,29 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 
 <!-- Newest first. Append a dated entry when a phase/milestone/task completes. Format: ### YYYY-MM-DD — what changed and why -->
 
+### 2026-09-04 — Two parallel sessions reconciled on main; Learn takes attachments
+- **Merged `phase-ab-reliability` into main** (Phase A+B reliability + the Learn/Teach split)
+  alongside the admin-console / usage-ledger / R2 / Learn-wiring work that a second session had
+  been doing in the same checkout. That work was committed as-is first (`bfbf160`) so a merge
+  could not lose it. Six conflicts, all additive on both sides, nothing dropped. The two that
+  needed a real decision: `cancel.carry(usage.carry(...))` on the scene fan-out (both thread-locals
+  must survive the hop), and in `jobs._run` **`usage.bind` outside, `cancel.scope` inside** — a
+  stop unwinds the work but must NOT skip the durable job-ledger line. A cancelled job is now
+  recorded too: a stop that already cost four minutes of renders is what those numbers are for.
+- **Teach's front door is Describe + Code; Image moved to Learn.** The doors were split by SEED
+  when the real difference is the OUTPUT CONTRACT — Teach returns a rendered artifact through the
+  review gate, Learn returns an answer now with a video only when earned. A learner photographing
+  a homework problem on the Teach door was starting a 4-minute build to be told what the picture
+  shows. Code STAYS in Teach: its walkthrough scaffold is deterministic, which makes it the most
+  reliable video the pipeline makes. `web/seed.describe()` (vision on the CRITIC client — the
+  generator can't see) turns an attachment into text; the thread keeps a `has_image` flag and
+  drops the base64.
+- **Deleted the old Learn screen** (95 lines in app.js), dead since the chat rewrite and dangerous:
+  it auto-approved every scene and built with no review gate.
+- **Gate: 404 passing** (365 unit + 39 admin/storage). Server boots; a Learn thread with an image
+  answers as text. `python -m scripts.merge_check <other-checkout>` now answers "does this merge?"
+  with an exit code. NOT done: Phases C and D, and no live end-to-end video run yet.
+
 ### 2026-09-04 — Cloudflare R2 for finished videos (chosen over "send users to their own Drive")
 
 - **The bug it fixes is not "we need a CDN": a PaaS disk is ephemeral.** Every redeploy wipes `out/`
