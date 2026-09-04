@@ -73,6 +73,43 @@ the product free; at any real volume the models are the bill.
 | **Hugging Face Space** (Docker, CPU basic) | 2 vCPU, 16 GB RAM, free, and the easiest public demo link you can get. | Ephemeral disk (state dies), sleeps when idle, public by default, no Docker daemon → `exec_mode=local`, so no sandbox. Good for showing people; not for saved work. |
 | **Google Cloud trial** | $300 for 90 days — an e2-standard-2 (2 vCPU / 8 GB) runs free for that window. | It ends. Fine for a launch, not a home. |
 
+### Every good free host asks for a card — here is what that means
+
+Oracle, Google Cloud, Fly and Cloudflare R2 all require a payment method **for identity
+verification**, not billing. Oracle places a temporary hold (~$1, often ₹75–100) that reverses in a
+few days, and Always Free resources never charge; you are billed only if you upgrade to Paid *and*
+exceed the free limits.
+
+The practical risk is rejection, not cost. Oracle refuses prepaid cards and rejects many Indian
+**debit** cards at this step. Use a Visa/Mastercard **credit** card with international transactions
+enabled; RuPay generally fails.
+
+### If you cannot (or will not) give a card
+
+| Option | Card? | What you get | The trade |
+|---|---|---|---|
+| **Hugging Face Space** | **No** — an HF account is enough | Public URL, 2 vCPU / 16 GB, free forever | Ephemeral disk, sleeps when idle, no sandbox (`exec_mode=local`), public by default. §6 |
+| **Your own machine + Cloudflare Quick Tunnel** | **No** — no account, no domain | A public `https://<random>.trycloudflare.com` URL pointing at the app running on your PC, with the **full docker sandbox** and your real disk | Your machine has to stay on, and the URL changes every restart |
+| Oracle / GCP / Fly | Yes | See above | — |
+
+**The tunnel route, in full** (Windows, from the repo):
+
+```powershell
+# 1. run the app as usual
+.\.venv\Scripts\python.exe -m scripts.serve --host 127.0.0.1 --port 8080
+
+# 2. in a second terminal: download cloudflared once, then
+.\cloudflared.exe tunnel --url http://127.0.0.1:8080
+```
+
+It prints a public HTTPS URL. Nothing is installed on Cloudflare's side, no account is created, and
+the tunnel is outbound-only — you are not opening a port on your router. Stop the process and the
+URL dies. For a stable address you need a domain on a (free) Cloudflare account and a *named*
+tunnel; that is when a card enters the picture again, for the domain rather than for Cloudflare.
+
+This is a genuinely good way to show the product to someone today. It is not where a product with
+users lives: your machine is the server, so it is up only while your machine is.
+
 ### Free tiers that cannot run this
 
 **Render free** (512 MB, 0.1 CPU, sleeps after 15 min) and equivalents: a single Manim render needs
