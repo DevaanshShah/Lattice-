@@ -209,7 +209,8 @@ function render() {
   const app = $("app");
   app.innerHTML = topbar() + (
     state.screen === "landing" ? landing() :
-    state.screen === "learn" ? learnScreen() :
+    state.screen === "learn" ? window.LatticeLearn.screen() :
+    state.screen === "slides" ? window.LatticeDecks.screen() :
     state.screen === "gallery" ? gallery() : studio()
   ) + devToggle() + devConsole();
   wire();
@@ -352,7 +353,7 @@ function topbar() {
       <span style="${DISPLAY}font-weight:600;font-size:18px;letter-spacing:-0.02em;color:var(--text);">Lattice</span>
     </div>
     <div style="display:flex;align-items:center;gap:26px;">
-      ${tab("home", "Home", state.screen === "landing")}${tab("learn", "Learn", state.screen === "learn")}${tab("studio", "Teach", state.screen === "studio")}${tab("gallery", "Gallery", state.screen === "gallery")}
+      ${tab("home", "Home", state.screen === "landing")}${tab("learn", "Learn", state.screen === "learn")}${tab("studio", "Teach", state.screen === "studio")}${tab("slides", "Slides", state.screen === "slides")}${tab("gallery", "Gallery", state.screen === "gallery")}
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <div data-act="replay-intro" title="Replay intro" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:15px;">↺</div>
@@ -890,6 +891,8 @@ function wire() {
   }
   const ss = $("side-search"); if (ss) ss.oninput = (e) => { state.sideSearch = e.target.value; rerenderSidebarList(); };
   const gs = $("gallery-search"); if (gs) gs.oninput = (e) => { state.gallerySearch = e.target.value; render(); const g = $("gallery-search"); if (g) { g.focus(); g.setSelectionRange(g.value.length, g.value.length); } };
+  const ld2 = $("learn-draft"); if (ld2 && window.LatticeLearn) ld2.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); window.LatticeLearn.send(); } };
+  const lsq = $("learn-search"); if (lsq && window.LatticeLearn) lsq.oninput = (e) => window.LatticeLearn.setSearch(e.target.value);
   // image seed: file picker + drag-drop on the dropzone
   const sf = $("seed-file"); if (sf) sf.onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) goFromImage(f); };
   const drop = $("seed-drop");
@@ -921,12 +924,15 @@ function reorderOutline(from, to) { if (from == null || from === to) return; con
 function handle(act, el) {
   const i = el ? +el.dataset.i : undefined, v = el ? el.dataset.v : undefined, id = el ? el.dataset.id : undefined;
   const pid = state.project && state.project.id;
+  if (window.LatticeDecks && window.LatticeDecks.handle(act, el)) return;   // Slides mode owns deck-*
+  if (window.LatticeLearn && window.LatticeLearn.handle(act, el)) return;   // Learn chat owns learn-*
   switch (act) {
     case "replay-intro": if (window.playLatticeIntro) window.playLatticeIntro(); break;
     case "home": state.screen = "landing"; render(); break;
     case "tab-home": state.screen = "landing"; render(); break;
     case "tab-learn": state.screen = "learn"; if (state.learnPhase === "generating") state.learnPhase = "input"; render(); break;
     case "tab-studio": state.screen = "studio"; render(); break;
+    case "tab-slides": state.screen = "slides"; render(); break;
     case "tab-gallery": state.screen = "gallery"; render(); break;
     case "theme": state.theme = state.theme === "dark" ? "light" : "dark"; document.documentElement.setAttribute("data-theme", state.theme); break;
     case "open": openProject(id); break;

@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 from core.config import settings
+from core import usage as usage_ledger
 
 
 def _is_transient(e: Exception) -> bool:
@@ -74,17 +75,30 @@ def usage_snapshot() -> dict:
 
 
 def _record_usage(model: str, resp: Any) -> None:
-    """Add one response's token usage to the process-wide accumulator (no-op if absent)."""
+    """Add one response's token usage to the process-wide accumulator (no-op if absent), and append
+    an attributed line to the durable ledger that the admin dashboard reads.
+
+    Cost prefers what the PROVIDER reports (OpenRouter returns `usage.cost` in real dollars) over
+    our price table, which only knows the models listed above.
+    """
     u = getattr(resp, "usage", None)
     if u is None:
         return
     pt = int(getattr(u, "prompt_tokens", 0) or 0)
     ct = int(getattr(u, "completion_tokens", 0) or 0)
+    reported = getattr(u, "cost", None)
+    priced = True
+    if reported is not None:
+        cost = float(reported)
+    else:
+        cost = estimate_cost(model, pt, ct)
+        priced = bool(MODEL_PRICES.get((model or "").lower())) or not (pt or ct)
     with _usage_lock:
         _usage["prompt_tokens"] += pt
         _usage["completion_tokens"] += ct
         _usage["calls"] += 1
-        _usage["cost_usd"] += estimate_cost(model, pt, ct)
+        _usage["cost_usd"] += cost
+    usage_ledger.record_llm(model, pt, ct, cost, priced=priced)
 
 
 class LLMClient:

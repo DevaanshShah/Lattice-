@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lattice — admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* The admin console is its own surface: same tokens as the product, denser grid. */
+    body { background: var(--bg); color: var(--text); }
+    #admin { min-height: 100vh; }
+    .a-wrap { max-width: 1320px; margin: 0 auto; padding: 22px 24px 72px; }
+    .a-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+              border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 22px; }
+    .a-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 22px; font-weight: 700;
+               letter-spacing: -0.02em; margin: 0; }
+    .a-sub { color: var(--muted); font-size: 12.5px; }
+    .a-spacer { flex: 1; }
+    .a-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block;
+             margin-right: 6px; animation: lt-pulse 2s infinite; }
+    .a-dot.off { background: var(--faint); animation: none; }
+
+    .a-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    .tile { background: var(--raise); border: 1px solid var(--line); border-radius: 12px; padding: 14px 15px; }
+    .tile .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; }
+    .tile .v { font-family: 'Bricolage Grotesque', sans-serif; font-size: 26px; font-weight: 600;
+               letter-spacing: -0.02em; margin-top: 6px; }
+    .tile .n { color: var(--faint); font-size: 11.5px; margin-top: 3px; }
+    .tile .v.accent { color: var(--accent); }
+
+    .panel { background: var(--raise); border: 1px solid var(--line); border-radius: 12px;
+             margin-top: 18px; overflow: hidden; }
+    .panel > h2 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 600;
+                  letter-spacing: 0.02em; margin: 0; padding: 13px 16px; border-bottom: 1px solid var(--line);
+                  display: flex; align-items: center; gap: 10px; }
+    .panel > h2 .hint { color: var(--faint); font-size: 11.5px; font-weight: 400; font-family: 'Geist', sans-serif; }
+    .panel .body { padding: 14px 16px; }
+    .cols { display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px; align-items: start; }
+    @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase;
+         letter-spacing: 0.08em; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { cursor: default; }
+    tbody tr.click { cursor: pointer; }
+    tbody tr.click:hover { background: var(--raise2); }
+    .num { text-align: right; font-family: 'Geist Mono', monospace; white-space: nowrap; }
+    .mono { font-family: 'Geist Mono', monospace; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
+    .accent { color: var(--accent); }
+    .ok { color: var(--ok); }
+    .bad { color: var(--danger); }
+
+    .chip { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10.5px;
+            border: 1px solid var(--line2); color: var(--muted); background: var(--bg2); white-space: nowrap; }
+    .chip.video { color: var(--accent); border-color: rgba(242,180,65,0.4); }
+    .chip.deck { color: #7FB2F0; border-color: rgba(127,178,240,0.4); }
+    .chip.learn { color: #9BDA8C; border-color: rgba(155,218,140,0.4); }
+
+    .bar { height: 5px; border-radius: 99px; background: var(--raise2); overflow: hidden; min-width: 70px; }
+    .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px;
+               transition: width .4s cubic-bezier(0.22,1,0.36,1); }
+    .bar.done > i { background: var(--ok); }
+    .bar.bad > i { background: var(--danger); }
+
+    .empty { color: var(--faint); font-size: 12.5px; padding: 18px 16px; text-align: center; }
+    .feed { max-height: 320px; overflow: auto; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+    .feed div { padding: 4px 16px; border-bottom: 1px solid var(--line); white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+
+    button.a-btn { background: var(--raise2); color: var(--text); border: 1px solid var(--line2);
+                   border-radius: 8px; padding: 6px 11px; font-size: 12px; cursor: pointer; }
+    button.a-btn:hover { background: var(--line); }
+    button.a-btn.primary { background: var(--accent); color: var(--ink); border-color: transparent; font-weight: 600; }
+    input.a-in { background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; color: var(--text);
+                 padding: 9px 11px; font-size: 13px; min-width: 260px; }
+
+    .gate { max-width: 420px; margin: 16vh auto; text-align: center; }
+    .gate p { color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .warn { background: rgba(240,85,59,0.09); border: 1px solid rgba(240,85,59,0.35); color: #F5A192;
+            border-radius: 10px; padding: 10px 13px; font-size: 12.5px; margin-top: 14px; }
+
+    .drawer { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; justify-content: flex-end;
+              z-index: 50; }
+    .drawer > div { width: min(560px, 94vw); height: 100%; background: var(--bg2); border-left: 1px solid var(--line);
+                    overflow: auto; padding: 20px 22px 60px; }
+  </style>
+</head>
+<body>
+  <div id="admin"></div>
+  <script src="/static/admin.js"></script>
+</body>
+</html>

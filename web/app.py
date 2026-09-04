@@ -18,13 +18,18 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
+                               RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from core import storage, usage
+from core.config import settings
 from web import jobs as jobs_mod
+from web import users as users_mod
 from web.engine import Engine, ProjectNotFound, project_dto
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -104,13 +109,30 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
                 print(f"[startup] recovery skipped: {type(e).__name__}: {e}")
         yield
 
-    app = FastAPI(title="Lattice", version="0.1.0", lifespan=lifespan)
+    # Anonymous per-browser identity, applied to EVERY route as a global dependency: one place
+    # decides who a request belongs to, so no endpoint has to remember to attribute itself.
+    user_store = users_mod.UserStore(settings.out_dir)
+    app = FastAPI(title="Lattice", version="0.1.0", lifespan=lifespan,
+                  dependencies=[Depends(users_mod.dependency(user_store))])
 
     def _load_or_404(pid: str):
         try:
             return engine.load(pid)
         except ProjectNotFound:
             raise HTTPException(404, f"no project {pid!r}")
+
+    # --- slide decks (additive path: HTML slides + Manim only where the topic needs it) ----
+    from web import decks as decks_mod
+    deck_store = decks_mod.register(app, engine, queue)
+
+    # --- learn chat (additive path: fast text turns, a deck video only when it's asked for) ----
+    from web import learn as learn_mod
+    learn_store = learn_mod.register(app, engine, queue)
+
+    # --- admin console (usage, spend, per-user activity; token- or loopback-gated) ----------
+    from web import admin as admin_mod
+    admin_mod.register(app, engine, queue, deck_store=deck_store, learn_store=learn_store,
+                       user_store=user_store)
 
     # --- health ---------------------------------------------------------------------------
     @app.get("/health")
@@ -120,28 +142,39 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     # --- projects: plan (outline gate) ----------------------------------------------------
     @app.post("/api/projects")
     def create_project(body: CreateProject) -> dict:
+        # Mint the id BEFORE planning: the outline call is the first spend, and tagging it after
+        # the fact would leave that cost with no project to bill it to.
+        pid = uuid4().hex[:8]
+        usage.tag(surface="video", kind="plan", project=pid)
         pid, project = engine.plan(body.topic, max_scenes=body.max_scenes,
-                                   target_seconds=body.target_seconds, log=lambda _m: None)
+                                   target_seconds=body.target_seconds, pid=pid, log=lambda _m: None)
+        usage.record("create", surface="video", project=pid, topic=body.topic)
         return project_dto(pid, project)
 
     @app.post("/api/projects/from-code")
     def create_from_code(body: FromCodeReq) -> dict:
         from planner.code_walkthrough import CodeWalkthroughError
+        pid = uuid4().hex[:8]
+        usage.tag(surface="video", kind="plan-code", project=pid)
         try:
-            pid, project = engine.plan_from_code(body.code, body.language,
+            pid, project = engine.plan_from_code(body.code, body.language, pid=pid,
                                                  target_seconds=body.target_seconds, log=lambda _m: None)
         except (ValueError, CodeWalkthroughError) as e:   # empty snippet or an unparseable walkthrough
             raise HTTPException(422, str(e))
+        usage.record("create", surface="video", project=pid, topic=project.topic)
         return project_dto(pid, project)
 
     @app.post("/api/projects/from-image")
     def create_from_image(body: FromImageReq) -> dict:
         from web.seed import SeedError
+        pid = uuid4().hex[:8]
+        usage.tag(surface="video", kind="plan-image", project=pid)
         try:
-            pid, project = engine.plan_from_image(body.image, max_scenes=body.max_scenes,
+            pid, project = engine.plan_from_image(body.image, max_scenes=body.max_scenes, pid=pid,
                                                   target_seconds=body.target_seconds, log=lambda _m: None)
         except SeedError as e:   # bad/unsupported/oversize image or empty vision reply
             raise HTTPException(422, str(e))
+        usage.record("create", surface="video", project=pid, topic=project.topic)
         return project_dto(pid, project)
 
     @app.get("/api/projects")
@@ -156,6 +189,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     @app.post("/api/projects/{pid}/build")
     def build(pid: str, body: BuildReq) -> dict:
         project = _load_or_404(pid)
+        usage.tag(surface="video")
 
         def run(job: jobs_mod.Job):
             for s in project.scenes:           # seed per-scene status so the UI shows "queued"
@@ -170,6 +204,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     # --- single-scene render ops (async) --------------------------------------------------
     def _scene_job(pid: str, index: int, kind: str, fn) -> dict:
         _load_or_404(pid)
+        usage.tag(surface="video")
 
         def run(job: jobs_mod.Job):
             job.set_scene(index, jobs_mod.S_RENDERING)
@@ -307,9 +342,15 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         """Stream the stitched lesson inline (for the Learn watch view — the whole video, not per-scene)."""
         _load_or_404(pid)
         mp4 = engine.final_mp4(pid)
-        if not mp4:
-            raise HTTPException(404, "final video not ready yet")
-        return FileResponse(str(mp4), media_type="video/mp4")
+        if mp4:
+            return FileResponse(str(mp4), media_type="video/mp4")
+        # No local copy: stream it straight from object storage rather than 404ing on a video that
+        # exists — and without paying to pull the whole file through this container first.
+        key = storage.video_key(pid)
+        url = storage.url_for(key)
+        if url and storage.exists(key):
+            return RedirectResponse(url, status_code=307)
+        raise HTTPException(404, "final video not ready yet")
 
     @app.get("/api/projects/{pid}/scenes/{index}/source")
     def scene_source(pid: str, index: int) -> dict:
@@ -324,6 +365,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     def download(pid: str, subtitles: str = Query("none", pattern="^(none|burn)$"),
                  fmt: str = Query("youtube", alias="format", pattern="^(youtube|reel)$")):
         _load_or_404(pid)
+        engine.ensure_final(pid)      # export reads the file, so fetch it back if R2 holds it
         try:
             res = engine.export(pid, subtitles=subtitles, fmt=fmt, log=lambda _m: None)
         except FileNotFoundError as e:

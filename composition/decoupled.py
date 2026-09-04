@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from core.config import settings
+from core import usage
 from core.llm import LLMClient, get_client, get_critic_client
 from core.schemas.outline import Outline, OutlineItem
 from core.schemas.scene_spec import SCENE_CLASS, SceneSpec
@@ -527,13 +528,15 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
         say(f"   duration budget: ~{target_seconds}s total (~{scene_seconds:.0f}s/scene)")
     say(f"-> building {len(outline.items)} scenes (workers={workers}, retries={retries}, layout={mode})")
     scenes_dir = out / "scenes"
+    # usage.carry: the fan-out threads start with an empty context, so without this every model
+    # call a scene makes would land in the admin ledger with no user/project attached.
+    build_one = usage.carry(
+        lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
+                                     style=style, use_components=use_components, use_critic=use_critic,
+                                     structural=structural, quality=quality, retries=retries,
+                                     on_scene=on_scene, scene_seconds=scene_seconds))
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        results = list(ex.map(
-            lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
-                                         style=style, use_components=use_components, use_critic=use_critic,
-                                         structural=structural, quality=quality, retries=retries,
-                                         on_scene=on_scene, scene_seconds=scene_seconds),
-            list(enumerate(outline.items))))
+        results = list(ex.map(build_one, list(enumerate(outline.items))))
 
     clips = [mp4 for _, mp4 in sorted(results, key=lambda r: r[0]) if mp4]
     say(f"   {len(clips)}/{len(outline.items)} scenes built")

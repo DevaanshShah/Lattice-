@@ -24,9 +24,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from core import storage, usage
 from core.textutil import extract_json
 from web import jobs as jobs_mod
 
@@ -197,6 +198,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
             for i in range(len(deck.slides)):
                 job.set_scene(i, jobs_mod.S_DONE)
             patch(vmsg["id"], status="ready", title=deck.title, mp4=str(mp4))
+            storage.offload(mp4, storage.learn_key(tid, vmsg["id"]), log=job.log)
             job.log(f"done: {mp4}")
             return {"mp4": str(mp4)}
 
@@ -207,6 +209,8 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     def create_thread(body: NewThread) -> dict:
         rec = ThreadRecord(id=uuid4().hex[:8], title=body.message[:60], created_at=time.time())
         store.save(rec)                                  # so _append_reply's edit() can load it back
+        usage.tag(surface="learn", kind="chat", project=rec.id)
+        usage.record("create", surface="learn", project=rec.id, topic=rec.title)
         rec = _append_reply(rec.id, body.message)
         return thread_dto(rec)
 
@@ -221,12 +225,14 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     @app.post("/api/learn/threads/{tid}/messages")
     def add_message(tid: str, body: NewMessage) -> dict:
         store.load(tid)                                    # 404s up front, before the LLM call
+        usage.tag(surface="learn", kind="chat", project=tid)
         rec = _append_reply(tid, body.message)
         return thread_dto(rec)
 
     @app.post("/api/learn/threads/{tid}/video")
     def make_video(tid: str, body: MakeVideo) -> dict:
         rec = store.load(tid)
+        usage.tag(surface="learn")
         prompt = (body.prompt or "").strip()
         if body.message_id:
             src = next((m for m in rec.messages if m["id"] == body.message_id), None)
@@ -242,6 +248,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
         """Re-plans and re-renders the WHOLE deck with the instruction folded in — not a per-slide
         patch (the deck path has no slide-level edit yet). Honest about that in the version note."""
         rec = store.load(tid)
+        usage.tag(surface="learn")
         src = next((m for m in rec.messages if m["id"] == mid and m.get("kind") == "video"), None)
         if not src:
             raise HTTPException(404, f"no video message {mid!r}")
@@ -255,8 +262,14 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     def get_video(tid: str, mid: str):
         rec = store.load(tid)
         msg = next((m for m in rec.messages if m["id"] == mid), None)
-        if not msg or not msg.get("mp4") or not Path(msg["mp4"]).exists():
+        if not msg or not msg.get("mp4"):
             raise HTTPException(409, "video is not ready yet")
-        return FileResponse(msg["mp4"], media_type="video/mp4", filename=f"{mid}.mp4")
+        if Path(msg["mp4"]).exists():
+            return FileResponse(msg["mp4"], media_type="video/mp4", filename=f"{mid}.mp4")
+        key = storage.learn_key(tid, mid)                  # local copy gone: serve it from R2
+        url = storage.url_for(key, filename=f"{mid}.mp4")
+        if url and storage.exists(key):
+            return RedirectResponse(url, status_code=307)
+        raise HTTPException(409, "video is not ready yet")
 
     return store

@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     concurrency_cap: int = 4
 
     # --- web deploy: concurrency + auth (FR-31, PaaS deploy) ---
+    # Admin console (/admin + /api/admin/*): usage, spend and per-user activity — everything a
+    # visitor must never see. Set a token in .env for any deployed instance; with it empty the
+    # console answers ONLY to loopback, so a public deploy fails closed instead of leaking.
+    admin_token: str = ""
     job_workers: int = 2            # web/jobs.py::JobQueue thread pool (concurrent build jobs)
     scene_workers: int = 3          # composition.decoupled.build_video per-build scene fan-out
     web_users: str = ""             # "alice:<sha256hex>,bob:<sha256hex>" — empty = auth OFF (local dev)
@@ -102,6 +106,18 @@ class Settings(BaseSettings):
     kokoro_model: str = "kokoro-v1.0.onnx"            # path to the Kokoro ONNX model
     kokoro_voices: str = "voices-v1.0.bin"            # path to the Kokoro voices bin
     kokoro_voice: str = "af_heart"                    # af_*=female, am_*=male, bf_/bm_=British
+
+    # --- object storage: Cloudflare R2 (S3-compatible) ---
+    # A PaaS container's disk is ephemeral, so without this every redeploy destroys every video the
+    # product has made. All empty = OFF, and everything keeps working exactly as it does on local
+    # disk, so this is safe to leave unset until the bucket exists.
+    r2_account_id: str = ""            # Cloudflare account id (the R2 endpoint is derived from it)
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""         # R2 API token -> Access Key ID
+    r2_secret_access_key: str = ""     # R2 API token -> Secret Access Key (shown once)
+    r2_endpoint: str = ""              # override the derived endpoint (rarely needed)
+    r2_public_base: str = ""           # optional public base (custom domain / r2.dev); empty = presigned URLs
+    r2_delete_local: bool = False      # delete the local copy after a successful upload (small-disk deploys)
 
     # --- paths ---
     out_dir: Path = Field(default=PROJECT_ROOT / "out")

@@ -19,9 +19,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from core import storage, usage
 from web import jobs as jobs_mod
 
 _MUSIC_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -126,13 +127,18 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
     @app.post("/api/decks")
     def create_deck(body: CreateDeck) -> dict:
         from planner.slide_plan import SlidePlanError, plan_deck
+        # The id is minted BEFORE the call that costs money: planning is ~all of a deck's spend, and
+        # tagging afterwards would file it under no project at all.
+        did = uuid4().hex[:8]
+        usage.tag(surface="deck", kind="plan", project=did)
         try:
             deck = plan_deck(body.topic, client=_client())
         except SlidePlanError as e:      # invalid after retries — the script lint never passed
             raise HTTPException(422, str(e))
-        rec = DeckRecord(id=uuid4().hex[:8], topic=body.topic, title=deck.title,
+        rec = DeckRecord(id=did, topic=body.topic, title=deck.title,
                          slides=[asdict(s) for s in deck.slides], created_at=time.time())
         store.save(rec)
+        usage.record("create", surface="deck", project=rec.id, topic=body.topic)
         return deck_dto(rec)
 
     @app.get("/api/decks")
@@ -147,6 +153,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
     def build_deck_route(did: str, body: BuildDeck) -> dict:
         from generation.slide_deck import Slide
         rec = store.load(did)
+        usage.tag(surface="deck")
         music = _music_path(body.music)              # validate BEFORE queueing, so it 422s not fails
         keep = body.keep if body.keep is not None else list(range(len(rec.slides)))
         chosen = [rec.slides[i] for i in keep if 0 <= i < len(rec.slides)]
@@ -173,6 +180,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
                              music=music, footer="Lattice")
             rec.mp4 = str(mp4)
             store.save(rec)
+            storage.offload(mp4, storage.deck_key(did), log=say)
             say(f"done: {mp4}")
             return deck_dto(rec)
 
@@ -182,8 +190,12 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
     @app.get("/api/decks/{did}/video")
     def deck_video(did: str):
         rec = store.load(did)
-        if not (rec.mp4 and Path(rec.mp4).exists()):
-            raise HTTPException(409, "deck is not built yet")
-        return FileResponse(rec.mp4, media_type="video/mp4", filename=f"{did}.mp4")
+        if rec.mp4 and Path(rec.mp4).exists():
+            return FileResponse(rec.mp4, media_type="video/mp4", filename=f"{did}.mp4")
+        # Local copy gone (redeploy, or r2_delete_local) — hand the browser the object in R2.
+        url = storage.url_for(storage.deck_key(did), filename=f"{did}.mp4") if rec.mp4 else None
+        if url and storage.exists(storage.deck_key(did)):
+            return RedirectResponse(url, status_code=307)
+        raise HTTPException(409, "deck is not built yet")
 
     return store

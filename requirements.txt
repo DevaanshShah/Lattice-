@@ -12,3 +12,6 @@ fastapi>=0.109
 uvicorn>=0.27
 # httpx backs fastapi.testclient in the unit tests
 httpx>=0.26
+# Object storage (Cloudflare R2, S3-compatible). Only needed when the R2_* settings are
+# filled in — core/storage.py degrades to local disk without it.
+boto3>=1.34

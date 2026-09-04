@@ -11,6 +11,18 @@
 </head>
 <body>
   <div id="app"></div>
+
+  <!-- 3D laptop intro overlay. MUST stay a sibling of #app (outside it):
+       app.js does $("app").innerHTML = … on every render and would wipe it otherwise. -->
+  <div id="intro-root" style="position:fixed;inset:0;z-index:9999;background:radial-gradient(120% 90% at 50% 38%, #17171d 0%, #0E0E12 55%, #08080b 100%);"></div>
+  <script>
+    // hard backstop: if the intro ever hangs, reveal the app anyway (intro itself ends ~7.6s)
+    setTimeout(function(){var r=document.getElementById('intro-root');if(r){r.style.transition='opacity .4s';r.style.opacity='0';setTimeout(function(){r.remove();},450);}},16000);
+  </script>
+
+  <script src="/static/decks.js"></script>
+  <script src="/static/learn.js"></script>
   <script src="/static/app.js"></script>
+  <script type="module" src="/static/intro.js"></script>
 </body>
 </html>

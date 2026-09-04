@@ -18,6 +18,7 @@ from uuid import uuid4
 from composition import decoupled
 from composition import export as export_mod
 from composition.scene_dag import SceneNode, VideoProject
+from core import storage
 from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.outline import Outline, OutlineItem
@@ -77,7 +78,7 @@ class Engine:
 
     # --- planning + build (the outline-approval gate, then render) ---------------------------
     def plan(self, topic: str, *, max_scenes: int | None = None, target_seconds: int | None = None,
-             log=print) -> tuple[str, VideoProject]:
+             pid: str | None = None, log=print) -> tuple[str, VideoProject]:
         """Plan an outline and persist a DRAFT project (scenes listed, nothing rendered yet).
 
         Returns (project_id, project). The build step happens later, after the user approves/edits
@@ -91,14 +92,17 @@ class Engine:
         outline = planner_outline.generate(topic, max_scenes=max_scenes,
                                            target_seconds=target_seconds,
                                            client=self._client_or_default())
-        pid, project = self._persist_new(outline, target_seconds=target_seconds)
+        pid, project = self._persist_new(outline, target_seconds=target_seconds, pid=pid)
         say(f"   draft project {pid} with {len(outline.items)} scene(s)")
         return pid, project
 
-    def _persist_new(self, outline: Outline, *, target_seconds: int | None = None) -> tuple[str, VideoProject]:
+    def _persist_new(self, outline: Outline, *, target_seconds: int | None = None,
+                     pid: str | None = None) -> tuple[str, VideoProject]:
         """Materialise a DRAFT project (fresh pid + workspace) from an outline — the shared tail of
         every planning path (topic / image / code). No style/render yet; the build gate comes later."""
-        pid = uuid4().hex[:8]
+        # The caller may pre-mint the id (the web layer does, so the planning LLM call is already
+        # tagged with the project it is paying for — attribute-after-the-fact loses that spend).
+        pid = pid or uuid4().hex[:8]
         self.workspace(pid).mkdir(parents=True, exist_ok=True)
         # Generate the visual THEME (palette/fonts/object looks) up front so the user reviews it
         # alongside the outline BEFORE any render — and the approved theme is what build() uses,
@@ -110,7 +114,8 @@ class Engine:
         return pid, project
 
     def plan_from_image(self, image: str, *, target_seconds: int | None = None,
-                        max_scenes: int | None = None, log=print) -> tuple[str, VideoProject]:
+                        max_scenes: int | None = None, pid: str | None = None,
+                        log=print) -> tuple[str, VideoProject]:
         """Derive a topic from an uploaded image, then plan an outline exactly like a typed topic.
         The vision step uses the critic client (vision-capable); planning reuses plan() unchanged."""
         from web import seed
@@ -118,9 +123,10 @@ class Engine:
         say("-> reading image (vision)")
         res = seed.from_image(image, client=self._client)   # None -> get_critic_client(); test client honored
         say(f"   derived topic: {res.topic!r}")
-        return self.plan(res.topic, max_scenes=max_scenes, target_seconds=target_seconds, log=log)
+        return self.plan(res.topic, max_scenes=max_scenes, target_seconds=target_seconds,
+                         pid=pid, log=log)
 
-    def plan_from_code(self, code: str, language: str | None = None, *,
+    def plan_from_code(self, code: str, language: str | None = None, *, pid: str | None = None,
                        target_seconds: int | None = None, log=print) -> tuple[str, VideoProject]:
         """Plan a segment-by-segment code WALKTHROUGH (overview + one scene per line/block) and persist
         a draft project. Reuses the outline-approval gate + build path unchanged; only the outline is
@@ -131,7 +137,7 @@ class Engine:
         wt = code_walkthrough.plan_walkthrough(code, language, client=self._client_or_default(),
                                                target_seconds=target_seconds)
         outline = code_walkthrough.outline_of(wt)
-        pid, project = self._persist_new(outline, target_seconds=target_seconds)
+        pid, project = self._persist_new(outline, target_seconds=target_seconds, pid=pid)
         # the manifest (full code lines + per-scene highlight/caption/narration) drives the scaffold
         # build; its presence is how build() knows to render the deterministic walkthrough, not freeform.
         (self.workspace(pid) / "walkthrough.json").write_text(
@@ -168,6 +174,9 @@ class Engine:
             out_dir=workspace, out_name="final.mp4", on_scene=on_scene, log=say)
         self._populate_from_decoupled(built, workspace, final)
         self.save(pid, built)
+        # Durable copy: this container's disk does not survive a redeploy. No-op when R2 is unset.
+        if final:
+            storage.offload(final, storage.video_key(pid), log=say)
         return built
 
     def _build_walkthrough(self, pid: str, *, keep: list[int] | None = None, quality: str = "preview",
@@ -486,6 +495,18 @@ class Engine:
     def final_mp4(self, pid: str) -> Path | None:
         p = self.load(pid)
         return Path(p.final_mp4) if p.final_mp4 and Path(p.final_mp4).exists() else None
+
+    def ensure_final(self, pid: str) -> Path | None:
+        """The stitched video ON THIS DISK, pulled back from object storage if the container no
+        longer has it (a redeploy wiped `out/`, or r2_delete_local freed it). Export/burn-in/reframe
+        all read the file, so they need it local — this is what makes those survive a restart."""
+        local = self.final_mp4(pid)
+        if local:
+            return local
+        project = self.load(pid)
+        dest = (Path(project.final_mp4) if project.final_mp4
+                else self.workspace(pid) / "final" / "final.mp4")
+        return storage.get(storage.video_key(pid), dest)
 
 
 # --- DTOs (plain dicts the API serializes; keeps pydantic models off the wire) --------------

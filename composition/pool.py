@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from core.config import settings
+from core import usage
 
 
 @dataclass
@@ -32,6 +33,10 @@ def run_bounded(items: list, work_fn: Callable[[Any, int], Any], *,
     results: list[TaskResult | None] = [None] * len(items)
     if not items:
         return []
+    # A worker thread starts with an empty context, so the caller's usage attribution (which user /
+    # project this work belongs to) would be lost — and every model call made down here would land
+    # in the ledger unattributed. Re-bind it on the way in.
+    work_fn = usage.carry(work_fn)
     with ThreadPoolExecutor(max_workers=max(1, cap)) as ex:
         futures = {ex.submit(work_fn, item, i): i for i, item in enumerate(items)}
         for fut in as_completed(futures):

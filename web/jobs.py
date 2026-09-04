@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from uuid import uuid4
 
+from core import usage
+
 # lifecycle states
 QUEUED, RUNNING, DONE, FAILED = "queued", "running", "done", "failed"
 # per-scene states
@@ -46,6 +48,7 @@ class Job:
         self.id: str = uuid4().hex[:12]
         self.kind = kind                       # "build" | "regenerate" | "tweak" | "narration" | "insert"
         self.project_id = project_id
+        self.user: str = ""                    # who queued it (web.users id); "" for CLI
         self.scene_index = scene_index
         self._now = now
         self.status: str = QUEUED
@@ -125,6 +128,7 @@ class Job:
                 "id": self.id,
                 "kind": self.kind,
                 "project_id": self.project_id,
+                "user": self.user,
                 "scene_index": self.scene_index,
                 "status": self.status,
                 "scenes": dict(self.scenes),
@@ -158,24 +162,36 @@ class JobQueue:
         value becomes `job.result`; any exception flips the job to FAILED (never propagates here).
         """
         job = Job(kind=kind, project_id=project_id, scene_index=scene_index, now=self._now)
+        # Captured HERE, in the request thread: a worker thread starts with an empty context, so this
+        # snapshot is what tells the usage ledger whose build the model calls underneath belong to.
+        attr = usage.current().merged(project=project_id, kind=kind)
+        job.user = attr.user
         with self._lock:
             self._jobs[job.id] = job
         if self._synchronous:
-            self._run(job, fn)
+            self._run(job, fn, attr)
         else:
             assert self._pool is not None
-            self._pool.submit(self._run, job, fn)
+            self._pool.submit(self._run, job, fn, attr)
         return job
 
     @staticmethod
-    def _run(job: Job, fn: Callable[[Job], Any]) -> None:
+    def _run(job: Job, fn: Callable[[Job], Any], attr: "usage.Attribution | None" = None) -> None:
         job._mark_running()
-        try:
-            result = fn(job)
-            job._mark_finished(DONE, result=result)
-        except Exception as e:  # a failed render must never take the server down
-            job.log(f"[error] {type(e).__name__}: {e}")
-            job._mark_finished(FAILED, error=f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}")
+        with usage.bind(attr or usage.current()):
+            try:
+                result = fn(job)
+                job._mark_finished(DONE, result=result)
+            except Exception as e:  # a failed render must never take the server down
+                job.log(f"[error] {type(e).__name__}: {e}")
+                job._mark_finished(FAILED,
+                                   error=f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}")
+            # One durable line per finished job: the in-memory queue is wiped by a restart, so this
+            # is the only lasting record of how many builds ran, how long they took, and how many
+            # failed — the "video progress per user" numbers on the admin page.
+            usage.record("job", job_id=job.id, status=job.status, error=job.error,
+                         scenes=len(job.scenes), scene_index=job.scene_index,
+                         seconds=round((job.finished_at or 0) - (job.started_at or 0), 2))
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

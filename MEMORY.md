@@ -34,6 +34,58 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 
 <!-- Newest first. Append a dated entry when a phase/milestone/task completes. Format: ### YYYY-MM-DD — what changed and why -->
 
+### 2026-09-04 — Cloudflare R2 for finished videos (chosen over "send users to their own Drive")
+
+- **The bug it fixes is not "we need a CDN": a PaaS disk is ephemeral.** Every redeploy wipes `out/`
+  and every video the product ever made. Locally invisible, fatal in production.
+- **R2 over S3** for one reason that dominates when the artifact is a streamed video: **zero egress**
+  ($0.015/GB-month storage; 1,000 videos ~= 10 GB ~= $0.15/month — cheaper than making one deck).
+- **Rejected: redirecting users to their own Google Drive.** It is an export feature, not a storage
+  backend. It needs Google OAuth per user, which means building accounts first (users are anonymous
+  cookie ids), and it takes the file OUT of the product: no in-app playback, gallery, re-export to
+  Reel/YouTube, thumbnails, or admin visibility — and it asks for authorization at the exact moment
+  the video is ready. Worth adding later as a "save a copy" button, on TOP of R2.
+- **`core/storage.py`** is the seam: keys are DERIVED from ids (`videos/<pid>/final.mp4`), so no
+  project/deck/thread schema changed to adopt it. Uploads happen after each build in all three paths
+  (video, deck, learn) and are best-effort — an R2 outage logs and leaves the local file, never
+  loses a render. Serving prefers local and 307s to a presigned URL when the disk was wiped;
+  `engine.ensure_final()` pulls the file back for export/reframe/burn-in.
+- **Inert until configured**: with the R2_* settings empty, `enabled()` is False and every call is a
+  no-op, so this was safe to merge before the bucket existed.
+- **`python -m scripts.r2 check|push|list|backup|pull`** — `check` round-trips a real object so bad
+  credentials fail loudly at setup instead of silently swallowing uploads mid-render. `backup`
+  snapshots the admin ledger, which is on the same ephemeral disk. Setup: `docs/r2-setup.md`.
+- Private bucket + presigned URLs is the default; `LATTICE_R2_PUBLIC_BASE` switches to permanent
+  public links, which is a product decision (anyone with the link can watch, forever).
+
+### 2026-09-04 — Admin console: who uses Lattice, what they built, what it cost
+
+- **The gap this closed.** There was no way to see usage at all: `core/llm.py` counted tokens in
+  ONE process-wide accumulator that evals reset and a restart wiped, with no idea which user or
+  project spent them — and the product has no accounts, so "per user" had nothing to group by.
+- **Two new primitives, then a page on top.** `core/usage.py` is an append-only attributed ledger
+  (`out/admin/usage.jsonl`): every model call, every created project/deck/thread, every finished
+  job, each tagged with user + project + kind + surface. `web/users.py` mints an anonymous
+  first-party cookie id per browser — explicitly NOT auth, just an attribution key, with
+  `dependency()` as the single seam to swap when real accounts land.
+- **Attribution rides a ContextVar, re-bound at every thread hop.** A request binds it once; the
+  job queue captures it at submit (in the request thread) and `usage.carry()` re-binds it inside
+  `composition/pool.py` and the `decoupled` scene fan-out. Without that, every scene's model calls
+  land unattributed, because a worker thread starts with an EMPTY context. A test pins this.
+- **Cost is honest about what it doesn't know.** Provider-reported `usage.cost` wins over the local
+  price table; a model missing from `MODEL_PRICES` with no reported cost is flagged `priced:false`
+  and the dashboard says the total is a floor. `/api/admin/*` also shows the real OpenRouter
+  account + key balance beside our own number, so the gap is visible.
+- **`/admin`** (vanilla, polls every 5s): user/spend/build tiles, live jobs with progress bars,
+  14-day spend chart, per-user table + drawer (their projects, models, events, editable label),
+  everything-built table with per-project progress, cost by model and by surface, raw ledger feed.
+- **Gate: `LATTICE_ADMIN_TOKEN`, else loopback only** — a public deploy fails closed instead of
+  publishing every user's activity. The page shell stays open so there is somewhere to type it.
+- **Found by running it:** the test suite was writing itself into the REAL ledger (35 fake users,
+  110 fake jobs on first look). `tests/conftest.py` now redirects `settings.out_dir` for the whole
+  session. Also fixed: `Request`/`Response` imported inside the dependency factory resolved to
+  nothing under `from __future__ import annotations`, so FastAPI treated them as query params.
+
 ### 2026-07-17 — Direct export presets: YouTube (16:9) + Reel (9:16), reframed at export
 - **Two delivery formats from ONE build.** `GET /api/projects/{pid}/download?format=youtube|reel`
   (+ the existing `subtitles=none|burn`). "youtube" = the finished `final.mp4` handed back untouched,
