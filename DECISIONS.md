@@ -10,6 +10,24 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-09-04 — `scripts/merge_check.py` instead of eyeballing the two trees
+
+**Context.** The reconciliation question is "does this branch merge into the other checkout", but
+the other side's work is uncommitted and on no branch, so `git merge` and `git diff <branch>` have
+nothing to compare against.
+
+**Decision.** A small tool that runs the same three-way merge git would (`git merge-file --diff3`)
+per tracked file — merge base as base, this branch as ours, the other tree's working copy as theirs
+— and exits with the number of conflicting files.
+
+**Why not the alternative.** Reading both diffs by hand scales badly and is wrong quietly. The first
+manual attempt reported *every* file as conflicting because the repo is `core.autocrlf=true` and a
+blob (LF) never matches a working file (CRLF); the tool normalises line endings, which is exactly
+the kind of detail a human check forgets on the second run.
+
+**Consequence.** "Check for conflicts" is now a command with an exit code, so it can gate a merge.
+It compares working copies, so its answer is a snapshot — re-run it before actually merging.
+
 ### 2026-09-04 — Phase A+B lives on a branch in a separate worktree, not in the main checkout
 
 **Context.** A second agent session was writing to `C:\Users\Dev\Desktop\Franko` at the same time

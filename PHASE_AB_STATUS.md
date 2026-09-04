@@ -172,9 +172,20 @@ C:\Users\Dev\Desktop\Franko\.venv\Scripts\python.exe -m pytest -m unit -q     # 
 
 ## 5. Merging this back — measured, not guessed
 
-Run as a real three-way merge (`git merge-file --diff3`) with `HEAD` as the base, this branch as
-*ours* and the live tree's current working copy as *theirs*, line endings normalised (the repo is
-`core.autocrlf=true`, so an un-normalised compare reports every file as conflicting).
+Measured, and re-runnable — `git merge` cannot answer this, because the other side's changes are
+uncommitted and on no branch:
+
+```powershell
+cd C:\Users\Dev\Desktop\Franko-phaseab
+C:\Users\Dev\Desktop\Franko\.venv\Scripts\python.exe -m scripts.merge_check ..\Franko [--show]
+# exits with the number of conflicting files (4 as of 2026-09-04 09:20)
+```
+
+It runs the three-way merge git would (`git merge-file --diff3`) per tracked file, with the merge
+base as base, this branch as *ours* and the other tree's WORKING copy as *theirs*, line endings
+normalised (the repo is `core.autocrlf=true`, so an un-normalised compare reports every file as
+conflicting). Re-run it before merging: the other tree keeps moving, though these same four have
+been stable across two of its rounds of edits.
 
 | File | Conflicts |
 |---|---|
