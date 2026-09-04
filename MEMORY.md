@@ -34,6 +34,34 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 
 <!-- Newest first. Append a dated entry when a phase/milestone/task completes. Format: ### YYYY-MM-DD — what changed and why -->
 
+### 2026-09-04 — Reliability/speed Phase A+B: configured limits made real, plus stop + named steps
+- **Branch `phase-ab-reliability` (worktree `..\Franko-phaseab`), uncommitted. See `PHASE_AB_STATUS.md`.**
+  Done on a branch because a second session was writing to the main checkout at the same time (the
+  admin-console / usage-ledger work); every edit made to that tree was reverted, and it is back to
+  its own state with `313 passed`.
+- **Phase B — the .env knobs were wired to nothing.** `JobQueue(workers=2)` and
+  `build_video(workers=3, retries=3)` were literals; `settings.job_workers` / `scene_workers`
+  existed but were referenced nowhere. Now resolved from settings (explicit args still override).
+  Added `scene_retries`, `scene_retry_backoff_s`, `llm_timeout_s`, `llm_attempts`, `job_deadline_s`,
+  `scene_deadline_s`. **The real find: the OpenAI SDK was retrying on top of our 6-attempt loop with
+  no timeout set** — up to 18 hidden attempts, each waiting on the SDK's 10-minute default before our
+  retry policy ran. `OpenAI(..., timeout=…, max_retries=0)` makes `_create` the single retry
+  authority. Defaults unchanged, so behaviour only moves when a knob does.
+- **Phase A — a build that is retrying no longer looks hung.** `core/cancel.py`: an AMBIENT
+  (thread-local) cancel token, carried into the scene pool the same way `usage.carry` carries
+  attribution, checked before every model call / repair attempt / critic round / render / scene.
+  `Cancelled` subclasses **BaseException** on purpose — the pipeline's many `except Exception`
+  handlers would otherwise swallow a stop and keep spending. Deadlines (job + per-scene) trip the
+  same token, so running out of time ends with a reason instead of a mystery timeout.
+- **Named steps without touching the pipeline.** `web/phases.py` derives the current step
+  (planning/codegen/render/lint/vision/narration/stitch/retrying/…) from the log narration the
+  pipeline ALREADY emits, so `composition/` and `verification/` stay web-agnostic; unit-tested
+  against 13 literal log strings so a reworded line fails a test instead of silently blanking the UI.
+  Job state gained step/attempt/elapsed + a `cancelled` terminal state (a stop is not a failure);
+  `POST /api/jobs/{id}/cancel`; UI shows "Rendering · attempt 2/4 · 3:41" and a Stop button.
+- **Gate: 358 passed** (313 base + 45 new). NOT done: a live end-to-end run, Phases C and D, and
+  cancellation is cooperative — worst case it waits out one in-flight render.
+
 ### 2026-07-17 — Direct export presets: YouTube (16:9) + Reel (9:16), reframed at export
 - **Two delivery formats from ONE build.** `GET /api/projects/{pid}/download?format=youtube|reel`
   (+ the existing `subtitles=none|burn`). "youtube" = the finished `final.mp4` handed back untouched,

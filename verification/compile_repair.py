@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core import cancel
 from core.llm import LLMClient, get_client
 from core.schemas.scene_spec import SceneSpec
 from core.textutil import strip_code_fences
@@ -122,6 +123,7 @@ def repair(code: str, work_dir: str | Path, *, render_fn: RenderFn | None = None
     last_error: str | None = None
 
     for i in range(1, caps.max_repair_attempts + 1):
+        cancel.check()
         res = render_fn(current, work_dir)
         if res.ok:
             attempts.append(Attempt(i, True))

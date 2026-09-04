@@ -24,11 +24,16 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from uuid import uuid4
 
+from core import cancel
+from core.config import settings
+from web import phases
+
 # lifecycle states
 QUEUED, RUNNING, DONE, FAILED = "queued", "running", "done", "failed"
+CANCELLED = "cancelled"        # stopped by the user, or out of time — NOT a failure
 # per-scene states
 S_QUEUED, S_RENDERING, S_DONE, S_FAILED = "queued", "rendering", "done", "failed"
-_TERMINAL = {DONE, FAILED}
+_TERMINAL = {DONE, FAILED, CANCELLED}
 
 
 @dataclass
@@ -49,6 +54,15 @@ class Job:
         self.scene_index = scene_index
         self._now = now
         self.status: str = QUEUED
+        # The STEP: which pipeline stage is running right now (web/phases.py vocabulary), read off
+        # the pipeline's own log narration. `attempt` is the "2/4" inside a repeating step, so a
+        # long stretch on one step reads as progress instead of as a freeze.
+        self.step: str = phases.QUEUED
+        self.attempt: str | None = None
+        self.step_started_at: float | None = None
+        # The stop switch this job's whole call tree checks (core/cancel.py). Its deadline is the
+        # bound that turns "retrying invisibly for 20 minutes" into an ended job with a reason.
+        self.token = cancel.CancelToken(deadline_s=settings.job_deadline_s or None)
         self.scenes: dict[int, str] = {}       # index -> per-scene status
         self.events: list[JobEvent] = []
         self.error: str | None = None
@@ -62,10 +76,44 @@ class Job:
     def log(self, message: str) -> None:
         with self._lock:
             self.events.append(JobEvent(len(self.events), self._now(), str(message)))
+            self._apply_step(phases.classify(str(message)))
 
     def set_scene(self, index: int, status: str) -> None:
         with self._lock:
             self.scenes[index] = status
+            self._apply_step(phases.classify_scene_status(str(status)))
+
+    def _apply_step(self, hit: "tuple[str, str | None] | None") -> None:
+        """Adopt a classified (step, attempt). Caller holds the lock. A finished job is never
+        re-labelled by a late log line from a worker thread that hasn't noticed yet."""
+        if hit is None or self.step in (phases.COMPLETE, phases.CANCELLED):
+            return
+        step, attempt = hit
+        if step != self.step:
+            self.step, self.step_started_at = step, self._now()
+        self.attempt = attempt
+
+    def set_step(self, step: str, *, attempt: str | None = None) -> None:
+        with self._lock:
+            self.step, self.attempt, self.step_started_at = step, attempt, self._now()
+
+    # --- cancellation ----------------------------------------------------------------------
+    def cancel(self, reason: str = "cancelled") -> bool:
+        """Ask the job to stop. Cooperative: the pipeline notices at its next checkpoint (worst
+        case after an in-flight render), so this means "asked to stop", not "already dead"."""
+        with self._lock:
+            if self.status in _TERMINAL:
+                return False
+            was_running = self.status == RUNNING
+        self.token.cancel(reason, "stopped by request")
+        self.log("[cancel] stop requested — finishing the current step, then stopping")
+        if not was_running:              # never started: nothing to unwind, end it here
+            self._mark_finished(CANCELLED, error="cancelled before it started")
+        return True
+
+    @property
+    def cancelled(self) -> bool:
+        return self.token.cancelled
 
     def events_since(self, cursor: int) -> list[JobEvent]:
         with self._lock:
@@ -81,12 +129,16 @@ class Job:
             scenes = dict(self.scenes)
             status = self.status
             scene_index = self.scene_index
+            step, attempt = self.step, self.attempt
+            started, step_started, finished = self.started_at, self.step_started_at, self.finished_at
         total = len(scenes) if scenes else (1 if scene_index is not None else 0)
         done = sum(1 for v in scenes.values() if v == S_DONE)
         rendering = sorted(i for i, v in scenes.items() if v == S_RENDERING)
         failed = sum(1 for v in scenes.values() if v == S_FAILED)
 
-        if status == FAILED:
+        if status == CANCELLED:
+            phase, label, pct = "cancelled", "Stopped", 100
+        elif status == FAILED:
             phase, label, pct = "failed", "Something went wrong", 100
         elif status == DONE:
             phase, label, pct = "done", "Done", 100
@@ -99,8 +151,16 @@ class Job:
             phase = "rendering"
             label = f"Scene {cur + 1}" + (f" of {total}" if total > 1 else "")
             pct = 10 + int(80 * done / total)                        # fill the band 10→90 as scenes land
+        # elapsed is whole seconds on purpose: the SSE stream pushes progress only when it CHANGES,
+        # so a float clock would push four times a second forever.
+        now = self._now()
         return {"phase": phase, "label": label, "pct": pct,
-                "done": done, "total": total, "scenes": scenes}
+                "done": done, "total": total, "scenes": scenes,
+                # the named step under the friendly label, so a slow build says what it is doing
+                "step": step, "step_label": phases.label(step), "attempt": attempt,
+                "elapsed": int((finished or now) - started) if started else 0,
+                "step_elapsed": int(now - step_started) if (step_started and not finished) else 0,
+                "cancellable": status not in _TERMINAL, "cancelled": self.token.cancelled}
 
     @property
     def done(self) -> bool:
@@ -127,6 +187,10 @@ class Job:
                 "project_id": self.project_id,
                 "scene_index": self.scene_index,
                 "status": self.status,
+                "step": self.step,
+                "step_label": phases.label(self.step),
+                "attempt": self.attempt,
+                "cancelled": self.token.cancelled,
                 "scenes": dict(self.scenes),
                 "error": self.error,
                 "event_count": len(self.events),
@@ -170,11 +234,25 @@ class JobQueue:
     @staticmethod
     def _run(job: Job, fn: Callable[[Job], Any]) -> None:
         job._mark_running()
+        job.set_step(phases.PLANNING)
         try:
-            result = fn(job)
+            # The token is AMBIENT for this whole call tree (core/cancel.py), so nothing between
+            # here and a model call needs a cancel= parameter in order to be stoppable.
+            with cancel.scope(job.token):
+                result = fn(job)
+            job.set_step(phases.COMPLETE)
             job._mark_finished(DONE, result=result)
+        except cancel.Cancelled as c:
+            # A deliberate stop (user or deadline) is not a crash — give it its own state so the UI
+            # doesn't report "failed" to someone who pressed Stop.
+            why = ("ran past its time limit — it was not hung, it was still retrying"
+                   if c.reason == "deadline" else "stopped by request")
+            job.log(f"[cancel] {why}")
+            job.set_step(phases.CANCELLED)
+            job._mark_finished(CANCELLED, error=why)
         except Exception as e:  # a failed render must never take the server down
             job.log(f"[error] {type(e).__name__}: {e}")
+            job.set_step(phases.FAILED)
             job._mark_finished(FAILED, error=f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}")
 
     def get(self, job_id: str) -> Job | None:

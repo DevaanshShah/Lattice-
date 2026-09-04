@@ -48,12 +48,22 @@ async function loadProjects() { try { state.projects = (await api("GET", "/api/p
 
 function followJob(jobId, onProgress) {
   return new Promise((resolve) => {
+    let final = null;                                  // the job's own last word: done | failed | cancelled
     const es = new EventSource(`/api/jobs/${jobId}/stream`);
     es.addEventListener("progress", (e) => { try { const p = JSON.parse(e.data); onProgress(p); refreshDevStatus(p); } catch {} });
     es.addEventListener("log", (e) => { try { const m = JSON.parse(e.data).message; state.gen.log.push(m); if (state.gen.log.length > 3000) state.gen.log.splice(0, state.gen.log.length - 3000); appendDevLog(m); } catch {} });
-    es.addEventListener("done", () => { es.close(); resolve(); });
-    es.onerror = () => { es.close(); resolve(); };
+    es.addEventListener("status", (e) => { try { final = JSON.parse(e.data); } catch {} });
+    es.addEventListener("done", () => { es.close(); resolve(final); });
+    es.onerror = () => { es.close(); resolve(final); };
   });
+}
+// Ask a running build to stop. Cooperative on the server, so the UI says "Stopping…" and waits for
+// the job's own terminal status rather than pretending it ended here.
+async function stopGenerating() {
+  if (!state.gen.jobId || state.gen.stopping) return;
+  state.gen.stopping = true; renderGenProgress();
+  try { await api("POST", `/api/jobs/${state.gen.jobId}/cancel`); }
+  catch (e) { state.gen.stopping = false; renderGenProgress(); alert("Couldn't stop: " + e.message); }
 }
 
 // ---- flows -------------------------------------------------------------------------------
@@ -110,16 +120,25 @@ async function goFromCode() {
 async function approveGenerate() {
   const keep = state.outline.filter(o => o.enabled).map(o => o.origIndex);
   if (!keep.length) return;
-  state.phase = "generating"; state.gen = { pct: 0, label: "Reading your idea", sub: "", scenes: {}, log: [], detailsOpen: state.gen.detailsOpen }; render();
+  state.phase = "generating"; state.gen = { pct: 0, label: "Reading your idea", sub: "", scenes: {}, log: [], detailsOpen: state.gen.detailsOpen, jobId: null, step: "", attempt: null, elapsed: 0, stopping: false }; render();
   try {
     const { job_id } = await api("POST", `/api/projects/${state.project.id}/build`, { keep, quality: state.quality });
-    await followJob(job_id, (pr) => {
+    state.gen.jobId = job_id;
+    const final = await followJob(job_id, (pr) => {
       state.gen.pct = Math.round(pr.pct || (pr.done && pr.total ? pr.done / pr.total * 100 : state.gen.pct));
       state.gen.label = pr.label || state.gen.label;
       state.gen.sub = pr.total ? `${pr.done || 0} of ${pr.total} scenes` : state.gen.sub;
       if (pr.scenes) state.gen.scenes = pr.scenes;
+      state.gen.step = pr.step_label || state.gen.step;   // WHICH step, not just "Thinking…"
+      state.gen.attempt = pr.attempt || null;             // "2/4" inside a repeating step
+      state.gen.elapsed = pr.elapsed || 0;
+      state.gen.cancellable = pr.cancellable !== false;
       renderGenProgress();
     });
+    if (final && final.status === "cancelled") {          // stopped on purpose — not a failure
+      state.phase = "outline"; render(); loadProjects(); return;
+    }
+    if (final && final.status === "failed") throw new Error(final.error || "the build failed");
     state.project = await api("GET", `/api/projects/${state.project.id}`);
     state.selected = 0; state.phase = "result";
   } catch (e) { alert("Build failed: " + e.message); state.phase = "outline"; }
@@ -609,6 +628,8 @@ function genInner() {
       <div style="position:absolute;inset:0;display:grid;place-items:center;"><span style="${MONO}font-size:28px;font-weight:500;color:var(--text);mix-blend-mode:difference;">${pct}%</span></div>
     </div>
     <div style="margin-top:30px;text-align:center;"><div style="${DISPLAY}font-size:22px;font-weight:600;color:var(--text);letter-spacing:-0.02em;">${esc(g.label)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px;">${esc(g.sub)}</div></div>
+    ${g.step ? `<div style="${MONO}margin-top:10px;font-size:11.5px;letter-spacing:0.05em;color:var(--faint);text-align:center;">${esc(g.step)}${g.attempt ? ` · attempt ${esc(g.attempt)}` : ""}${g.elapsed ? ` · ${fmt(g.elapsed)}` : ""}</div>` : ""}
+    ${g.jobId && g.cancellable !== false ? `<div data-act="gen-stop" style="margin-top:18px;${MONO}font-size:11.5px;letter-spacing:0.06em;padding:7px 14px;border:1px solid var(--line2);border-radius:7px;color:${g.stopping ? "var(--faint)" : "var(--muted)"};cursor:${g.stopping ? "default" : "pointer"};">${g.stopping ? "Stopping…" : "Stop"}</div>` : ""}
     <div data-act="gen-details" style="margin-top:26px;${MONO}font-size:11.5px;letter-spacing:0.06em;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:7px;">${g.detailsOpen ? "▾" : "▸"} Details</div>
     ${g.detailsOpen ? `<div class="lt-snap" style="margin-top:16px;width:100%;max-width:400px;border:1px solid var(--line);border-radius:8px;overflow:hidden;">${sceneRows || `<div style="padding:14px;${MONO}font-size:12px;color:var(--faint);">Starting…</div>`}</div>` : ""}`;
 }
@@ -956,6 +977,7 @@ function handle(act, el) {
     case "back-prompt": state.phase = "prompt"; render(); break;
     case "approve": approveGenerate(); break;
     case "gen-details": state.gen.detailsOpen = !state.gen.detailsOpen; renderGenProgress(); break;
+    case "gen-stop": stopGenerating(); break;
     case "select": state.selected = i; state.historyOpen = false; render(); break;
     case "regen": sceneJob(`/api/projects/${pid}/scenes/${curIdx()}/regenerate`, { quality: state.quality }); break;
     case "edit-tab": state.editTab = v; render(); break;

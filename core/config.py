@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     max_critic_iters: int = 3      # vision-critic <-> fix iterations before best-of-N fallback
     best_of_n: int = 2             # candidates generated when the critic loop doesn't converge
     concurrency_cap: int = 4
+    scene_retries: int = 3         # composition.decoupled: whole-scene REBUILDS before a scene is given up
+    scene_retry_backoff_s: float = 10.0  # pause between those rebuilds (rides out a provider 500-streak)
+    # Deadlines (0 = off). Caps bound how MANY times a step repeats; these bound how LONG the whole
+    # thing may take, so a job ends with an actionable error instead of retrying invisibly.
+    # Cooperative: enforced at the pipeline's checkpoints (core/cancel.py), so the effective
+    # overshoot is at most one in-flight render (render_timeout_s).
+    job_deadline_s: int = 3600     # whole build job, wall clock
+    scene_deadline_s: int = 900    # one scene INCLUDING its rebuild attempts
 
     # --- web deploy: concurrency + auth (FR-31, PaaS deploy) ---
     job_workers: int = 2            # web/jobs.py::JobQueue thread pool (concurrent build jobs)
@@ -96,6 +104,12 @@ class Settings(BaseSettings):
     # so DeepSeek's context cache hits (~90% off repeated input); fallbacks stay ON for reliability.
     llm_provider_pin: str = ""                         # e.g. "DeepSeek" — prefer this OpenRouter provider (warm cache)
     llm_provider_sort: str = "throughput"              # used only when NOT pinning: throughput|price|latency
+    # Retry/timeout budget for ONE model call. Without an explicit timeout the SDK waits on its own
+    # default (10 min) before our retry policy ever runs, so a wedged route reads as a hung job.
+    # llm_attempts is OUR retry loop; the SDK's internal retries are turned OFF (see core/llm.py) so
+    # attempts aren't silently multiplied. Worst case per call ~= llm_attempts * llm_timeout_s.
+    llm_timeout_s: float = 120.0                       # per-request client timeout (seconds)
+    llm_attempts: int = 6                              # transient-error / empty-response retries
 
     # --- TTS (Q3; from M4) ---
     tts_engine: str = "gtts"                          # "gtts" (free/online) | "kokoro" (free/local)

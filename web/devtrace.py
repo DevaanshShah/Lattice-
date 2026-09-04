@@ -29,6 +29,8 @@ def _infer_kind(system: str, user: str) -> str:
         return "critic-fix"
     if "trimmed traceback" in u or "traceback" in u:
         return "compile-fix"
+    if "scene planner" in s or "scene spec" in s:
+        return "spec"          # the structured plan for one scene, before any code
     if "narration" in s and "manim" not in s:
         return "narration"
     if "setup_scene" in s or "lattice" in s or "manim" in s:

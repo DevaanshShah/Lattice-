@@ -20,6 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from core import cancel
 from core.config import settings
 from core.llm import LLMClient, get_client, get_critic_client
 from core.schemas.outline import Outline, OutlineItem
@@ -470,7 +471,25 @@ def build_scene(item: OutlineItem, outline: Outline, index: int, *, work_dir: st
 def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_components,
                       use_critic, structural, quality, retries, on_scene,
                       scene_seconds=None) -> tuple[int, Path | None]:
+    try:
+        with cancel.deadline(settings.scene_deadline_s):   # this scene's own clock, retries included
+            return _attempt_scene(item, outline, index, scenes_dir=scenes_dir, client=client,
+                                  style=style, use_components=use_components, use_critic=use_critic,
+                                  structural=structural, quality=quality, retries=retries,
+                                  on_scene=on_scene, scene_seconds=scene_seconds)
+    except cancel.Cancelled as c:
+        # Stopped, or this scene ran out of time. Give it up WITHOUT retrying (a retry is more spend
+        # on a job that is ending) and report it as its own state — not as a code failure.
+        if on_scene:
+            on_scene(index, "deadline" if c.reason == "deadline" else "cancelled")
+        return (index, None)
+
+
+def _attempt_scene(item, outline, index, *, scenes_dir, client, style, use_components,
+                   use_critic, structural, quality, retries, on_scene,
+                   scene_seconds=None) -> tuple[int, Path | None]:
     for attempt in range(retries):
+        cancel.check()
         try:
             mp4 = build_scene(item, outline, index, work_dir=Path(scenes_dir) / f"scene_{index}",
                               client=client, style=style, use_components=use_components,
@@ -482,7 +501,8 @@ def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_co
         except Exception as e:  # noqa: BLE001 — retry the whole scene (covers 500-streaks)
             if on_scene:
                 on_scene(index, f"retry {attempt + 1}/{retries}: {type(e).__name__}")
-            time.sleep(10)
+            if attempt < retries - 1:   # no point pausing after the LAST attempt — it's given up
+                time.sleep(settings.scene_retry_backoff_s)
     if on_scene:
         on_scene(index, "failed")
     return (index, None)
@@ -490,7 +510,7 @@ def _build_with_retry(item, outline, index, *, scenes_dir, client, style, use_co
 
 # --- whole video -----------------------------------------------------------------------------
 def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int = 8,
-                workers: int = 3, retries: int = 3, use_components: bool = True,
+                workers: int | None = None, retries: int | None = None, use_components: bool = True,
                 use_critic: bool = True, structural: bool | None = None, quality: str = "preview",
                 outline: Outline | None = None, target_seconds: int | None = None,
                 style=None, out_dir: str | Path | None = None, out_name: str = "final.mp4",
@@ -501,8 +521,12 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
     structural: use the LatticeScene grid scaffold. FINALIZED default for the video path = True
     (renders cleaner than freehand); pass structural=False to A/B the old freehand path.
     outline: pass an ALREADY-APPROVED outline (e.g. from the web outline-gate) to skip generation +
-    the approve_fn; the scenes are built in the outline's order (scene_i == outline.items[i])."""
+    the approve_fn; the scenes are built in the outline's order (scene_i == outline.items[i]).
+    workers/retries: None = take the configured budget (LATTICE_SCENE_WORKERS / LATTICE_SCENE_RETRIES)
+    so the .env is the real control; pass a number only to override for one call (evals, tests)."""
     client = client or get_client()
+    workers = settings.scene_workers if workers is None else workers
+    retries = settings.scene_retries if retries is None else retries
     structural = True if structural is None else structural
     out = Path(out_dir) if out_dir else settings.out_dir / "decoupled"
     out.mkdir(parents=True, exist_ok=True)
@@ -525,18 +549,29 @@ def build_video(prompt: str, *, client: LLMClient | None = None, max_scenes: int
     scene_seconds = (target_seconds / len(outline.items)) if (target_seconds and outline.items) else None
     if scene_seconds:
         say(f"   duration budget: ~{target_seconds}s total (~{scene_seconds:.0f}s/scene)")
+    # Every bound that can extend this build, named up front — so a slow job's log says how much
+    # invisible retrying is still permitted, without reading the source.
     say(f"-> building {len(outline.items)} scenes (workers={workers}, retries={retries}, layout={mode})")
+    say(f"   caps: compile-repair x{settings.max_repair_attempts}, critic x{settings.max_critic_iters}, "
+        f"llm x{settings.llm_attempts} @ {settings.llm_timeout_s:.0f}s, render {settings.render_timeout_s}s")
     scenes_dir = out / "scenes"
+    # cancel.carry: thread-locals do not inherit, so without this a scene rendering on a pool
+    # thread would never see its job's stop switch (core/cancel.py).
+    build_one = cancel.carry(
+        lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
+                                     style=style, use_components=use_components, use_critic=use_critic,
+                                     structural=structural, quality=quality, retries=retries,
+                                     on_scene=on_scene, scene_seconds=scene_seconds))
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        results = list(ex.map(
-            lambda iv: _build_with_retry(iv[1], outline, iv[0], scenes_dir=scenes_dir, client=client,
-                                         style=style, use_components=use_components, use_critic=use_critic,
-                                         structural=structural, quality=quality, retries=retries,
-                                         on_scene=on_scene, scene_seconds=scene_seconds),
-            list(enumerate(outline.items))))
+        results = list(ex.map(build_one, list(enumerate(outline.items))))
 
     clips = [mp4 for _, mp4 in sorted(results, key=lambda r: r[0]) if mp4]
     say(f"   {len(clips)}/{len(outline.items)} scenes built")
+    # Stopped mid-build: raise instead of stitching a video nobody is waiting for. The scene clips
+    # that DID finish stay on disk in the project workspace, so nothing paid for is thrown away.
+    if (tok := cancel.current()) is not None and (tok.cancelled or tok.expired()):
+        say(f"   stopped after {len(clips)} scene(s) — their clips are kept on disk")
+        tok.check()
     if not clips:
         return None
     say("-> stitching")

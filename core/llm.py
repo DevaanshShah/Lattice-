@@ -14,6 +14,7 @@ import threading
 import time
 from typing import Any
 
+from core import cancel
 from core.config import settings
 
 
@@ -99,7 +100,12 @@ class LLMClient:
     def client(self) -> Any:
         if self._client is None:
             from openai import OpenAI  # lazy: import only when actually calling out
-            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key or "not-set")
+            # timeout: without it the SDK's own default (10 min) elapses before _create's retry
+            # policy gets a turn, so a wedged route looks like a hung job.
+            # max_retries=0: the SDK retries transient errors too, which would multiply with our
+            # loop (6 x 3 = 18 hidden attempts). _create is the single retry authority.
+            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key or "not-set",
+                                  timeout=settings.llm_timeout_s, max_retries=0)
         return self._client
 
     def _with_cache(self, messages: list[dict], model: str | None) -> list[dict]:
@@ -118,11 +124,12 @@ class LLMClient:
             {"type": "text", "text": head["content"], "cache_control": {"type": "ephemeral"}}]}
         return [cached, *messages[1:]]
 
-    def _create(self, *, attempts: int = 6, **kwargs: Any) -> Any:
+    def _create(self, *, attempts: int | None = None, **kwargs: Any) -> Any:
         """API call with bounded retry on transient errors (5xx/429/timeout) AND on an empty
         message — some gateway-routed models (e.g. deepseek v3.2/v4 on AiCredits) intermittently
         500 or return blank content (AiCredits 500-streaks for ~10-20s, so retry persistently).
         4xx (auth/bad request) raise immediately (no point retrying)."""
+        attempts = settings.llm_attempts if attempts is None else attempts
         # OpenRouter routes each call to some upstream host. Two competing goals:
         #  - latency: sort:throughput picks the fastest host (but scatters providers per call).
         #  - COST: a stable provider keeps that host's automatic prefix cache warm, so the big static
@@ -142,6 +149,7 @@ class LLMClient:
         last_exc: Exception | None = None
         resp = None
         for i in range(attempts):
+            cancel.check()      # stop/deadline lands here — never mid-flight, never after a retry sleep
             try:
                 resp = self.client.chat.completions.create(**kwargs)
             except Exception as e:  # noqa: BLE001 — re-raised below if not transient/last
