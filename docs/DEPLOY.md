@@ -1,6 +1,6 @@
 # Deploying Lattice
 
-Platform-agnostic. Read §1 and §2 whatever you deploy on; §4 covers cost and the free options, §5 the three concrete paths.
+Platform-agnostic. Read §1 and §2 whatever you deploy on; §4 covers cost and the free options; §5 and §6 are the two step-by-step deploys.
 
 Run `python -m scripts.preflight` first, and again on the server. It exits non-zero on a FAIL and
 names the env var to change for every finding.
@@ -95,61 +95,119 @@ you, a €4 Hetzner CX22 with the §3 sizing is the pragmatic fallback.
 
 ---
 
-## 5. The three paths
+## 5. Path A — Oracle Cloud Always Free (recommended)
 
+Free forever, 4 ARM cores / 24 GB, a real Docker daemon — so the render sandbox survives.
 
-### A. VPS + Docker — recommended
+**1. Create the VM.** Oracle Cloud console → Compute → Instances → Create.
+   - Image **Ubuntu 22.04 or 24.04**, shape **VM.Standard.A1.Flex**, **4 OCPUs / 24 GB** (all of
+     the Always Free ARM allowance).
+   - Add your SSH public key. Assign a public IPv4.
+   - If you get *"Out of host capacity"* — common in Mumbai/Hyderabad — try another availability
+     domain, or another region, and retry. It is capacity, not your account.
 
-Keeps the sandbox, keeps a real disk, cheapest per core (~€4–14/mo on Hetzner; DigitalOcean
-Bangalore or Hetzner Singapore if your users are in India).
+**2. Open the ports.** Two separate firewalls, and people miss the second one:
+   - VCN → Security List → Add **Ingress** rules for TCP 80 and 443 from `0.0.0.0/0`.
+   - The instance's own iptables — handled by `setup.sh` below.
 
-```bash
-# on the server, once
-git clone <repo> lattice && cd lattice
-docker build -t lattice-render:0.2 .                  # the render sandbox image
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-scp kokoro-v1.0.onnx voices-v1.0.bin <server>:~/lattice/    # from your machine; gitignored
-cp .env.example .env && $EDITOR .env
-.venv/bin/python -m scripts.preflight                 # must print 0 failing
-.venv/bin/python -m scripts.serve --host 127.0.0.1 --port 8080
-```
-
-Then a systemd unit for restarts, and Caddy in front for TLS:
-
-```
-lattice.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
-**Run the app on the host, not in a container, on this path.** In docker mode the app shells out to
-`docker run`; containerising it would mean mounting `/var/run/docker.sock`, which hands the app
-container root-equivalent control of the host. Running the app directly and letting it drive the
-daemon avoids that entirely, and the render sandbox is unchanged.
-
-### B. Fly.io — push-to-deploy, no daemon
+**3. Run the bootstrap.**
 
 ```bash
-docker build -f Dockerfile.app --build-arg BASE=manimcommunity/manim:v0.18.1 -t lattice-app-local .
-fly launch --no-deploy && fly volumes create data --size 10
-fly secrets set LATTICE_LLM_API_KEY=... LATTICE_ADMIN_TOKEN=... LATTICE_R2_...
-fly deploy
+ssh ubuntu@<your-ip>
+git clone <your-repo> ~/lattice
+bash ~/lattice/deploy/oracle/setup.sh lattice.example.com     # omit the domain to skip Caddy
 ```
 
-with `LATTICE_EXEC_MODE=local`, the volume mounted at `/data`, and `[[mounts]] destination = "/data"`.
-The image is ~3 GB (Manim + LaTeX + Kokoro + onnxruntime). **Model-written Python executes in your
-app container** — child-process environments are scrubbed of secrets and rlimits are applied, but
-the filesystem and network are shared. Accept that consciously or use path A.
+It installs Docker + Python + Caddy, builds `lattice-render:0.2` (the pinned base publishes an
+arm64 image, so this Just Works on Ampere), creates the venv, opens the firewall, and installs the
+systemd unit.
 
-### C. Render / Railway
+**4. Configuration and the voice files** — deliberately not scripted, because both carry secrets or
+338 MB:
 
-Same trade-offs as Fly, plus a paid persistent disk for `/data` and slower builds on a ~3 GB image.
-Point the service at `Dockerfile.app` with the same `--build-arg`, set the same env, mount the disk
-at `/data`.
+```bash
+cp ~/lattice/.env.example ~/lattice/.env && nano ~/lattice/.env
+# LATTICE_LLM_API_KEY, LATTICE_ADMIN_TOKEN (32+ random), the four LATTICE_R2_*,
+# LATTICE_OUT_DIR=/home/ubuntu/lattice/out
+# 4 OCPU / 24 GB sizing:
+# LATTICE_JOB_WORKERS=1  LATTICE_SCENE_WORKERS=3  LATTICE_RENDER_MEMORY=3g  LATTICE_RENDER_CPUS=1.0
+
+# from your own machine (gitignored, ~338 MB):
+scp kokoro-v1.0.onnx voices-v1.0.bin ubuntu@<your-ip>:~/lattice/
+```
+
+**5. Point DNS** — an `A` record for your domain at the instance IP. Caddy gets a certificate
+automatically on the first request.
+
+**6. Start it.**
+
+```bash
+cd ~/lattice && ./.venv/bin/python -m scripts.preflight   # must print 0 failing
+sudo systemctl start lattice && journalctl -u lattice -f
+```
+
+**Keep it alive.** Oracle reclaims *idle* Always Free compute. Upgrading the account to
+pay-as-you-go keeps the Always Free resources and still bills nothing while you stay inside them —
+the usual advice for anything you actually depend on.
 
 ---
 
-## 6. Known limits — read before you promise uptime
+## 6. Path B — Hugging Face Space (public demo, zero setup)
+
+Free CPU tier: 2 vCPU / 16 GB, a public URL, and no server to run. It is a **demo**, not a home:
+the disk is ephemeral, it sleeps when idle, and with no Docker daemon it runs `exec_mode=local`,
+so model-written Python executes in the container.
+
+**1. Create the Space** at huggingface.co/new-space → SDK **Docker** → blank template.
+
+**2. Push this app into it:**
+
+```bash
+bash deploy/huggingface/push-space.sh <hf-username>/<space-name>
+```
+
+That assembles a clean copy of the tracked files, swaps in `deploy/huggingface/Dockerfile` as the
+Space's root `Dockerfile` (its own root Dockerfile is the render image, a different thing), adds
+the README frontmatter HF needs, and pushes the two Kokoro files through **git-lfs**. Use an HF
+access token with write scope as the password.
+
+**3. Set secrets** in Settings → Variables and secrets — never in the repo:
+`LATTICE_LLM_API_KEY`, and the four `LATTICE_R2_*` if you want finished videos to outlive the
+container.
+
+**4. Watch the build log**, then the container log: the first lines are the preflight report.
+The build is slow the first time (Manim base + onnxruntime is a few GB).
+
+### Other PaaS (Fly.io, Render, Railway)
+
+Same shape as the Space — `exec_mode=local`, no sandbox — but paid, with a disk you attach for
+`/data`. Build `Dockerfile.app` with `--build-arg BASE=manimcommunity/manim:v0.18.1`, mount a
+volume at `/data`, set the same env. Worth it over a Space only when you need persistence *and*
+push-to-deploy.
+
+---
+
+## 7. Running both at once
+
+Yes — they are independent deployments of the same code, and nothing in the app coordinates
+between them. The sensible split is **Space = public demo, Oracle = the real thing**.
+
+**What they share, if you let them:**
+
+| | Shared? | What to do |
+|---|---|---|
+| Model API key | Only if you use the same one — and both then spend from it | Give the demo **its own key**, so a demo that goes viral cannot spend your production budget, and `scripts/cost` shows them apart |
+| R2 bucket | Safe to share: keys are derived from random ids (`videos/<pid>/final.mp4`), so they cannot collide | Separate buckets only if you care *which* instance wrote an object |
+
+**What they do not share, at all:** projects, Learn threads, deck records, the usage ledger and
+users. All of it is files on each box, and users are anonymous per-browser cookie ids scoped to a
+domain. A video made on the Space is invisible on Oracle, and vice versa.
+
+Hosting both costs nothing. Only the model calls cost, and only when someone actually builds.
+
+---
+
+## 8. Known limits — read before you promise uptime
 
 - **A restart loses running jobs.** The queue is in-memory; finished scene clips survive on disk and
   the boot recovery path can stitch them, but an in-flight build does not resume.
@@ -161,7 +219,7 @@ at `/data`.
 
 ---
 
-## 7. After deploying
+## 9. After deploying
 
 ```bash
 python -m scripts.preflight     # 0 failing

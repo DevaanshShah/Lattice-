@@ -1,0 +1,14 @@
+# Automatic HTTPS. __DOMAIN__ is filled in by setup.sh.
+__DOMAIN__ {
+	reverse_proxy 127.0.0.1:8080 {
+		# Builds stream progress over SSE for minutes; the default proxy timeouts would cut them.
+		flush_interval -1
+		transport http {
+			read_timeout 30m
+		}
+	}
+	request_body {
+		max_size 12MB          # an attached image is a base64 data URL in the JSON body
+	}
+	encode zstd gzip
+}
