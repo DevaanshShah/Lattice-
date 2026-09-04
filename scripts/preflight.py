@@ -175,9 +175,13 @@ def check_storage() -> list[Check]:
           "key": settings.r2_access_key_id, "secret": settings.r2_secret_access_key}
     set_ = {k for k, v in r2.items() if str(v).strip()}
     if not set_:
+        # How bad this is depends on the disk underneath, which we cannot detect: on a PaaS or a
+        # Space it means every video dies on the next rebuild; on a VPS with a real volume it is
+        # "no backup" rather than "no storage". Say which, instead of one alarmist sentence.
         out.append(Check("object storage", WARN,
-                         "no R2 configured: finished videos live only on this container's disk and "
-                         "die with it on redeploy"))
+                         "no R2 configured: finished videos live only on this disk. On an "
+                         "ephemeral one (PaaS/Space) they die on the next rebuild; on a VPS volume "
+                         "they persist but have no off-box backup"))
     elif len(set_) < len(r2):
         out.append(Check("object storage", FAIL,
                          f"R2 half-configured (missing: {', '.join(sorted(set(r2) - set_))})"))
