@@ -5,9 +5,6 @@
 const state = {
   screen: "landing",              // landing | studio | gallery | learn
   phase: "prompt",                // prompt | outline | generating | result
-  learnPhase: "input",            // input | generating | watch  (student Learn mode)
-  learnInputMode: "describe",     // describe | image | code  (what the student gives)
-  learnTopic: "",
   inputMode: "describe",          // describe | image | code  (Step-1 seed source)
   theme: "dark",
   projects: [],                   // GET /api/projects
@@ -674,103 +671,8 @@ function timeline(scenes) {
   </div>`;
 }
 // ---- Learn mode (student): ask / image / code -> auto plan+build -> watch (no editing) --------
-function startLearn() { state.screen = "learn"; state.learnPhase = "input"; state.learnTopic = ""; render(); }
+function startLearn() { state.screen = "learn"; render(); }   // the chat itself lives in learn.js
 // Shared: a freshly-PLANNED project (from topic / image / code) -> auto-build at cheap Draft -> watch.
-async function learnBuildAndWatch(p) {
-  state.project = p; state.screen = "learn"; state.learnPhase = "generating";
-  state.gen.label = "Building your lesson";
-  render();
-  try {
-    const keep = (p.scenes || []).map(s => s.index);                               // auto-approve every scene
-    const { job_id } = await api("POST", `/api/projects/${p.id}/build`, { keep, quality: "draft" }); // watch-only -> cheap
-    await followJob(job_id, (pr) => {
-      state.gen.pct = Math.round(pr.pct || (pr.done && pr.total ? pr.done / pr.total * 100 : state.gen.pct));
-      state.gen.label = pr.label || state.gen.label;
-      state.gen.sub = pr.total ? `${pr.done || 0} of ${pr.total} scenes` : state.gen.sub;
-      if (pr.scenes) state.gen.scenes = pr.scenes;
-      renderGenProgress();
-    });
-    state.project = await api("GET", `/api/projects/${p.id}`);
-    state.selected = 0; state.learnPhase = "watch";
-  } catch (e) { alert("Couldn't build the lesson: " + e.message); state.learnPhase = "input"; }
-  render(); loadProjects();
-}
-function learnPlanning(label) { state.learnPhase = "generating"; state.gen = { pct: 0, label, sub: "", scenes: {}, log: [], detailsOpen: false }; render(); }
-async function learnGo(topic) {
-  topic = (topic || "").trim(); if (!topic) return;
-  learnPlanning("Planning your lesson");
-  try { await learnBuildAndWatch(await api("POST", "/api/projects", { topic })); }
-  catch (e) { alert("Couldn't plan: " + e.message); state.learnPhase = "input"; render(); }
-}
-async function learnGoImage(file) {
-  if (!file) return;
-  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) { alert("Use a PNG, JPG, or WebP image."); return; }
-  learnPlanning("Reading your image");
-  try { const image = await downscale(file); await learnBuildAndWatch(await api("POST", "/api/projects/from-image", { image })); }
-  catch (e) { alert("Couldn't read that image: " + e.message); state.learnPhase = "input"; render(); }
-}
-async function learnGoCode() {
-  const t = $("learn-code"), code = t ? t.value.trim() : "";
-  if (!code) { alert("Paste some code first."); return; }
-  const ls = $("learn-lang"), lang = ls ? ls.value : "auto";
-  learnPlanning("Reading your code");
-  try { await learnBuildAndWatch(await api("POST", "/api/projects/from-code", { code, language: lang === "auto" ? null : lang })); }
-  catch (e) { alert("Couldn't read that code: " + e.message); state.learnPhase = "input"; render(); }
-}
-function learnScreen() {
-  if (state.learnPhase === "generating") {
-    return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div id="gen-root" class="lt-fade" style="max-width:520px;margin:0 auto;padding:80px 32px;display:flex;flex-direction:column;align-items:center;">${genInner()}</div></div>`;
-  }
-  if (state.learnPhase === "watch" && state.project) {
-    const p = state.project, built = (p.scenes || []).filter(s => s.built).length;
-    return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div class="lt-fade" style="max-width:900px;margin:0 auto;padding:40px 32px 80px;">
-      <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Your lesson</div>
-      <h1 style="${DISPLAY}font-size:30px;font-weight:600;letter-spacing:-0.02em;color:var(--text);margin:0 0 20px;line-height:1.1;">${esc(p.topic)}</h1>
-      <div style="border-radius:10px;overflow:hidden;background:#0B0B10;border:1px solid var(--line);"><div style="position:relative;aspect-ratio:16/9;"><video src="/api/projects/${p.id}/final?t=${Date.now()}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;"></video></div></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:20px;flex-wrap:wrap;">
-        <span style="${MONO}font-size:12px;color:var(--faint);">${built} scenes · narrated</span>
-        <div style="display:flex;gap:10px;">
-          <button class="lt-btnp" data-act="learn-again" style="padding:11px 18px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:14px;cursor:pointer;">Learn something else</button>
-          <button class="lt-btnp" data-act="learn-edit" style="padding:11px 18px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14px;cursor:pointer;">Open in studio to edit →</button>
-        </div>
-      </div>
-    </div></div>`;
-  }
-  const mode = state.learnInputMode || "describe";
-  const langs = ["auto", "python", "javascript", "typescript", "java", "c", "cpp", "go", "rust", "ruby", "sql"];
-  let card;
-  if (mode === "image") {
-    card = `<div id="learn-drop" style="border:1.5px dashed var(--line2);border-radius:12px;background:var(--raise);padding:44px 18px;text-align:center;transition:border-color .15s ease;">
-      <input id="learn-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;" />
-      <div style="font-size:15.5px;color:var(--muted);margin-bottom:18px;">Drop a screenshot of code or a diagram — or choose a file</div>
-      <button class="lt-btnp" data-act="learn-pick" style="padding:12px 22px;border-radius:7px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14px;cursor:pointer;">Choose image</button>
-      <div style="${MONO}font-size:11px;color:var(--faint);margin-top:18px;">PNG, JPG or WebP · we read it and explain it</div>
-    </div>`;
-  } else if (mode === "code") {
-    card = `<div style="border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:18px;">
-      <textarea id="learn-code" placeholder="Paste code to have it explained, line by line…" spellcheck="false" style="width:100%;min-height:150px;resize:vertical;background:transparent;border:none;outline:none;${MONO}font-size:13.5px;line-height:1.6;color:var(--text);"></textarea>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap;">
-        <select id="learn-lang" style="background:var(--raise2);border:1px solid var(--line2);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;cursor:pointer;">${langs.map(l => `<option value="${l}">${l === "auto" ? "Auto-detect" : l}</option>`).join("")}</select>
-        <button class="lt-btnp" data-act="learn-code-go" style="padding:13px 26px;border-radius:7px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:15px;cursor:pointer;">Explain this code →</button>
-      </div>
-    </div>`;
-  } else {
-    card = `<div style="border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:18px;">
-      <textarea id="learn-input" placeholder="e.g. How does gradient descent find the minimum? · Explain the Fourier series" style="width:100%;min-height:96px;resize:none;background:transparent;border:none;outline:none;font-size:17px;line-height:1.5;color:var(--text);"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-        <button class="lt-btnp" data-act="learn-go" style="padding:13px 26px;border-radius:7px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:15px;cursor:pointer;">Learn this →</button>
-      </div>
-    </div>`;
-  }
-  return `<div class="lt-scroll" style="flex:1;overflow-y:auto;"><div class="lt-fade" style="max-width:680px;margin:0 auto;padding:80px 32px;">
-    <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;">Learn</div>
-    <h1 style="${DISPLAY}font-size:44px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 12px;line-height:1.0;">What do you want to learn?</h1>
-    <p style="color:var(--muted);font-size:17px;margin:0 0 24px;max-width:50ch;">Ask a question, drop a screenshot of code or a diagram, or paste code — and get a short animated explainer.</p>
-    <div style="margin-bottom:18px;">${segmented("learn-mode", [["describe", "Ask"], ["image", "Image"], ["code", "Code"]], mode)}</div>
-    ${card}
-    ${mode === "describe" ? suggestRow("sugg-learn") : ""}
-  </div></div>`;
-}
 function phaseResult() {
   const scenes = (state.project && state.project.scenes) || [];
   const sel = scenes[state.selected] || scenes[0];
@@ -878,14 +780,6 @@ function wire() {
   app.onclick = (e) => { const el = e.target.closest("[data-act]"); if (el) handle(el.dataset.act, el); };
   // Enter-to-submit for key inputs
   const li = $("landing-input"); if (li) li.onkeydown = (e) => { if (e.key === "Enter") planTopic(li.value); };
-  const le = $("learn-input"); if (le) le.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); learnGo(le.value); } };
-  const lf = $("learn-file"); if (lf) lf.onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) learnGoImage(f); };
-  const ld = $("learn-drop");
-  if (ld) {
-    ld.ondragover = (e) => { e.preventDefault(); ld.style.borderColor = "var(--accent)"; };
-    ld.ondragleave = () => { ld.style.borderColor = "var(--line2)"; };
-    ld.ondrop = (e) => { e.preventDefault(); ld.style.borderColor = "var(--line2)"; const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) learnGoImage(f); };
-  }
   const tw = $("tweak-input"); if (tw) tw.onkeydown = (e) => { if (e.key === "Enter") handle("tweak"); };
   const mo = $("motion-input"); if (mo) mo.onkeydown = (e) => { if (e.key === "Enter") handle("motion-apply"); };
   // timeline playhead follows the player: global time = selected scene's start + player currentTime
@@ -927,7 +821,7 @@ function handle(act, el) {
     case "replay-intro": if (window.playLatticeIntro) window.playLatticeIntro(); break;
     case "home": state.screen = "landing"; render(); break;
     case "tab-home": state.screen = "landing"; render(); break;
-    case "tab-learn": state.screen = "learn"; if (state.learnPhase === "generating") state.learnPhase = "input"; render(); break;
+    case "tab-learn": state.screen = "learn"; render(); break;
     case "tab-studio": state.screen = "studio"; render(); break;
     case "tab-slides": state.screen = "slides"; render(); break;
     case "tab-gallery": state.screen = "gallery"; render(); break;
@@ -939,13 +833,6 @@ function handle(act, el) {
     case "sugg-prompt": { const el2 = $("prompt-text"); if (el2) el2.value = "Explain " + v; break; }
     case "go-teach": state.screen = "studio"; state.phase = "prompt"; state.project = null; state.outline = []; render(); break;
     case "go-learn": startLearn(); break;
-    case "learn-mode": state.learnInputMode = v; render(); break;
-    case "learn-pick": { const f = $("learn-file"); if (f) f.click(); break; }
-    case "learn-code-go": learnGoCode(); break;
-    case "learn-go": learnGo($("learn-input").value); break;
-    case "learn-again": state.learnPhase = "input"; state.learnTopic = ""; state.project = null; render(); break;
-    case "learn-edit": state.screen = "studio"; state.phase = "result"; state.selected = 0; render(); break;
-    case "sugg-learn": { const el2 = $("learn-input"); if (el2) el2.value = "Explain " + v; break; }
     case "len": state.length = v; render(); break;
     case "qual": state.quality = v; render(); break;
     case "mode": state.inputMode = v; render(); break;
