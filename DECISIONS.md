@@ -10,6 +10,58 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-09-04 — Image leaves the Teach front door; Code stays. Learn answers both in text
+
+**Context.** Teach step 1 offered three doors: Describe, Image, Code. The question was whether
+Image and Code are student gestures that belong in Learn.
+
+**Decision.** Image moves to the Learn chat composer (attach a photo, get a text answer). Code
+stays in Teach *and* gains a "send as code" affordance in Learn.
+
+**Why not the alternative.** Moving both would make Teach a single clean box, but it would cost the
+code-walkthrough video — the most *reliable* artifact this pipeline makes, because its scaffold is
+deterministic (full snippet on screen, active line highlighted, per-line narration) rather than
+dependent on the model getting layout right. "Make a video explaining this function" is normal
+lesson prep, not a student gesture.
+
+The real line is not *who pastes what* — students and teachers both paste code. It is the **output
+contract**: Teach returns a rendered artifact through the review gate; Learn returns an answer now,
+with a video only when it is earned. A learner photographing a homework problem on the Teach door
+was starting a four-minute build to be told what the picture shows.
+
+**Consequence.** `/api/projects/from-image` is now unreferenced by the UI. It is left in place —
+removing a working endpoint is a separate decision — but it is dead weight to revisit.
+
+### 2026-09-04 — Learn describes an attached image, and stores the description, not the image
+
+**Decision.** `web/seed.describe()` (sibling of `from_image`, which returns a video *topic*) turns
+the attachment into plain text on the vision-capable **critic** client; `web/learn.py` folds that
+into the ordinary chat turn. The thread keeps the learner's own words plus a `has_image` flag; the
+base64 is dropped after the call.
+
+**Why not the alternative.** Passing the image straight to the chat model does not work — the live
+generator (deepseek) is not vision-capable, and the critic model is the one already configured for
+vision. Storing the payload would add megabytes per message to a thread JSON that no later turn
+re-reads. Letting vision *answer* the question (rather than describe) would hand the chat model a
+conclusion it cannot check, and the learner a reasoning step they cannot see.
+
+**Consequence.** One extra paid vision call per attached image, bounded at 700 output tokens; if it
+fails, the turn still answers, with a note that the image could not be read.
+
+### 2026-09-04 — The Learn composer wires itself, with no new DOM id
+
+**Context.** `learn.js` normally relies on `app.js` to wire its inputs — but `app.js` differs
+between the two checkouts, and the obvious id (`learn-file`) is already taken there by the old,
+now-unrouted Learn screen.
+
+**Decision.** The attach button builds its own `<input type="file">` in JS. `learn.js` gains no new
+externally-wired id, so the file merges into either checkout untouched.
+
+**Consequence.** `learn.js` — the one file in this feature that neither session was editing —
+stayed conflict-free. `app.js` did not.
+
+---
+
 ### 2026-09-04 — `scripts/merge_check.py` instead of eyeballing the two trees
 
 **Context.** The reconciliation question is "does this branch merge into the other checkout", but

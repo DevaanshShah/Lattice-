@@ -29,14 +29,20 @@ from pydantic import BaseModel, Field
 
 from core.textutil import extract_json
 from web import jobs as jobs_mod
+from web import seed
 
 
 class NewThread(BaseModel):
     message: str = Field(..., min_length=1, max_length=4_000)
+    # An attached image (png/jpeg/webp data URL). Described by vision, folded into the turn, then
+    # DROPPED — a thread is a JSON file on disk, and storing base64 would bloat it by megabytes
+    # per message for something no later turn re-reads.
+    image: str | None = Field(None, max_length=seed.MAX_IMAGE_CHARS)
 
 
 class NewMessage(BaseModel):
     message: str = Field(..., min_length=1, max_length=4_000)
+    image: str | None = Field(None, max_length=seed.MAX_IMAGE_CHARS)
 
 
 class MakeVideo(BaseModel):
@@ -142,6 +148,17 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
         from core.llm import get_client
         return get_client()
 
+    def _see(image: str | None, question: str) -> str:
+        """Vision, best-effort: a chat turn must still answer if the image can't be read."""
+        if not image:
+            return ""
+        try:
+            # No client= on purpose: seed.describe falls back to the CRITIC client, which is the
+            # vision-capable one. The chat/generator model (deepseek) cannot see images at all.
+            return seed.describe(image, question)
+        except seed.SeedError as e:
+            return f"(the attached image could not be read: {e})"
+
     def _reply(rec: ThreadRecord, user_text: str) -> dict:
         """One fast LLM call: answer the message AND decide whether a video is worth offering.
         Falls back to a plain, un-offered answer if the model's JSON doesn't parse — a chat turn
@@ -158,10 +175,14 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
         except ValueError:
             return {**_SYSTEM_FALLBACK, "answer": raw.strip()[:4000] or "Sorry, could you rephrase that?"}
 
-    def _append_reply(tid: str, user_text: str) -> ThreadRecord:
+    def _append_reply(tid: str, user_text: str, image: str | None = None) -> ThreadRecord:
+        seen = _see(image, user_text)                   # one vision call, outside the store lock
+
         def mutate(rec: ThreadRecord):
-            data = _reply(rec, user_text)               # history built BEFORE this turn is appended,
-            rec.messages.append(_msg("user", "text", text=user_text))   # or it would double up below
+            asked = f"{user_text}\n\n[Attached image shows: {seen}]" if seen else user_text
+            data = _reply(rec, asked)                   # history built BEFORE this turn is appended,
+            # the message keeps the learner's words + a flag, never the base64 payload
+            rec.messages.append(_msg("user", "text", text=user_text, has_image=bool(image)))
             rec.messages.append(_msg("assistant", "text", text=data["answer"],
                 offer=({"label": data["offer_label"], "video_prompt": data["video_prompt"]}
                        if data["offer"] and data["video_prompt"] else None)))
@@ -207,7 +228,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     def create_thread(body: NewThread) -> dict:
         rec = ThreadRecord(id=uuid4().hex[:8], title=body.message[:60], created_at=time.time())
         store.save(rec)                                  # so _append_reply's edit() can load it back
-        rec = _append_reply(rec.id, body.message)
+        rec = _append_reply(rec.id, body.message, body.image)
         return thread_dto(rec)
 
     @app.get("/api/learn/threads")
@@ -221,7 +242,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     @app.post("/api/learn/threads/{tid}/messages")
     def add_message(tid: str, body: NewMessage) -> dict:
         store.load(tid)                                    # 404s up front, before the LLM call
-        rec = _append_reply(tid, body.message)
+        rec = _append_reply(tid, body.message, body.image)
         return thread_dto(rec)
 
     @app.post("/api/learn/threads/{tid}/video")

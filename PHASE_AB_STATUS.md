@@ -178,7 +178,7 @@ uncommitted and on no branch:
 ```powershell
 cd C:\Users\Dev\Desktop\Franko-phaseab
 C:\Users\Dev\Desktop\Franko\.venv\Scripts\python.exe -m scripts.merge_check ..\Franko [--show]
-# exits with the number of conflicting files (4 as of 2026-09-04 09:20)
+# exits with the number of conflicting files (6 as of 2026-09-04 10:05)
 ```
 
 It runs the three-way merge git would (`git merge-file --diff3`) per tracked file, with the merge
@@ -191,6 +191,7 @@ been stable across two of its rounds of edits.
 |---|---|
 | `core/config.py` | 0 — clean |
 | `core/llm.py` | 0 — clean |
+| `web/seed.py`, `web/static/learn.js` | 0 — clean |
 | `web/devtrace.py` | 0 — clean |
 | `web/static/app.js` | 0 — clean (my edits and the uncommitted UI work are in different regions) |
 | `verification/compile_repair.py`, `verification/vision_critic.py`, `render/sandbox.py` | 0 — clean |
@@ -199,6 +200,8 @@ been stable across two of its rounds of edits.
 | `web/app.py` | **1** |
 | `web/jobs.py` | **2** |
 | `MEMORY.md` | **1** |
+| `web/learn.py` | **2** |
+| `web/static/app.js` | **1** |
 
 **All four conflicts are additive-on-additive** — both sides inserted at the same line, neither
 deletes the other's code. The union resolution for each:
@@ -214,6 +217,11 @@ deletes the other's code. The union resolution for each:
    outermost, then my `with cancel.scope(job.token):`, keeping my `except cancel.Cancelled` clause
    ahead of `except Exception` and their `usage.record("job", ...)` line at the end.
 5. `MEMORY.md` — both sessions appended a phase-log entry at the same anchor. Keep both, newest first.
+6. `web/learn.py` (x2) — they added `usage.tag(...)`/`usage.record(...)` above the two
+   `_append_reply(...)` calls; I added a `body.image` argument to those same calls. Keep their lines
+   and my argument.
+7. `web/static/app.js` — they added the two `learn-draft`/`learn-search` wiring lines directly above
+   the image-seed block that I deleted. Keep their two lines, drop the block.
 
 Nothing else in either tree is touched by the other side.
 

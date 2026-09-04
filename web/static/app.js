@@ -98,16 +98,6 @@ function downscale(file) {
     img.src = url;
   });
 }
-async function goFromImage(file) {
-  if (!file) return;
-  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) { alert("Please choose a PNG, JPG, or WebP image."); return; }
-  state.screen = "studio"; state.phase = "prompt"; state.planning = true; render();
-  try {
-    const image = await downscale(file);
-    enterOutline(await api("POST", "/api/projects/from-image", { image }));
-  } catch (e) { alert("Couldn't read that image: " + e.message); state.phase = "prompt"; }
-  state.planning = false; render(); loadProjects();
-}
 async function goFromCode() {
   const t = $("seed-code"), code = t ? t.value.trim() : "";
   if (!code) { alert("Paste some code first."); return; }
@@ -503,7 +493,6 @@ function segmented(name, opts, cur) { return `<div style="display:flex;border:1p
 function phasePrompt() {
   if (state.planning) {
     const caps = {
-      image: ["Reading your image…", "Looking at what it shows, then planning each scene."],
       code: ["Reading your code…", "Breaking it into a line-by-line walkthrough."],
     };
     const [ttl, sub] = caps[state.inputMode] || ["Sketching your storyboard…", "Reading your idea and planning each scene. This usually takes a few seconds."];
@@ -515,18 +504,13 @@ function phasePrompt() {
   }
   const subById = {
     describe: "Give Lattice a topic or a question. It handles the storyboard, the animation, and the narration.",
-    image: "Upload a diagram, chart, screenshot, or a photo of code. Lattice works out the concept and explains it.",
     code: "Paste a function or snippet. Lattice walks through it line by line — what each part does and why.",
   };
+  // No Image tab here on purpose: "here is a photo of the problem" is a LEARNER's gesture and it
+  // wants an answer, not a four-minute render. It lives in the Learn composer instead. Teach keeps
+  // the two artifact-shaped doors: a topic, or a snippet to walk through.
   let card;
-  if (state.inputMode === "image") {
-    card = `<div id="seed-drop" style="border:1.5px dashed var(--line2);border-radius:10px;background:var(--raise);padding:46px 18px;text-align:center;transition:border-color .15s ease;">
-      <input id="seed-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;" />
-      <div style="font-size:15.5px;color:var(--muted);margin-bottom:18px;">Drop an image here, or choose a file</div>
-      <button class="lt-btnp" data-act="seed-pick" style="padding:11px 22px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14px;cursor:pointer;">Choose image</button>
-      <div style="${MONO}font-size:11px;color:var(--faint);margin-top:18px;">PNG, JPG or WebP · diagram, chart, screenshot, or photo of code</div>
-    </div>`;
-  } else if (state.inputMode === "code") {
+  if (state.inputMode === "code") {
     const langs = ["auto", "python", "javascript", "typescript", "java", "c", "cpp", "go", "rust", "ruby", "sql"];
     const langOpts = langs.map(l => `<option value="${l}">${l === "auto" ? "Auto-detect" : l}</option>`).join("");
     card = `<div style="border:1px solid var(--line2);border-radius:10px;background:var(--raise);padding:18px;">
@@ -553,7 +537,7 @@ function phasePrompt() {
     <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;">Step 1 · The idea</div>
     <h2 style="${DISPLAY}font-size:38px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 10px;line-height:1.02;">What do you want to explain?</h2>
     <p style="color:var(--muted);font-size:16px;margin:0 0 22px;max-width:52ch;">${subById[state.inputMode] || subById.describe}</p>
-    <div style="margin-bottom:20px;">${segmented("mode", [["describe", "Describe"], ["image", "Image"], ["code", "Code"]], state.inputMode)}</div>
+    <div style="margin-bottom:20px;">${segmented("mode", [["describe", "Describe"], ["code", "Code"]], state.inputMode)}</div>
     ${card}
     ${state.inputMode === "describe" ? suggestRow("sugg-prompt") : ""}
   </div>`;
@@ -911,14 +895,6 @@ function wire() {
   }
   const ss = $("side-search"); if (ss) ss.oninput = (e) => { state.sideSearch = e.target.value; rerenderSidebarList(); };
   const gs = $("gallery-search"); if (gs) gs.oninput = (e) => { state.gallerySearch = e.target.value; render(); const g = $("gallery-search"); if (g) { g.focus(); g.setSelectionRange(g.value.length, g.value.length); } };
-  // image seed: file picker + drag-drop on the dropzone
-  const sf = $("seed-file"); if (sf) sf.onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) goFromImage(f); };
-  const drop = $("seed-drop");
-  if (drop) {
-    drop.ondragover = (e) => { e.preventDefault(); drop.style.borderColor = "var(--accent)"; };
-    drop.ondragleave = () => { drop.style.borderColor = "var(--line2)"; };
-    drop.ondrop = (e) => { e.preventDefault(); drop.style.borderColor = "var(--line2)"; const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) goFromImage(f); };
-  }
   // outline drag-reorder
   app.querySelectorAll("[data-drag]").forEach(el => {
     el.ondragstart = () => { state.dragFrom = +el.dataset.drag; };
@@ -967,7 +943,6 @@ function handle(act, el) {
     case "len": state.length = v; render(); break;
     case "qual": state.quality = v; render(); break;
     case "mode": state.inputMode = v; render(); break;
-    case "seed-pick": { const f = $("seed-file"); if (f) f.click(); break; }
     case "seed-code-go": goFromCode(); break;
     case "storyboard": planTopic($("prompt-text").value); break;
     case "ol-title": break; case "ol-desc": break; // uncontrolled, cosmetic

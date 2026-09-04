@@ -43,14 +43,53 @@ def _clean(raw: str) -> str:
     return t
 
 
-def from_image(data_url: str, *, client: LLMClient | None = None) -> SeedResult:
-    """Derive a 1-3 sentence explainer topic from an image data-URL. Raises SeedError on a bad input
-    or an empty model reply."""
+def validate(data_url: str) -> str:
+    """Cheap guards before any paid vision call: right shape, not absurdly large."""
     data_url = (data_url or "").strip()
     if not _DATA_URL.match(data_url):
         raise SeedError("image must be a png/jpeg/webp data URL (data:image/...;base64,...)")
     if len(data_url) > MAX_IMAGE_CHARS:
         raise SeedError("image too large (max ~5 MB)")
+    return data_url
+
+
+DESCRIBE_MAX_TOKENS = 700   # a paragraph of what's in the image, not an essay
+
+
+def describe(data_url: str, question: str = "", *, client: LLMClient | None = None) -> str:
+    """What is IN this image, in plain text, read with the learner's question in mind.
+
+    The sibling of from_image() and deliberately not the same thing: from_image() returns a TOPIC
+    for the video planner, this returns a DESCRIPTION for a chat answer. A learner photographing a
+    homework problem wants it read and answered, not turned into a lesson title.
+
+    The description is what gets folded into the chat turn, so the generator model never has to be
+    vision-capable (the live one, deepseek, isn't) and the thread stores text rather than megabytes
+    of base64.
+    """
+    data_url = validate(data_url)
+    ask = (question or "").strip()
+    prompt = ("Describe what this image shows, in enough detail that someone who cannot see it "
+              "could answer questions about it. Transcribe any text, code, equations, labels or "
+              "numbers exactly. Do not answer the question yourself — just describe.")
+    if ask:
+        prompt += f"\n\nThe person asked: {ask!r} — make sure the parts relevant to that are covered."
+    client = client or get_critic_client()   # vision runs on the critic model, like from_image
+    content: list[dict] = [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": data_url, "detail": settings.critic_image_detail}},
+    ]
+    out = (client.chat([{"role": "user", "content": content}],
+                       max_tokens=DESCRIBE_MAX_TOKENS) or "").strip()
+    if not out:
+        raise SeedError("could not read that image")
+    return out
+
+
+def from_image(data_url: str, *, client: LLMClient | None = None) -> SeedResult:
+    """Derive a 1-3 sentence explainer topic from an image data-URL. Raises SeedError on a bad input
+    or an empty model reply."""
+    data_url = validate(data_url)
 
     # vision needs the CRITIC client — the default generator (deepseek) isn't vision-capable, and the
     # critic may live on its own provider (settings.critic_base_url). Tests inject their own client.
