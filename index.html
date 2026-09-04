@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lattice — turn any idea into an explainer video</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: #0E0E12; color: #ECEAE3;
+    font: 400 16px/1.55 "Geist", "Helvetica Neue", sans-serif;
+    min-height: 100vh;
+  }
+  a { color: #F2B441; text-decoration: none; }
+  a:hover { color: #ECEAE3; }
+  .nav {
+    display: flex; align-items: center; gap: 28px;
+    padding: 22px 44px; border-bottom: 1px solid rgba(236,234,227,.08);
+  }
+  .wordmark { display: flex; align-items: center; gap: 11px; font: 600 20px "Bricolage Grotesque", sans-serif; }
+  .wordmark .glyph {
+    width: 28px; height: 28px; border-radius: 7px; background: #F2B441;
+    color: #141008; display: grid; place-items: center; font: 700 16px "Bricolage Grotesque", sans-serif;
+  }
+  .nav .links { display: flex; gap: 24px; margin-left: auto; font: 500 14px "Geist", sans-serif; }
+  .nav .links a { color: rgba(236,234,227,.6); }
+  .nav .links a:hover { color: #F2B441; }
+  .replay {
+    background: none; border: 1px solid rgba(236,234,227,.2); border-radius: 999px;
+    color: rgba(236,234,227,.65); font: 500 13px "Geist", sans-serif;
+    padding: 7px 15px; cursor: pointer; transition: all .2s;
+  }
+  .replay:hover { border-color: #F2B441; color: #F2B441; }
+  .hero { max-width: 860px; margin: 0 auto; padding: 96px 32px 40px; text-align: center; }
+  .hero h1 {
+    font: 600 clamp(40px, 6vw, 64px)/1.08 "Bricolage Grotesque", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em { font-style: normal; color: #F2B441; }
+  .hero p { margin-top: 18px; color: rgba(236,234,227,.6); font-size: 18px; }
+  .prompt {
+    display: flex; align-items: center; gap: 10px;
+    max-width: 620px; margin: 40px auto 0; padding: 8px 8px 8px 26px;
+    background: #17171E; border: 1px solid rgba(242,180,65,.4); border-radius: 999px;
+  }
+  .prompt input {
+    flex: 1; background: none; border: none; outline: none;
+    color: #ECEAE3; font: 400 16px "Geist", sans-serif;
+  }
+  .prompt input::placeholder { color: rgba(236,234,227,.4); }
+  .prompt button {
+    background: #F2B441; color: #141008; border: none; border-radius: 999px;
+    font: 600 15px "Geist", sans-serif; padding: 12px 24px; cursor: pointer;
+    transition: filter .15s;
+  }
+  .prompt button:hover { filter: brightness(1.08); }
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    max-width: 880px; margin: 64px auto 96px; padding: 0 32px;
+  }
+  .card {
+    aspect-ratio: 16/9; border-radius: 14px; position: relative;
+    background: #15151B; border: 1px solid rgba(236,234,227,.08);
+    display: grid; place-items: center; overflow: hidden;
+  }
+  .card::after {
+    content: attr(data-title); position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 10px 14px; font: 500 13px "Geist", sans-serif; color: rgba(236,234,227,.7);
+    background: linear-gradient(transparent, rgba(0,0,0,.55));
+  }
+  .card .play {
+    width: 42px; height: 42px; border-radius: 50%; background: rgba(242,180,65,.92);
+    display: grid; place-items: center; color: #141008; font-size: 15px;
+  }
+  .card:nth-child(1) { background: linear-gradient(135deg, rgba(242,180,65,.18), #15151B 70%); }
+  .card:nth-child(2) { background: linear-gradient(135deg, rgba(127,168,255,.15), #15151B 70%); }
+  .card:nth-child(3) { background: linear-gradient(135deg, rgba(236,234,227,.09), #15151B 70%); }
+</style>
+</head>
+<body>
+
+  <!-- the real app -->
+  <div id="app">
+    <nav class="nav">
+      <div class="wordmark"><span class="glyph">L</span>Lattice</div>
+      <div class="links">
+        <a href="#">Gallery</a><a href="#">Pricing</a><a href="#">Docs</a>
+      </div>
+      <button class="replay" onclick="window.playLatticeIntro()">Replay intro</button>
+    </nav>
+    <main class="hero">
+      <h1>Turn any idea into <em>an explainer video.</em></h1>
+      <p>Type a prompt. Lattice writes, narrates, and animates it.</p>
+      <div class="prompt">
+        <input type="text" placeholder="a 90-second explainer on mycelium networks…">
+        <button type="button">Generate ▸</button>
+      </div>
+      <div class="grid">
+        <div class="card" data-title="How rockets land themselves"><span class="play">▶</span></div>
+        <div class="card" data-title="Why sourdough is alive"><span class="play">▶</span></div>
+        <div class="card" data-title="CRISPR in 90 seconds"><span class="play">▶</span></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ════════ INTRO WIRING · edit 1: cover div (place right after #app, before scripts).
+       Inline gradient prevents any flash before the canvas mounts. ════════ -->
+  <div id="intro-root" style="position:fixed;inset:0;z-index:9999;background:radial-gradient(120% 90% at 50% 38%, #17171d 0%, #0E0E12 55%, #08080b 100%);"></div>
+
+  <!-- ════════ INTRO WIRING · edit 2: hard timeout backstop —
+       if anything hangs, the cover self-destructs and the app is never trapped. ════════ -->
+  <script>
+    setTimeout(function () {
+      var r = document.getElementById('intro-root');
+      if (r) { r.style.transition = 'opacity .4s'; r.style.opacity = '0'; setTimeout(function () { r.remove(); }, 450); }
+    }, 12000);
+  </script>
+
+  <!-- ════════ INTRO WIRING · edit 3: the intro module.
+       In the FastAPI app use src="/static/intro.js". ════════ -->
+  <script type="module" src="./intro.js"></script>
+
+</body>
+</html>

@@ -91,7 +91,7 @@ class RollbackReq(BaseModel):
 
 def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None = None) -> FastAPI:
     engine = engine or Engine()
-    queue = queue or jobs_mod.JobQueue(workers=2)
+    queue = queue or jobs_mod.JobQueue(workers=settings.job_workers)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -284,6 +284,18 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         if job is None:
             raise HTTPException(404, f"no job {job_id!r}")
         return job.to_dict()
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def job_cancel(job_id: str) -> dict:
+        """Ask a running job to stop. Cooperative (core/cancel.py): the pipeline notices at its
+        next checkpoint — between model calls, repair attempts, critic rounds and scenes — so this
+        returns "asked", not "already stopped". Worst case it finishes one in-flight render first.
+        Idempotent, and a job that already ended reports accepted=False rather than erroring."""
+        job = queue.get(job_id)
+        if job is None:
+            raise HTTPException(404, f"no job {job_id!r}")
+        accepted = job.cancel()
+        return {"accepted": accepted, "status": job.status, "progress": job.progress()}
 
     @app.get("/api/jobs/{job_id}/events")
     def job_events(job_id: str, cursor: int = Query(0, ge=0)) -> dict:

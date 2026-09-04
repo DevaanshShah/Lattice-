@@ -24,6 +24,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core import cancel
 from core.config import settings
 from render import exec as exec_mod
 from render.exec import hardening_args  # re-exported: callers/tests use sandbox.hardening_args
@@ -132,6 +133,7 @@ def render(
     image: str | None = None,
     timeout: int | None = None,
 ) -> RenderResult:
+    cancel.check()   # a render is the most expensive step; never start one for a stopped job
     name = f"lattice-render-{uuid.uuid4().hex[:12]}"
     cmd = build_command(
         work_dir, scene_file, scene_name,

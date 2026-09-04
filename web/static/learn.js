@@ -26,6 +26,8 @@
     // in the background while the composer stays usable, so re-renders can land mid-typing — an
     // innerHTML rebuild driven by live state would blow away whatever the student was typing.
     videoMode: false,       // composer's video toggle: send goes straight to /video, skipping chat
+    pendingImage: null,     // a data-URL waiting to go with the next message (photo of the problem)
+    codeMode: false,        // wrap the next draft in a fence so the model reads it as code
     refining: null,         // {mid, title, version}
     busy: false,
     jobs: {},               // message_id -> {pct, label}
@@ -251,16 +253,36 @@
       : L.videoMode ? "Describe the video you want to see…" : "Ask anything…";
     const hint = refining ? "This re-renders the video above as a new version."
       : L.videoMode ? "&#9654; Video mode on &middot; this will render as a ~1 min video"
+      : L.pendingImage ? "Image attached &middot; ask about it and the answer comes back as text"
+      : L.codeMode ? "Code mode on &middot; paste a snippet and ask what it does"
       : "Text answers are instant &middot; tap &#9654; to get a video (~1 min)";
+    // A photo of the problem, or a pasted snippet, is a LEARNER's gesture: it wants an answer now,
+    // not a four-minute render. Both ride the ordinary chat turn.
+    const chip = L.pendingImage ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <img src="${L.pendingImage}" alt="" style="width:34px;height:34px;object-fit:cover;border-radius:5px;
+        border:1px solid var(--line2);" />
+      <span style="${MONO}font-size:11px;color:var(--muted);">Image attached</span>
+      <span data-act="learn-attach-clear" title="Remove" style="cursor:pointer;color:var(--faint);
+        font-size:13px;padding:0 4px;">&times;</span>
+    </div>` : "";
     return `<div style="flex:0 0 auto;border-top:1px solid var(--line);background:var(--bg2);padding:14px 40px 16px;">
       <div style="max-width:760px;margin:0 auto;">
         ${banner}
+        ${chip}
         <div style="display:flex;align-items:flex-end;gap:10px;border:1px solid var(--line2);border-radius:9px;
           background:var(--raise);padding:8px 8px 8px 6px;">
           ${refining ? "" : `<div data-act="learn-videomode" title="Answer with a video (~1 min)"
             style="flex:0 0 auto;width:38px;height:38px;border-radius:7px;display:grid;place-items:center;cursor:pointer;
             ${L.videoMode ? "background:var(--accent);color:var(--ink);" : "background:transparent;color:var(--muted);border:1px solid var(--line);"}">
             <span style="font-size:13px;">&#9654;</span></div>`}
+          ${refining ? "" : `<div data-act="learn-attach" title="Attach an image"
+            style="flex:0 0 auto;width:38px;height:38px;border-radius:7px;display:grid;place-items:center;cursor:pointer;
+            background:transparent;color:${L.pendingImage ? "var(--accent)" : "var(--muted)"};border:1px solid var(--line);">
+            <span style="font-size:14px;">&#128206;</span></div>
+          <div data-act="learn-codemode" title="Send the draft as code"
+            style="flex:0 0 auto;width:38px;height:38px;border-radius:7px;display:grid;place-items:center;cursor:pointer;
+            ${L.codeMode ? "background:var(--accent);color:var(--ink);" : "background:transparent;color:var(--muted);border:1px solid var(--line);"}">
+            <span style="${MONO}font-size:12px;">&lt;/&gt;</span></div>`}
           <textarea id="learn-draft" placeholder="${esc(placeholder)}" rows="1"
             style="flex:1;resize:none;background:transparent;border:none;outline:none;font-family:inherit;font-size:15px;
             line-height:1.5;color:var(--text);padding:9px 4px;max-height:120px;min-width:0;"></textarea>
@@ -274,6 +296,33 @@
   }
 
   // ---------------------------------------------------------------------------- actions
+  // Deliberately builds its own <input>: the wiring file (app.js) differs between checkouts, and
+  // the id "learn-file" is already claimed there by the old Learn screen.
+  function pickImage() {
+    const el = document.createElement("input");
+    el.type = "file";
+    el.accept = "image/png,image/jpeg,image/webp";
+    el.onchange = async () => {
+      const f = el.files && el.files[0];
+      if (!f) return;
+      if (!/^image\/(png|jpe?g|webp)$/i.test(f.type)) { alert("Use a PNG, JPG, or WebP image."); return; }
+      try {
+        L.pendingImage = typeof downscale === "function" ? await downscale(f) : await asDataUrl(f);
+        render();
+      } catch (e) { alert("Couldn't read that image: " + e.message); }
+    };
+    el.click();
+  }
+
+  function asDataUrl(file) {          // fallback if app.js's downscale() isn't loaded
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error("unreadable file"));
+      r.readAsDataURL(file);
+    });
+  }
+
   async function openThread(tid) {
     L.busy = true; render();
     try {
@@ -297,10 +346,14 @@
 
   async function send() {
     const box = $("learn-draft");
-    const text = ((box && box.value) || "").trim();
-    if (!text || L.busy) return;
-    if (L.refining) return sendRefine(text);
+    const raw = ((box && box.value) || "").trim();
+    if (!raw || L.busy) return;
+    if (L.refining) return sendRefine(raw);
+    // fenced so the model reads it as code rather than prose; the learner still sees their own text
+    const text = L.codeMode ? "```\n" + raw + "\n```" : raw;
+    const image = L.pendingImage;
     if (box) box.value = "";
+    L.pendingImage = null; L.codeMode = false;
     L.busy = true; render();
     try {
       if (L.videoMode) {
@@ -310,12 +363,16 @@
         L.videoMode = false; render(); scrollThread();
         watchVideo(r.message_id, r.job_id);
       } else if (!L.tid) {
-        const t = await api("POST", "/api/learn/threads", { message: text });
+        const t = await api("POST", "/api/learn/threads", { message: text, image });
         L.tid = t.id; L.thread = t; L.threadsLoaded = false;
       } else {
-        L.thread = await api("POST", `/api/learn/threads/${L.tid}/messages`, { message: text });
+        L.thread = await api("POST", `/api/learn/threads/${L.tid}/messages`, { message: text, image });
       }
-    } catch (e) { alert("Couldn't send that: " + e.message); if (box) box.value = text; }
+    } catch (e) {
+      alert("Couldn't send that: " + e.message);
+      if (box) box.value = raw;
+      L.pendingImage = image;            // hand the attachment back so a retry keeps it
+    }
     finally { L.busy = false; render(); scrollThread(); }
   }
 
@@ -367,6 +424,9 @@
         case "learn-sugg": { const box = $("learn-draft"); if (box) box.value = v; send(); return true; }
         case "learn-videomode": L.videoMode = !L.videoMode; render(); return true;
         case "learn-send": send(); return true;
+        case "learn-attach": pickImage(); return true;
+        case "learn-attach-clear": L.pendingImage = null; render(); return true;
+        case "learn-codemode": L.codeMode = !L.codeMode; render(); return true;
         case "learn-offer": useOffer(id); return true;
         case "learn-refine-start": {
           const m = (L.thread.messages || []).find(x => x.id === id);

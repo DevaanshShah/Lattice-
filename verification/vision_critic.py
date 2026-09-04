@@ -26,6 +26,7 @@ from pathlib import Path
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from core import cancel
 from core.config import settings
 from core.llm import LLMClient, get_client, get_critic_client
 from core.schemas.scene_spec import SceneSpec
@@ -184,6 +185,7 @@ def run(code: str, work_dir: str | Path, spec: SceneSpec | None = None, *,
     best: CritiqueResult | None = None
 
     for it in range(1, caps.max_critic_iters + 1):
+        cancel.check()
         # LAYER 1 (free): must render before we ever pay the critic.
         rep = compile_repair.repair(current, work_dir, render_fn=render_fn,
                                     regen_fn=compile_regen_fn, caps=caps,
