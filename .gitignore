@@ -54,3 +54,8 @@ manimator/
 # Kokoro TTS model files (large, local)
 kokoro-v1.0.onnx
 voices-v1.0.bin
+
+# another agent session config, and stray root copies of the static landing page
+.codex/
+/index.html
+/intro.js
