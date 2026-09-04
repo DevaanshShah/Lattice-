@@ -49,8 +49,13 @@ sudo netfilter-persistent save 2>/dev/null || sudo apt-get install -y -qq iptabl
 say "6/7  systemd service"
 sudo cp deploy/oracle/lattice.service /etc/systemd/system/lattice.service
 sudo sed -i "s|__APP_DIR__|$APP_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice.service
+# ...and a daily snapshot of the admin ledger + user registry into R2. The videos upload
+# themselves after every build; this data does not, and it is on the same mortal disk.
+sudo cp deploy/oracle/lattice-backup.service deploy/oracle/lattice-backup.timer /etc/systemd/system/
+sudo sed -i "s|__APP_DIR__|$APP_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice-backup.service
 sudo systemctl daemon-reload
 sudo systemctl enable lattice
+sudo systemctl enable --now lattice-backup.timer
 
 say "7/7  caddy (automatic TLS)"
 if [ -n "$DOMAIN" ]; then

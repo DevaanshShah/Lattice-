@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Lattice admin snapshot
+
+[Timer]
+OnCalendar=daily
+Persistent=true          # a box that was off at 00:00 still runs it on the next boot
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+# Snapshot the admin ledger + user registry into R2. These live on the box's disk, and unlike the
+# videos nothing uploads them automatically — so without this the console's history is one disk
+# failure (or one rebuild) from gone. No-ops when R2 isn't configured.
+[Unit]
+Description=Lattice admin data snapshot to R2
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/.venv/bin/python -m scripts.r2 backup

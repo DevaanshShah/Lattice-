@@ -182,7 +182,10 @@ def check_storage() -> list[Check]:
         out.append(Check("object storage", FAIL,
                          f"R2 half-configured (missing: {', '.join(sorted(set(r2) - set_))})"))
     else:
-        out.append(Check("object storage", OK, f"R2 bucket {settings.r2_bucket}"))
+        # configured != working: only a round-trip proves the secret and the bucket match.
+        out.append(Check("object storage", OK,
+                         f"R2 bucket {settings.r2_bucket} configured — verify with "
+                         "`python -m scripts.r2 check`"))
 
     out_dir = Path(settings.out_dir)
     try:
