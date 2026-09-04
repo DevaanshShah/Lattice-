@@ -1,0 +1,245 @@
+"""Is this box actually configured to run Lattice in production?
+
+    python -m scripts.preflight          # exit code = number of FAILs
+
+Deploying this app is not "start the web server". It needs a model key, a way to run Manim, voice
+model files, somewhere durable to put finished videos, and a memory budget that its own concurrency
+knobs can't exceed. Every one of those fails LATE and quietly if it is wrong: a missing render image
+looks like a broken scene, missing Kokoro files ship a silent video, an unset admin token makes the
+console answer only to loopback (so on a server, to nobody), and over-subscribed workers get the
+container OOM-killed mid-render.
+
+So: one command that says what is wrong BEFORE a user hits it. Checks are pure functions over
+`settings` plus a few probes, so they are unit-testable without a server.
+
+FAIL = the product is broken or unsafe in this configuration.
+WARN = it will run, but something is worse than you probably intend.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+from core.config import settings
+
+FAIL, WARN, OK = "FAIL", "WARN", "ok"
+
+
+@dataclass(frozen=True)
+class Check:
+    name: str
+    level: str          # FAIL | WARN | OK
+    detail: str = ""
+
+    @property
+    def bad(self) -> bool:
+        return self.level == FAIL
+
+
+# --- helpers (pure where they can be) ---------------------------------------------------------
+def parse_size(text: str) -> float | None:
+    """Docker-style size ("2g", "1500m", "512k") -> GiB. None if unparseable."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    unit, num = t[-1], t[:-1]
+    scale = {"g": 1.0, "m": 1 / 1024, "k": 1 / 1024 / 1024, "b": 1 / 1024 ** 3}.get(unit)
+    if scale is None:                       # a bare number is bytes
+        unit, num, scale = "b", t, 1 / 1024 ** 3
+    try:
+        return float(num) * scale
+    except ValueError:
+        return None
+
+
+def host_memory_gb() -> float | None:
+    """RAM this process may actually use: the cgroup limit inside a container, else the host's.
+    None when it cannot be determined (Windows dev boxes) — the caller degrades to a WARN."""
+    for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            raw = Path(p).read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if raw and raw != "max":
+            try:
+                n = int(raw)
+            except ValueError:
+                continue
+            if 0 < n < 2 ** 62:            # cgroup v1 writes a sentinel ~2^63 for "no limit"
+                return n / 1024 ** 3
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024 ** 3
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def worst_case_renders() -> int:
+    """Concurrent renders this configuration permits: every build job fans out to scene workers."""
+    return max(1, settings.job_workers) * max(1, settings.scene_workers)
+
+
+def memory_check(available_gb: float | None) -> Check:
+    """The sizing mistake that gets a container OOM-killed mid-render, in one line of arithmetic."""
+    n = worst_case_renders()
+    per = parse_size(settings.render_memory) or 0.0
+    need = n * per
+    knobs = ("LATTICE_JOB_WORKERS / LATTICE_SCENE_WORKERS / LATTICE_RENDER_MEMORY")
+    detail = (f"{settings.job_workers} job workers x {settings.scene_workers} scene workers "
+              f"= up to {n} concurrent renders x {settings.render_memory} = {need:.1f} GiB")
+    if available_gb is None:
+        return Check("memory budget", WARN, f"{detail}; could not read this box's limit — size it yourself")
+    if need > available_gb:
+        return Check("memory budget", FAIL,
+                     f"{detail}, but only {available_gb:.1f} GiB available. Turn down {knobs}")
+    if need > available_gb * 0.8:
+        return Check("memory budget", WARN,
+                     f"{detail}, against {available_gb:.1f} GiB — little headroom for the web process")
+    return Check("memory budget", OK, f"{detail}, within {available_gb:.1f} GiB")
+
+
+def _docker_reachable() -> bool:
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=20).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _image_present(image: str) -> bool:
+    try:
+        r = subprocess.run(["docker", "image", "inspect", image], capture_output=True, timeout=20)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+# --- the checks --------------------------------------------------------------------------------
+def check_model() -> list[Check]:
+    if not settings.llm_api_key.strip():
+        return [Check("model key", FAIL, "LATTICE_LLM_API_KEY is empty — nothing can be generated")]
+    return [Check("model key", OK, f"{settings.llm_model} via {settings.llm_base_url}")]
+
+
+def check_execution() -> list[Check]:
+    """Docker mode is the sandbox. Local mode runs model-written Python in this container."""
+    if settings.exec_mode == "docker":
+        if not _docker_reachable():
+            return [Check("docker daemon", FAIL,
+                          "exec_mode=docker but no daemon answers. Renders will all fail; either "
+                          "expose the socket or set LATTICE_EXEC_MODE=local (NOT a sandbox)")]
+        out = [Check("docker daemon", OK, "reachable; renders run sandboxed")]
+        if not _image_present(settings.render_image):
+            out.append(Check("render image", FAIL,
+                             f"{settings.render_image} not present — build it with "
+                             f"`docker build -t {settings.render_image} .`"))
+        else:
+            out.append(Check("render image", OK, settings.render_image))
+        if settings.render_network:
+            out.append(Check("render network", WARN,
+                             "LATTICE_RENDER_NETWORK is on — model-written code has egress"))
+        return out
+
+    missing = [t for t in ("manim", "ffmpeg") if not shutil.which(t)]
+    out = [Check("local toolchain", FAIL if missing else OK,
+                 f"missing from PATH: {', '.join(missing)}" if missing
+                 else "manim + ffmpeg present")]
+    out.append(Check("sandbox", WARN,
+                     "exec_mode=local: model-written Python runs IN this container, sharing its "
+                     "filesystem and network. Prefer docker mode wherever a daemon exists"))
+    return out
+
+
+def check_voice() -> list[Check]:
+    if settings.tts_engine != "kokoro":
+        return [Check("voice", WARN, f"tts_engine={settings.tts_engine}: gTTS needs network at "
+                                     "synthesis time and sounds worse than Kokoro")]
+    missing = [p for p in (settings.kokoro_model, settings.kokoro_voices) if not Path(p).is_file()]
+    if missing:
+        return [Check("voice", FAIL,
+                      f"kokoro selected but model files are missing: {', '.join(missing)} — "
+                      "builds would ship SILENT. Bake them into the image")]
+    try:
+        import kokoro_onnx  # noqa: F401
+    except ImportError:
+        return [Check("voice", FAIL, "kokoro model files present but `kokoro-onnx` is not installed")]
+    return [Check("voice", OK, f"kokoro ({settings.kokoro_voice})")]
+
+
+def check_storage() -> list[Check]:
+    """Finished videos, and the JSON state that is NOT covered by object storage."""
+    out: list[Check] = []
+    r2 = {"account": settings.r2_account_id, "bucket": settings.r2_bucket,
+          "key": settings.r2_access_key_id, "secret": settings.r2_secret_access_key}
+    set_ = {k for k, v in r2.items() if str(v).strip()}
+    if not set_:
+        out.append(Check("object storage", WARN,
+                         "no R2 configured: finished videos live only on this container's disk and "
+                         "die with it on redeploy"))
+    elif len(set_) < len(r2):
+        out.append(Check("object storage", FAIL,
+                         f"R2 half-configured (missing: {', '.join(sorted(set(r2) - set_))})"))
+    else:
+        out.append(Check("object storage", OK, f"R2 bucket {settings.r2_bucket}"))
+
+    out_dir = Path(settings.out_dir)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        probe = out_dir / ".preflight"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        out.append(Check("state directory", OK,
+                         f"{out_dir} writable — mount a VOLUME here: projects, Learn threads, deck "
+                         "records and the usage ledger are files, and R2 only holds the videos"))
+    except OSError as e:
+        out.append(Check("state directory", FAIL, f"{out_dir} is not writable: {e}"))
+    return out
+
+
+def check_admin() -> list[Check]:
+    token = (settings.admin_token or "").strip()
+    if not token:
+        return [Check("admin console", WARN,
+                      "LATTICE_ADMIN_TOKEN empty: the console answers only to loopback, so on a "
+                      "server it answers to nobody. Set one to use it (and to keep others out)")]
+    if len(token) < 16:
+        return [Check("admin console", WARN, f"admin token is only {len(token)} chars — use a long random one")]
+    return [Check("admin console", OK, "token set")]
+
+
+def check_bounds() -> list[Check]:
+    """Phase A/B knobs: a job that can never end is a production incident, not a slow build."""
+    if not settings.job_deadline_s:
+        return [Check("job deadline", WARN,
+                      "LATTICE_JOB_DEADLINE_S=0: a wedged build can retry until someone notices")]
+    worst = settings.llm_attempts * settings.llm_timeout_s
+    return [Check("job deadline", OK,
+                  f"{settings.job_deadline_s}s per job, {settings.scene_deadline_s}s per scene; "
+                  f"one model call is bounded at {worst:.0f}s")]
+
+
+def run() -> list[Check]:
+    checks: list[Check] = []
+    for fn in (check_model, check_execution, check_voice, check_storage, check_admin, check_bounds):
+        checks.extend(fn())
+    checks.append(memory_check(host_memory_gb()))
+    return checks
+
+
+def main() -> int:
+    checks = run()
+    width = max(len(c.name) for c in checks)
+    for c in checks:
+        mark = {FAIL: "FAIL", WARN: "warn", OK: "  ok"}[c.level]
+        print(f"  [{mark}] {c.name.ljust(width)}  {c.detail}")
+    fails = sum(1 for c in checks if c.bad)
+    warns = sum(1 for c in checks if c.level == WARN)
+    print(f"\n{fails} failing, {warns} warning(s)."
+          + ("" if fails else "  Configuration is deployable."))
+    return fails
+
+
+if __name__ == "__main__":
+    sys.exit(main())

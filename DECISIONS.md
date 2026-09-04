@@ -10,6 +10,43 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-09-04 — Deploy-readiness before a platform, and a preflight that fails loudly
+
+**Context.** Every way this app breaks in production breaks *quietly*: a missing render image looks
+like a broken scene, missing Kokoro files ship a silent video, an unset admin token makes the console
+answer only to loopback (on a server: to nobody), and the default concurrency knobs permit six
+concurrent renders at 2 GB each — 12 GB — on a box you would size at 4.
+
+**Decision.** `python -m scripts.preflight`: one command, checks as pure functions over `settings`,
+exit code = number of failures, and every finding names the env var to change. It runs at container
+start before the server.
+
+**Why not the alternative.** Documenting the requirements in a runbook only helps the person who
+reads it on the day. The memory arithmetic in particular (`JOB_WORKERS × SCENE_WORKERS ×
+RENDER_MEMORY` against the cgroup limit) is not something anyone recomputes after changing one knob.
+
+**Consequence.** It found two real defects the moment it ran: `kokoro-onnx` was missing from
+`requirements.txt` (so any rebuilt environment silently loses the voice — this machine had already
+lost it), and building the image showed `COPY . .` was baking `.env` — the model key, admin token and
+R2 credentials — into the image layers. Both fixed.
+
+### 2026-09-04 — One app Dockerfile with a swappable base, not two
+
+**Decision.** `Dockerfile.app` takes `ARG BASE`. Default `python:3.11-slim` gives a ~2 GB app image
+that shells out to the pinned render sandbox (docker mode). `--build-arg BASE=manimcommunity/manim:v0.18.1`
+gives a self-contained image for PaaS platforms with no daemon (local mode).
+
+**Why not the alternative.** Two Dockerfiles drift: the dependency list, the Kokoro copy and the
+entrypoint would be duplicated, and the one nobody builds locally is the one that breaks. The two
+modes already exist in `render/exec.py`; the image should mirror that seam rather than invent a
+second one.
+
+**Consequence.** On a VPS, run the app **on the host**, not in this image — containerising it in
+docker mode would mean mounting `/var/run/docker.sock`, which hands the app container root-equivalent
+control of the host. The image is for the PaaS paths and for local parity testing.
+
+---
+
 ### 2026-09-04 — In `jobs._run`, attribution wraps cancellation (and a cancelled job is still recorded)
 
 **Context.** Merging the two sessions' work put two context managers on the same block: the other

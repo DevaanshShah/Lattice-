@@ -1,5 +1,7 @@
 # Keep the build context small — the render image only needs assets/icons (COPY'd in the Dockerfile).
 out/
+.venv/
+venv/
 .git/
 reference/
 New folder/
@@ -8,3 +10,11 @@ New folder/
 *.mp4
 *.mp3
 node_modules/
+
+# NOT ignored on purpose: kokoro-v1.0.onnx / voices-v1.0.bin — the app image bakes them in
+
+# NEVER bake secrets into an image: .env holds the model key, the admin token and the R2
+# credentials. Supply them at RUN time (-e / --env-file / platform secrets) instead.
+.env
+.env.*
+!.env.example
