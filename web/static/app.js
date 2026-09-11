@@ -224,7 +224,20 @@ function render() {
 }
 
 // ---- developer console -------------------------------------------------------------------
+// OFF for visitors. This panel streams the raw engine log and, on its second tab, the exact
+// generation prompts and the code they produced — everything the product does not put in front of
+// the people using it. Turn it on for yourself with ?dev=1 (it sticks), off again with ?dev=0.
+const DEV_KEY = "lattice_dev";
+function devEnabled() {
+  try {
+    const q = new URLSearchParams(location.search).get("dev");
+    if (q === "1") localStorage.setItem(DEV_KEY, "1");
+    if (q === "0") localStorage.removeItem(DEV_KEY);
+    return localStorage.getItem(DEV_KEY) === "1";
+  } catch (e) { return false; }      // private mode / storage blocked -> stay hidden
+}
 function devToggle() {
+  if (!devEnabled()) return "";
   const active = state.busy || state.phase === "generating";
   return `<div data-act="dev-toggle" title="Developer console" style="position:fixed;right:18px;bottom:18px;z-index:60;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;cursor:pointer;background:var(--raise2);border:1px solid ${state.dev.open ? "var(--accent)" : "var(--line2)"};box-shadow:0 12px 32px -14px rgba(0,0,0,0.7);${MONO}font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:${state.dev.open ? "var(--accent)" : "var(--muted)"};">
     <span style="width:7px;height:7px;border-radius:50%;background:${active ? "var(--accent)" : "var(--faint)"};${active ? "animation:lt-pulse 1.2s ease-in-out infinite;" : ""}"></span>Dev</div>`;
@@ -262,7 +275,7 @@ function devStatsHtml(p) {
 }
 
 function devConsole() {
-  if (!state.dev.open) return "";
+  if (!state.dev.open || !devEnabled()) return "";
   const d = state.dev;
   const tabBtn = (k, l) => `<div data-act="dev-tab" data-v="${k}" style="${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;padding:6px 2px;color:${d.tab === k ? "var(--text)" : "var(--muted)"};border-bottom:1.5px solid ${d.tab === k ? "var(--accent)" : "transparent"};">${l}</div>`;
   let inner;
@@ -363,7 +376,7 @@ function topbar() {
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <div data-act="replay-intro" title="Replay intro" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:15px;">↺</div>
-      <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:14px;">${state.theme === "dark" ? "☾" : "☀"}</div>
+      <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);">${state.theme === "dark" ? ICON.moon : ICON.sun}</div>
       <div style="width:26px;height:26px;border-radius:50%;background:var(--raise2);border:1px solid var(--line2);display:grid;place-items:center;font-size:11px;${MONO}color:var(--text);">AD</div>
     </div>
   </div>`;
@@ -394,12 +407,10 @@ function landing() {
       <p class="lt-fade" style="font-size:19px;line-height:1.5;color:var(--muted);max-width:48ch;margin:0 0 30px;">Describe a concept in a sentence. Lattice storyboards it, animates every idea, and narrates the whole thing — start to finish, no design or editing.</p>
       <div class="lt-fade" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:0 0 30px;">
         <div class="lt-thumb" data-act="go-learn" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
-          <div style="font-size:26px;margin-bottom:10px;">📚</div>
           <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Learn</div>
           <div style="font-size:14px;color:var(--muted);line-height:1.45;">Ask about any concept — get a short animated explainer made for you. Just watch.</div>
         </div>
         <div class="lt-thumb" data-act="go-teach" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
-          <div style="font-size:26px;margin-bottom:10px;">🎓</div>
           <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Teach</div>
           <div style="font-size:14px;color:var(--muted);line-height:1.45;">Build a lesson from a topic, image, or code — then edit scenes, sound, and timing in the studio.</div>
         </div>
@@ -541,7 +552,7 @@ function phasePrompt() {
   </div>`;
 }
 
-// The AI's chosen visual THEME (palette + fonts + object looks), shown at the review gate so the
+// The chosen visual THEME (palette + fonts + object looks), shown at the review gate so the
 // user checks it BEFORE building. Reads state.project.style (project_dto exposes it).
 function themePanel() {
   const st = state.project && state.project.style;
@@ -579,7 +590,7 @@ function phaseOutline() {
   return `<div class="lt-fade" style="max-width:780px;margin:0 auto;padding:38px 32px 64px;">
     <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Step 2 · Review theme &amp; storyboard</div>
     <h2 style="${DISPLAY}font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 8px;line-height:1.03;">Here's the plan for your video</h2>
-    <p style="color:var(--muted);font-size:15px;margin:0 0 24px;">Check the theme and scenes the AI chose. Reorder or drop any scene. Nothing has been made yet.</p>
+    <p style="color:var(--muted);font-size:15px;margin:0 0 24px;">Check the theme and scenes in this plan. Reorder or drop any scene. Nothing has been made yet.</p>
     ${themePanel()}
     <div style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin:6px 0 2px;">Storyboard</div>
     <div style="border-top:1px solid var(--line);">${rows}</div>
@@ -623,7 +634,7 @@ function sceneDur(s) {
   return Math.max(3, words / 2.6 + 1.0);
 }
 // A Filmora/Kinemaster-style timeline: clips sized to duration on a video track + an audio track, a
-// ruler, and a playhead. Click a clip to select/edit; drag to reorder; per-clip ↻ regenerate / 🗑 delete.
+// ruler, and a playhead. Click a clip to select/edit; drag to reorder; per-clip ↻ regenerate /  delete.
 function timeline(scenes) {
   const PXPS = 46;                                   // px per second
   const durs = scenes.map(sceneDur);
@@ -638,7 +649,7 @@ function timeline(scenes) {
     const on = i === state.selected, left = starts[i] * PXPS, w = Math.max(24, durs[i] * PXPS - 4);
     const acts = on ? `<div style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
         <span data-act="regen" title="Regenerate scene" style="${mini}">↻</span>
-        <span data-act="delete" title="Delete scene" style="${mini}border-color:rgba(240,85,59,0.5);color:var(--danger);">🗑</span></div>` : "";
+        <span data-act="delete" title="Delete scene" style="${mini}border-color:rgba(240,85,59,0.5);color:var(--danger);">✕</span></div>` : "";
     return `<div draggable="true" data-drag2="${i}" data-act="select" data-i="${i}" style="position:absolute;left:${left}px;width:${w}px;top:0;bottom:0;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid ${on ? "var(--accent)" : "var(--line2)"};background:#0B0B10;">
       <div style="${thumb(seedOf(s.sid || s.index))}"></div>
       <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.05),rgba(0,0,0,0.6));"></div>
@@ -663,7 +674,7 @@ function timeline(scenes) {
         <div style="position:relative;height:20px;border-bottom:1px solid var(--line);">${ticks}</div>
         <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">Video</div>
         <div style="position:relative;height:56px;margin:0 0 2px;">${clips}<div data-act="insert-end" title="Add scene" style="position:absolute;left:${total * PXPS + 6}px;width:42px;top:0;bottom:0;border:1px dashed var(--line2);border-radius:6px;display:grid;place-items:center;color:var(--muted);cursor:pointer;">＋</div></div>
-        <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">🔊 Narration</div>
+        <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">Narration</div>
         <div style="position:relative;height:28px;">${audio}</div>
         <div id="playhead" style="position:absolute;top:20px;bottom:8px;left:${(starts[state.selected] || 0) * PXPS}px;width:2px;background:var(--accent);pointer-events:none;box-shadow:0 0 6px var(--accent);"><div style="position:absolute;top:-3px;left:-4px;width:10px;height:8px;background:var(--accent);border-radius:2px;"></div></div>
       </div>
@@ -685,16 +696,25 @@ function phaseResult() {
     ${sel ? editorPanel(sel) : ""}
   </div>`;
 }
-// The video-editor edit-mode switch: Frames (visuals) · Sound (narration) · Motion (re-animate).
+// Line icons, drawn in currentColor so they invert cleanly on the active amber tab. Deliberately
+// geometric (frame, speaker, motion arc) to sit with the grid mark rather than emoji.
+const ICON = {
+  frames: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><rect x="1.6" y="3.2" width="12.8" height="9.6" rx="1.4"/><path d="M5.6 3.2v9.6M10.4 3.2v9.6"/></svg>',
+  sound: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2h2.2L8.4 3.4v9.2L5.2 9.8H3z"/><path d="M11 6a3 3 0 0 1 0 4"/></svg>',
+  motion: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><path d="M2 5.2h7M2 8h10M2 10.8h6"/><path d="M12.4 4.6 15 8l-2.6 3.4"/></svg>',
+  sun: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.4v1.6M8 13v1.6M14.6 8H13M3 8H1.4M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1M12.7 12.7l-1.1-1.1M4.4 4.4 3.3 3.3"/></svg>',
+  moon: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"><path d="M13.2 9.6A5.8 5.8 0 0 1 6.4 2.8a5.8 5.8 0 1 0 6.8 6.8z"/></svg>',
+};
+// The video-editor edit-mode switch.
 const EDIT_TABS = [
-  ["frames", "🎞", "Frames", "Visuals"],
-  ["sound", "🔊", "Sound", "Narration"],
-  ["motion", "🎬", "Motion", "Re-animate"],
+  ["frames", ICON.frames, "Frames", "Visuals"],
+  ["sound", ICON.sound, "Sound", "Narration"],
+  ["motion", ICON.motion, "Motion", "Re-animate"],
 ];
 function editTabBar() {
   return `<div style="display:flex;gap:6px;padding:5px;border:1px solid var(--line2);border-radius:9px;background:var(--raise);margin-bottom:16px;">
     ${EDIT_TABS.map(([k, ic, l, sub]) => { const on = state.editTab === k; return `<div data-act="edit-tab" data-v="${k}" style="flex:1;display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:6px;cursor:pointer;${on ? "background:var(--accent);" : ""}">
-      <span style="font-size:16px;line-height:1;filter:${on ? "grayscale(1) brightness(0);" : "none"};">${ic}</span>
+      <span style="display:grid;place-items:center;color:${on ? "var(--ink)" : "var(--muted)"};">${ic}</span>
       <span style="display:flex;flex-direction:column;line-height:1.15;min-width:0;">
         <span style="font-size:13.5px;font-weight:600;color:${on ? "var(--ink)" : "var(--text)"};">${l}</span>
         <span style="${MONO}font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:${on ? "rgba(14,14,18,0.62)" : "var(--faint)"};">${sub}</span>
@@ -711,7 +731,7 @@ function editTabBody(sel) {
         <textarea id="narr-input" placeholder="What the narrator says over this scene…" style="width:100%;min-height:120px;resize:vertical;background:transparent;border:none;outline:none;font-size:14px;line-height:1.6;color:var(--text);">${esc((sel.narration || []).join("\n"))}</textarea>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-        <button class="lt-btnp" data-act="save-narr" style="${primary}">🔊 Save &amp; re-voice</button>
+        <button class="lt-btnp" data-act="save-narr" style="${primary}">Save &amp; re-voice</button>
       </div>
     </div>`;
   }
@@ -720,7 +740,7 @@ function editTabBody(sel) {
       <div style="${hint}">Regenerate the animation for a fresh take on how this scene moves. Leave the box blank for a new roll, or describe the motion you want.</div>
       <input id="motion-input" placeholder="Optional: e.g. slower reveal, pan across the graph, build up piece by piece" style="width:100%;height:42px;padding:0 13px;border-radius:6px;border:1px solid var(--line2);background:var(--raise2);outline:none;font-size:13.5px;color:var(--text);margin-bottom:12px;" />
       <div style="display:flex;justify-content:flex-end;">
-        <button class="lt-btnp" data-act="motion-apply" style="${primary}">🎬 Regenerate motion</button>
+        <button class="lt-btnp" data-act="motion-apply" style="${primary}">Regenerate motion</button>
       </div>
     </div>`;
   }
@@ -729,7 +749,7 @@ function editTabBody(sel) {
     <div style="${hint}">Change what's on screen — colors, labels, what's shown, layout. Describe the change in plain words.</div>
     <div style="display:flex;gap:8px;">
       <input id="tweak-input" placeholder="e.g. make the wave amber · label the axes · move the graph up" style="flex:1;height:42px;padding:0 13px;border-radius:6px;border:1px solid var(--line2);background:var(--raise2);outline:none;font-size:13.5px;color:var(--text);min-width:0;" />
-      <button class="lt-btnp" data-act="tweak" style="${primary}">🎞 Apply</button>
+      <button class="lt-btnp" data-act="tweak" style="${primary}">Apply</button>
     </div>
   </div>`;
 }
@@ -750,7 +770,7 @@ function editorPanel(sel) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
         <button class="lt-act" style="${util}" data-act="insert-after">＋ Insert after</button>
         <button class="lt-act" style="${util}" data-act="history">↺ History</button>
-        <button class="lt-act" style="${danger}" data-act="delete">🗑 Delete</button>
+        <button class="lt-act" style="${danger}" data-act="delete">Delete</button>
       </div>
       ${versions ? `<div class="lt-snap" style="margin-top:14px;border:1px solid var(--line);border-radius:6px;overflow:hidden;"><div style="padding:9px 14px;${MONO}font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);background:var(--raise);">Version history</div>${versions.length ? versions.map(v => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);"><div><div style="font-size:13px;color:var(--text);">v${v.version}${v.label ? " · " + esc(v.label) : ""}</div></div><div data-act="rollback" data-v="${v.version}" style="${MONO}font-size:11px;color:var(--accent);padding:5px 10px;border:1px solid var(--line2);border-radius:5px;cursor:pointer;">Restore</div></div>`).join("") : `<div style="padding:12px 14px;${MONO}font-size:12px;color:var(--faint);">No saved versions yet.</div>`}</div>` : ""}
     </div>

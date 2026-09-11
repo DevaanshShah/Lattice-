@@ -78,7 +78,7 @@
 
   function promptView() {
     return `<div style="max-width:640px;margin:0 auto;padding:64px 24px;">
-      ${label("Slides &middot; one LLM call, no re-rolls")}
+      ${label("Slides &middot; planned once, no re-rolls")}
       <div style="${DISPLAY}font-size:34px;font-weight:600;letter-spacing:-0.02em;color:var(--text);margin-bottom:10px;">
         What should this deck teach?</div>
       <div style="font-size:14.5px;color:var(--muted);line-height:1.6;margin-bottom:22px;">
