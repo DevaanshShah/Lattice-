@@ -12,7 +12,10 @@ from generation import scene_spec
 
 
 def expand(item: OutlineItem, outline: Outline, index: int, *,
-           client: LLMClient | None = None) -> SceneSpec:
+           client: LLMClient | None = None, recipe_guidance: str | None = None) -> SceneSpec:
+    """recipe_guidance: optional extra instruction (from a product-video recipe, see
+    planner/product_recipe.py) appended to the scene prompt to bias its objects/beats toward one
+    of the fixed product-video shapes. None (the default) leaves this prompt unchanged."""
     others = ", ".join(f"{j + 1}) {t}" for j, t in enumerate(outline.titles()))
     prompt = (
         f"{item.intent}\n\n"
@@ -20,4 +23,6 @@ def expand(item: OutlineItem, outline: Outline, index: int, *,
         f"'{outline.topic}'. Full scene order: {others}. Keep THIS scene focused only on: "
         f"{item.title}.)"
     )
+    if recipe_guidance:
+        prompt += f"\n\n{recipe_guidance}"
     return scene_spec.generate(prompt, client=client)

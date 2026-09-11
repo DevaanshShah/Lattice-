@@ -17,6 +17,7 @@ from generation import style as style_gen
 from narration import narrate
 from planner import expand as planner_expand
 from planner import outline as planner_outline
+from planner import product_recipe
 
 
 def _outline_of(project: VideoProject) -> Outline:
@@ -49,17 +50,25 @@ def _story_context(project: VideoProject, idx: int) -> str:
 
 
 def build_scene(node: SceneNode, project: VideoProject, *, scenes_dir: Path,
-                quality: str, client: LLMClient, log=print) -> SceneNode:
+                quality: str, client: LLMClient, log=print,
+                recipe_scene_guidance: str | None = None) -> SceneNode:
     """Build one scene: (expand if needed) -> narrate+render with the shared style.
 
     Mutates and returns `node`. Reuses `node.spec` when it already exists (so re-time/tweak/regen
     are deterministic and don't silently re-author the scene); only expands a fresh scene. The
     work dir is keyed off the IMMUTABLE `node.sid`, so reorder/insert never collide. Each call
     uses its own dir, so parallel builds don't clash.
+
+    recipe_scene_guidance: optional product-video recipe guidance (planner/product_recipe.py),
+    forwarded to expand() only when a spec still needs generating. None (the default, and every
+    caller that doesn't pass --recipe) leaves scene generation unchanged.
     """
     if node.spec is None:
         item = OutlineItem(title=node.title, intent=node.intent)
-        spec = planner_expand.expand(item, _outline_of(project), node.index, client=client)
+        expand_kwargs = {"client": client}
+        if recipe_scene_guidance:
+            expand_kwargs["recipe_guidance"] = recipe_scene_guidance
+        spec = planner_expand.expand(item, _outline_of(project), node.index, **expand_kwargs)
     else:
         spec = node.spec
     wd = scenes_dir / f"scene_{node.sid}"
@@ -76,13 +85,16 @@ def build_scene(node: SceneNode, project: VideoProject, *, scenes_dir: Path,
 
 def build_project(project: VideoProject, *, quality: str = "preview",
                   out_dir: str | Path, client: LLMClient | None = None, cap: int | None = None,
-                  log=print, on_scene=None) -> VideoProject:
+                  log=print, on_scene=None, recipe_scene_guidance: str | None = None) -> VideoProject:
     """Build all scenes of an already-planned project (style set) in parallel, stitch, persist.
 
     The post-approval half of generate_video, factored out so the web layer (M7) can drive it
     after its own outline-approval gate WITHOUT re-planning. `on_scene(index, status)` fires with
     status in {"rendering","done","failed"} around each scene so a UI can show live per-scene
     state (FR-24/FR-29). Failure isolation is unchanged: a scene failing doesn't abort the rest.
+
+    recipe_scene_guidance: optional product-video recipe guidance, forwarded to each build_scene
+    call. None (the default) leaves every call identical to before this parameter existed.
     """
     client = client or get_client()
     out = Path(out_dir)
@@ -94,7 +106,10 @@ def build_project(project: VideoProject, *, quality: str = "preview",
         if on_scene:
             on_scene(node.index, "rendering")
         try:
-            build_scene(node, project, scenes_dir=scenes_dir, quality=quality, client=client, log=say)
+            build_kwargs = {"scenes_dir": scenes_dir, "quality": quality, "client": client, "log": say}
+            if recipe_scene_guidance:
+                build_kwargs["recipe_scene_guidance"] = recipe_scene_guidance
+            build_scene(node, project, **build_kwargs)
         except Exception:
             if on_scene:
                 on_scene(node.index, "failed")
@@ -118,14 +133,28 @@ def build_project(project: VideoProject, *, quality: str = "preview",
 
 def generate_video(topic: str, *, approve_fn=None, quality: str = "preview",
                    out_dir: str | Path | None = None, client: LLMClient | None = None,
-                   cap: int | None = None, log=print, on_scene=None) -> VideoProject:
+                   cap: int | None = None, log=print, on_scene=None,
+                   recipe: str | None = None) -> VideoProject:
+    """recipe: None (the default — no --recipe given) skips product-video recipe selection
+    entirely, so outline/scene generation is byte-identical to before this parameter existed.
+    "auto" runs the deterministic keyword picker (planner/product_recipe.py, falls back to
+    workflow_explainer on no match); a specific recipe id selects that recipe directly."""
     client = client or get_client()
     out = Path(out_dir) if out_dir else settings.out_dir / "video"
     out.mkdir(parents=True, exist_ok=True)
     say = log or (lambda _m: None)
 
+    outline_guidance = scene_guidance = None
+    if recipe is not None:
+        selected = product_recipe.pick_recipe(topic, recipe)
+        outline_guidance, scene_guidance = selected.outline_guidance, selected.scene_guidance
+        say(f"-> recipe: {selected.id}")
+
     say(f"-> planning outline for: {topic!r}")
-    outline = planner_outline.generate(topic, client=client)
+    outline_kwargs = {"client": client}
+    if outline_guidance:
+        outline_kwargs["recipe_guidance"] = outline_guidance
+    outline = planner_outline.generate(topic, **outline_kwargs)
     if approve_fn is not None:
         outline = approve_fn(outline)          # the approval gate, BEFORE any render
     say(f"   {len(outline.items)} scene(s) approved")
@@ -135,4 +164,4 @@ def generate_video(topic: str, *, approve_fn=None, quality: str = "preview",
 
     project = VideoProject.from_outline(outline, style=style)
     return build_project(project, quality=quality, out_dir=out, client=client, cap=cap,
-                         log=say, on_scene=on_scene)
+                         log=say, on_scene=on_scene, recipe_scene_guidance=scene_guidance)

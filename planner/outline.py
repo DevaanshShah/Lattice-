@@ -29,9 +29,14 @@ def scenes_for_duration(target_seconds: int) -> int:
 
 
 def generate(topic: str, *, max_scenes: int | None = None, target_seconds: int | None = None,
-             attempts: int = 3, client: LLMClient | None = None) -> Outline:
+             attempts: int = 3, client: LLMClient | None = None,
+             recipe_guidance: str | None = None) -> Outline:
     """target_seconds (the user's 30s/60s/2min pick) beats max_scenes: it sets the scene count AND
-    tells the planner to keep only the most essential beats for that budget."""
+    tells the planner to keep only the most essential beats for that budget.
+
+    recipe_guidance: optional extra instruction (from a product-video recipe, see
+    planner/product_recipe.py) appended to the prompt to bias the scene sequence toward one of
+    the fixed product-video shapes. None (the default) leaves this prompt unchanged."""
     client = client or get_client()
     budget_line = ""
     if target_seconds:
@@ -39,10 +44,11 @@ def generate(topic: str, *, max_scenes: int | None = None, target_seconds: int |
         budget_line = (f"Time budget: ~{target_seconds}s total (~{SCENE_SECONDS}s per scene) — pick "
                        f"ONLY the {max_scenes} most essential beat(s); cut everything nonessential.\n")
     max_scenes = max_scenes or settings.scene_cap
+    guidance_block = f"{recipe_guidance}\n\n" if recipe_guidance else ""
     messages = [
         {"role": "system", "content": load("outline")},
         {"role": "user", "content": f"Topic: {topic}\n{budget_line}Maximum scenes: {max_scenes}\n\n"
-                                    "Return the outline JSON now."},
+                                    f"{guidance_block}Return the outline JSON now."},
     ]
     last: Exception | None = None
     for _ in range(attempts):

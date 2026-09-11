@@ -51,12 +51,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--quality", choices=["preview", "final"], default="preview")
     ap.add_argument("--max-scenes", type=int, default=0, help="cap scenes (0 = planner default)")
     ap.add_argument("--cap", type=int, default=0, help="parallel render cap (0 = config default)")
+    ap.add_argument("--recipe", default=None,
+                    choices=["auto", "architecture_explainer", "workflow_explainer",
+                             "funnel_explainer", "metric_story", "before_after"],
+                    help="bias generation toward a fixed product-video shape. Omit entirely for "
+                         "today's generic behavior; 'auto' runs the deterministic keyword picker "
+                         "(falls back to workflow_explainer); or name a recipe directly.")
     args = ap.parse_args(argv)
 
     out = settings.out_dir / "video"
     proj = video.generate_video(
         args.topic, approve_fn=_make_approver(args.yes, args.max_scenes),
         quality=args.quality, out_dir=out, cap=(args.cap or None), log=print,
+        recipe=args.recipe,
     )
 
     print("---")
