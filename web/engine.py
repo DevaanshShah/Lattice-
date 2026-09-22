@@ -15,12 +15,14 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from composition import decoupled
+from composition import browser_video, decoupled
 from composition import export as export_mod
 from composition.scene_dag import SceneNode, VideoProject
 from core import storage
 from core.config import settings
 from core.llm import LLMClient, get_client
+from core.schemas.browser_visual_plan import BrowserVisualPlan
+from core.schemas.lesson_plan import LessonPlan
 from core.schemas.outline import Outline, OutlineItem
 from editing import arrange, history, tweak
 from editing._common import restitch_and_save
@@ -71,14 +73,15 @@ class Engine:
                 try:
                     p = VideoProject.load(pj)
                     out.append({"id": d.name, "topic": p.topic, "scenes": len(p.scenes),
-                                "built": bool(p.final_mp4)})
+                                "built": bool(p.final_mp4), "renderer": p.renderer})
                 except Exception:
                     continue  # a half-written project shouldn't break the listing
         return out
 
     # --- planning + build (the outline-approval gate, then render) ---------------------------
     def plan(self, topic: str, *, max_scenes: int | None = None, target_seconds: int | None = None,
-             pid: str | None = None, log=print) -> tuple[str, VideoProject]:
+             pid: str | None = None, log=print, renderer: str = "legacy",
+             recipe: str = "auto") -> tuple[str, VideoProject]:
         """Plan an outline and persist a DRAFT project (scenes listed, nothing rendered yet).
 
         Returns (project_id, project). The build step happens later, after the user approves/edits
@@ -86,6 +89,12 @@ class Engine:
         target_seconds: the user's duration pick (30s/60s/2min). Sets the outline SCOPE (how many
         ~15s beats fit) and is persisted so build() paces each scene's animation to budget/n.
         """
+        if renderer == "browser_v2":
+            return self._plan_browser(topic, max_scenes=max_scenes,
+                                      target_seconds=target_seconds, pid=pid,
+                                      recipe=recipe, log=log)
+        if renderer != "legacy":
+            raise ValueError(f"unknown renderer: {renderer!r}")
         say = log or (lambda _m: None)
         say(f"-> planning outline for: {topic!r}"
             + (f" (~{target_seconds}s budget)" if target_seconds else ""))
@@ -94,6 +103,28 @@ class Engine:
                                            client=self._client_or_default())
         pid, project = self._persist_new(outline, target_seconds=target_seconds, pid=pid)
         say(f"   draft project {pid} with {len(outline.items)} scene(s)")
+        return pid, project
+
+    def _plan_browser(self, topic: str, *, max_scenes: int | None,
+                      target_seconds: int | None, pid: str | None,
+                      recipe: str, log=print) -> tuple[str, VideoProject]:
+        say = log or (lambda _m: None)
+        pid = pid or uuid4().hex[:8]
+        workspace = self.workspace(pid)
+        planned = browser_video.plan(topic, recipe=recipe, out_dir=workspace,
+                                     client=self._client_or_default(), max_scenes=max_scenes,
+                                     log=say)
+        outline = Outline(topic=topic, items=[
+            OutlineItem(title=scene.title, intent=scene.learning_goal)
+            for scene in planned.lesson.scenes
+        ])
+        project = VideoProject.from_outline(outline)
+        project.renderer = "browser_v2"
+        project.target_seconds = target_seconds
+        for node, scene in zip(project.scenes, planned.lesson.scenes):
+            node.script = [beat.spoken_text for beat in scene.beats]
+        self.save(pid, project)
+        say(f"   browser_v2 draft {pid} with {len(project.scenes)} scene(s)")
         return pid, project
 
     def _persist_new(self, outline: Outline, *, target_seconds: int | None = None,
@@ -156,9 +187,11 @@ class Engine:
         silent-render->gTTS->mux reliability), stitch, and persist. Populates the VideoProject so
         preview/download/script keep working. (`cap` is accepted for API compat; the approved outline
         already fixes the scene count.)"""
+        project = self.load(pid)
+        if project.renderer == "browser_v2":
+            return self._build_browser(pid, project, keep=keep, log=log, on_scene=on_scene)
         if (self.workspace(pid) / "walkthrough.json").exists():
             return self._build_walkthrough(pid, keep=keep, quality=quality, log=log, on_scene=on_scene)
-        project = self.load(pid)
         outline = self._outline_of(project)
         say = log or (lambda _m: None)
         if keep is not None:
@@ -177,6 +210,40 @@ class Engine:
         # Durable copy: this container's disk does not survive a redeploy. No-op when R2 is unset.
         if final:
             storage.offload(final, storage.video_key(pid), log=say)
+        return built
+
+    def _build_browser(self, pid: str, project: VideoProject, *, keep: list[int] | None,
+                       log=print, on_scene=None) -> VideoProject:
+        workspace = self.workspace(pid)
+        lesson = LessonPlan.model_validate_json(
+            (workspace / "lesson_plan.json").read_text(encoding="utf-8"))
+        visual = BrowserVisualPlan.model_validate_json(
+            (workspace / "browser_visual_plan.json").read_text(encoding="utf-8"))
+        kept = list(range(len(lesson.scenes))) if keep is None else list(keep)
+        if any(index < 0 or index >= len(lesson.scenes) for index in kept):
+            raise ValueError("browser_v2 outline contains an unknown scene")
+        lesson = lesson.model_copy(update={"scenes": [lesson.scenes[index] for index in kept]})
+        visual_by_id = {scene.lesson_scene_id: scene for scene in visual.scenes}
+        visual = visual.model_copy(update={
+            "scenes": [visual_by_id[scene.id] for scene in lesson.scenes]
+        })
+        skill = browser_video.product_recipe.pick_recipe(project.topic, lesson.skill_id)
+        result = browser_video.build(lesson, visual, skill, out_dir=workspace,
+                                     log=log, on_scene=on_scene)
+        outline = Outline(topic=project.topic, items=[
+            OutlineItem(title=scene.title, intent=scene.learning_goal)
+            for scene in lesson.scenes
+        ])
+        built = VideoProject.from_outline(outline)
+        built.renderer = "browser_v2"
+        built.target_seconds = project.target_seconds
+        for node, scene, mp4 in zip(built.scenes, lesson.scenes, result.scene_mp4s):
+            node.mp4 = str(mp4)
+            node.compiled = True
+            node.script = [beat.spoken_text for beat in scene.beats]
+        built.final_mp4 = str(result.mp4)
+        self.save(pid, built)
+        storage.offload(result.mp4, storage.video_key(pid), log=log)
         return built
 
     def _build_walkthrough(self, pid: str, *, keep: list[int] | None = None, quality: str = "preview",
@@ -517,6 +584,7 @@ def project_dto(pid: str, project: VideoProject) -> dict:
         "topic": project.topic,
         "final_ready": bool(project.final_mp4),
         "target_seconds": project.target_seconds,
+        "renderer": project.renderer,
         "style": (project.style.model_dump() if project.style else None),
         "scenes": [scene_dto(s) for s in project.scenes],
     }

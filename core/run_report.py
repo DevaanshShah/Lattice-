@@ -90,6 +90,11 @@ class RunReport:
         self.event("run", "complete", detail=str(artifact) if artifact else None)
         self._finish_timestamp()
 
+    def planned(self) -> None:
+        self.data["status"] = "planned"
+        self.event("run", "planned")
+        self._finish_timestamp()
+
     def _finish_timestamp(self) -> None:
         finished = time.time()
         self.data["finished_at"] = round(finished, 3)

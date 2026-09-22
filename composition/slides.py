@@ -54,6 +54,7 @@ def render_html(document: str, out_png: str | Path, *, label: str = "page", time
     with tempfile.TemporaryDirectory(prefix="lattice-chrome-") as profile:
         cmd = [chrome_path(), "--headless=new", "--disable-gpu", "--hide-scrollbars",
                "--no-first-run", "--no-default-browser-check", f"--user-data-dir={profile}",
+               "--run-all-compositor-stages-before-draw", "--virtual-time-budget=500",
                f"--window-size={W},{H}", f"--screenshot={out_png}", html.resolve().as_uri()]
         result = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if not out_png.exists():

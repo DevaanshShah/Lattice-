@@ -18,6 +18,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -40,6 +41,8 @@ class CreateProject(BaseModel):
     topic: str = Field(..., min_length=1)
     max_scenes: int | None = None
     target_seconds: int | None = Field(None, ge=15, le=600)   # the user's duration pick (30/60/150...)
+    renderer: Literal["legacy", "browser_v2"] = "legacy"
+    recipe: str | None = None
 
 
 class FromCodeReq(BaseModel):
@@ -146,8 +149,11 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         # the fact would leave that cost with no project to bill it to.
         pid = uuid4().hex[:8]
         usage.tag(surface="video", kind="plan", project=pid)
-        pid, project = engine.plan(body.topic, max_scenes=body.max_scenes,
-                                   target_seconds=body.target_seconds, pid=pid, log=lambda _m: None)
+        kwargs = {"max_scenes": body.max_scenes, "target_seconds": body.target_seconds,
+                  "pid": pid, "log": lambda _m: None}
+        if body.renderer == "browser_v2":
+            kwargs.update(renderer="browser_v2", recipe=body.recipe or "auto")
+        pid, project = engine.plan(body.topic, **kwargs)
         usage.record("create", surface="video", project=pid, topic=body.topic)
         return project_dto(pid, project)
 
@@ -192,8 +198,9 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         usage.tag(surface="video")
 
         def run(job: jobs_mod.Job):
-            for s in project.scenes:           # seed per-scene status so the UI shows "queued"
-                job.set_scene(s.index, jobs_mod.S_QUEUED)
+            scene_count = len(project.scenes) if body.keep is None else len(body.keep)
+            for index in range(scene_count):   # seed the approved sequence, after reorder/cut
+                job.set_scene(index, jobs_mod.S_QUEUED)
             built = engine.build(pid, keep=body.keep, quality=body.quality,
                                  log=job.log, on_scene=job.set_scene)
             return project_dto(pid, built)

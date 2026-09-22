@@ -31,15 +31,22 @@ class BrowserGenerationResult:
     render: BrowserVideoResult
 
 
+@dataclass(frozen=True)
+class BrowserPlanResult:
+    skill: Recipe
+    lesson: LessonPlan
+    visual_plan: BrowserVisualPlan
+
+
 def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir: str | Path,
           tts_engine: str | None = None, fps: int = 30, transition: float = 0.45,
           beat_transition: float = 0.22, scene_hold_s: float = 1.0,
-          report: RunReport | None = None, log=None) -> BrowserVideoResult:
+          report: RunReport | None = None, log=None, on_scene=None) -> BrowserVideoResult:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     owns_report = report is None
     report = report or RunReport(out, topic=lesson.topic, recipe=skill.id, log=log)
-    stage, scene_id, beat_id = "validation", None, None
+    stage, scene_id, beat_id, scene_index = "validation", None, None, None
     try:
         report.event(stage, "start")
         validate(lesson, plan, skill)
@@ -50,6 +57,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
         audio_dir = out / "audio"
         for scene_index, lesson_scene in enumerate(lesson.scenes):
             scene_id = lesson_scene.id
+            if on_scene:
+                on_scene(scene_index, "rendering")
             visual_scene = scenes[scene_id]
             parts: list[Path] = []
             for beat_index, lesson_beat in enumerate(lesson_scene.beats):
@@ -95,6 +104,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                 _concat_clips(parts, scene_path)
             scene_mp4s.append(scene_path)
             report.event(stage, "passed", scene=scene_id, detail=str(scene_path))
+            if on_scene:
+                on_scene(scene_index, "done")
         stage, scene_id, beat_id = "stitch", None, None
         report.event(stage, "start")
         final = out / "browser-video.mp4"
@@ -107,6 +118,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
             report.complete(artifact=final)
         return BrowserVideoResult(mp4=final, scene_mp4s=scene_mp4s, frames=frames)
     except Exception as exc:
+        if on_scene and scene_index is not None and scene_id is not None:
+            on_scene(scene_index, "failed")
         issues = exc.issues if isinstance(exc, BrowserLayoutError) else None
         evidence = {"geometry": exc.geometry} if isinstance(exc, BrowserLayoutError) else None
         if report.data["status"] != "failed":
@@ -115,12 +128,13 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
         raise
 
 
-def generate(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Path,
-             client=None, tts_engine: str | None = None, fps: int = 30,
-             transition: float = 0.45, log=None) -> BrowserGenerationResult:
+def plan(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Path,
+         client=None, max_scenes: int | None = None, report: RunReport | None = None,
+         log=None) -> BrowserPlanResult:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    report = RunReport(out, topic=topic, recipe=recipe, log=log)
+    owns_report = report is None
+    report = report or RunReport(out, topic=topic, recipe=recipe, log=log)
     stage = "recipe"
     try:
         skill = product_recipe.pick_recipe(topic, recipe)
@@ -134,6 +148,8 @@ def generate(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str 
             lesson = approve_fn(lesson)
             if not isinstance(lesson, LessonPlan):
                 raise TypeError("browser-video approval must return a LessonPlan")
+        if max_scenes is not None:
+            lesson = lesson.model_copy(update={"scenes": lesson.scenes[:max_scenes]})
         lesson_path = out / "lesson_plan.json"
         lesson_path.write_text(lesson.model_dump_json(indent=2), encoding="utf-8")
         stage = "visual_plan"
@@ -142,11 +158,31 @@ def generate(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str 
         report.event(stage, "passed", detail=f"{len(plan.scenes)} scene(s)")
         visual_path = out / "browser_visual_plan.json"
         visual_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
-        render = build(lesson, plan, skill, out_dir=out, tts_engine=tts_engine, fps=fps,
-                       transition=transition, report=report, log=log)
-        report.complete(artifact=render.mp4)
-        return BrowserGenerationResult(skill=skill, lesson=lesson, visual_plan=plan, render=render)
+        if owns_report:
+            report.planned()
+        return BrowserPlanResult(skill=skill, lesson=lesson, visual_plan=plan)
     except Exception as exc:
         if report.data["status"] != "failed":
             report.failure(stage, exc)
+        raise
+
+
+def generate(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Path,
+             client=None, tts_engine: str | None = None, fps: int = 30,
+             transition: float = 0.45, log=None) -> BrowserGenerationResult:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    report = RunReport(out, topic=topic, recipe=recipe, log=log)
+    try:
+        planned = plan(topic, recipe=recipe, approve_fn=approve_fn, out_dir=out,
+                       client=client, report=report, log=log)
+        render = build(planned.lesson, planned.visual_plan, planned.skill, out_dir=out,
+                       tts_engine=tts_engine, fps=fps, transition=transition,
+                       report=report, log=log)
+        report.complete(artifact=render.mp4)
+        return BrowserGenerationResult(skill=planned.skill, lesson=planned.lesson,
+                                       visual_plan=planned.visual_plan, render=render)
+    except Exception as exc:
+        if report.data["status"] != "failed":
+            report.failure("run", exc)
         raise

@@ -5,6 +5,7 @@ import pytest
 
 from core.schemas.browser_visual_plan import BrowserVisualPlan
 from core.schemas.lesson_plan import LessonPlan
+from generation import browser_scene
 from generation.browser_scene import page_html
 from planner import browser_visual_plan, lesson_plan, product_recipe
 from verification import browser_layout
@@ -395,6 +396,26 @@ def test_browser_layout_rejects_clipping_title_overlap_and_hidden_label_collisio
 
 
 @pytest.mark.unit
+def test_decision_layout_assigns_repeated_roles_to_unique_slots_and_audit_rejects_overlap():
+    scene = _visual(pattern="decision").scenes[0]
+    duplicate_input = scene.objects[0].model_copy(update={"id": "ticket_2"})
+    duplicate_output = scene.objects[-1].model_copy(update={"id": "result_2"})
+    scene = scene.model_copy(update={"objects": [*scene.objects, duplicate_input, duplicate_output]})
+
+    assert browser_scene._decision_slots(scene) == {
+        "ticket": (1, 1), "harness": (2, 1), "policy": (2, 2), "reset": (3, 1),
+        "ticket_2": (1, 2), "result_2": (3, 2),
+    }
+    issues = browser_layout._issues({
+        "viewport": [1280, 720], "title": [400, 40, 880, 90],
+        "nodes": [{"id": "left", "rect": [100, 200, 300, 320]},
+                  {"id": "right", "rect": [120, 210, 320, 330]}],
+        "labels": [],
+    })
+    assert "node 'left' overlaps node 'right'" in issues
+
+
+@pytest.mark.unit
 def test_browser_layout_error_preserves_machine_readable_evidence():
     geometry = {"viewport": [1280, 720], "nodes": [], "labels": []}
     error = BrowserLayoutError("scene one", ["node 'x' is clipped"], geometry)
@@ -414,6 +435,27 @@ def test_browser_scene_runs_geometry_qa_before_screenshot(monkeypatch, tmp_path)
                                         title="The Agent Checks Policy", active_beat_id="check_policy")
     assert result.name == "frame.png"
     assert seen == ["browser scene 'ticket_flow'"]
+
+
+@pytest.mark.unit
+def test_html_screenshot_waits_for_compositor_paint(monkeypatch, tmp_path):
+    from composition import slides
+    from types import SimpleNamespace
+
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        target = next(arg.split("=", 1)[1] for arg in command if arg.startswith("--screenshot="))
+        Path(target).write_bytes(b"png")
+        return SimpleNamespace(stderr=b"", stdout=b"")
+
+    monkeypatch.setattr(slides, "chrome_path", lambda: "chrome")
+    monkeypatch.setattr(slides.subprocess, "run", fake_run)
+    slides.render_html("<h1>Ready</h1>", tmp_path / "frame.png")
+
+    assert "--run-all-compositor-stages-before-draw" in commands[0]
+    assert "--virtual-time-budget=500" in commands[0]
 
 
 @pytest.mark.unit

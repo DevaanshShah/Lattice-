@@ -20,7 +20,7 @@ _CSS = """
 .workflow.dense .nodes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:28px;align-content:center}.workflow.dense .node{min-width:0;width:100%;min-height:86px;padding:12px;font-size:17px}.workflow.dense .nodes:has(.role-before){grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}.workflow.dense .nodes:has(.role-before) .node:nth-child(1){grid-column:2/5;grid-row:1}.workflow.dense .nodes:has(.role-before) .node:nth-child(2){grid-column:5/7;grid-row:1}.workflow.dense .nodes:has(.role-before) .node:nth-child(n+3){grid-row:2}
 .architecture .nodes{display:grid;grid-template-columns:repeat(3,minmax(170px,1fr));grid-template-rows:repeat(2,150px);gap:46px}.architecture .node{justify-self:center}.architecture .kind-group{grid-column:span 2;width:86%}
 .transformation .nodes{display:flex;gap:46px}.transformation .nodes:before{content:"CHECK + TRANSFORM";position:absolute;left:25%;right:25%;top:28px;bottom:28px;border:1px dashed #986ca766;border-radius:28px;color:#b58abe;font-size:12px;letter-spacing:.18em;padding:16px;text-align:center;z-index:-1}
-.decision .nodes{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;column-gap:72px;row-gap:36px}.decision .role-input{grid-column:1;grid-row:1/3}.decision .role-decision{grid-column:2;grid-row:1/3}.decision .role-output{grid-column:3;grid-row:1}.decision .role-result{grid-column:3;grid-row:2}
+.decision .nodes{display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:minmax(106px,1fr);column-gap:72px;row-gap:30px}
 .comparison .nodes{display:grid;grid-template-columns:1fr 1fr;gap:100px}.comparison .role-before{grid-column:1}.comparison .role-after{grid-column:2}.comparison .node{min-height:190px}.comparison.dense .nodes{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:36px 56px}.comparison.dense .node{min-width:0;width:100%;min-height:100px}.comparison.dense .kind-metric{font-size:30px}.comparison.dense .role-before,.comparison.dense .role-after{grid-column:auto}
 .contour .nodes{display:block;min-height:440px;border-left:2px solid #74798c;border-bottom:2px solid #74798c;background:repeating-radial-gradient(ellipse at 58% 53%,transparent 0 42px,#59c5d255 44px 47px,transparent 49px 82px);border-radius:0 0 0 4px}.contour .nodes:before{content:"parameter θ₂";position:absolute;left:-44px;top:8px;color:var(--muted);font-size:14px;transform:rotate(-90deg)}.contour .nodes:after{content:"parameter θ₁";position:absolute;right:8px;bottom:-28px;color:var(--muted);font-size:14px}.contour-path{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}.contour-path polyline{fill:none;stroke:var(--amber);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:9 8}.contour-path circle{fill:var(--amber);stroke:var(--bg);stroke-width:3}.contour .node{position:absolute;min-width:120px;max-width:190px;min-height:62px;padding:12px;border-radius:999px}.contour .role-input,.contour .role-source,.contour .role-context{left:5%;top:12%}.contour .role-operation,.contour .role-tool{right:4%;top:14%}.contour .role-metric,.contour .role-destination,.contour .role-result{left:50%;top:43%;transform:translate(-50%,-50%)}.contour .role-output,.contour .role-audit{right:7%;bottom:8%}.contour .node.is-hidden{transform:translate(-50%,-50%) scale(.92)}.contour .node.is-active{box-shadow:0 0 44px #32b9c566}.contour .role-metric.is-active,.contour .role-destination.is-active,.contour .role-result.is-active{transform:translate(-50%,-50%) scale(1.035)}.contour .role-input.is-hidden,.contour .role-source.is-hidden,.contour .role-context.is-hidden,.contour .role-operation.is-hidden,.contour .role-tool.is-hidden,.contour .role-output.is-hidden,.contour .role-audit.is-hidden{transform:scale(.92)}
 .timeline .nodes{align-items:flex-start;padding-top:170px}.timeline .nodes:before{content:"";position:absolute;left:8%;right:8%;top:164px;height:3px;background:linear-gradient(90deg,var(--blue),var(--purple),var(--green));border-radius:3px}.timeline .node{min-height:90px;border-radius:12px}.timeline .node:before{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:var(--cyan);box-shadow:0 0 20px #59c5d288;transform:translateY(-64px)}
@@ -47,14 +47,31 @@ def _state(scene: BrowserScene, active_beat_id: str | None) -> tuple[set[str], s
     return visible, active
 
 
+def _decision_slots(scene: BrowserScene) -> dict[str, tuple[int, int]]:
+    columns = {
+        "input": 1, "source": 1, "context": 1, "before": 1,
+        "operation": 2, "tool": 2, "decision": 2,
+    }
+    rows = {1: 0, 2: 0, 3: 0}
+    slots: dict[str, tuple[int, int]] = {}
+    for obj in scene.objects:
+        column = columns.get(obj.role, 3)
+        rows[column] += 1
+        slots[obj.id] = (column, rows[column])
+    return slots
+
+
 def _node_html(scene: BrowserScene, active_beat_id: str | None) -> str:
     visible, active = _state(scene, active_beat_id)
+    slots = _decision_slots(scene) if scene.pattern == "decision" else {}
     out = []
     for obj in scene.objects:
         state = "" if obj.id in visible else " is-hidden"
         if obj.id in active:
             state = " is-active"
-        out.append(f'<div class="node kind-{obj.kind} role-{obj.role}{state}" data-object-id="{escape(obj.id)}">'
+        style = (f' style="grid-column:{slots[obj.id][0]};grid-row:{slots[obj.id][1]}"'
+                 if obj.id in slots else "")
+        out.append(f'<div class="node kind-{obj.kind} role-{obj.role}{state}" data-object-id="{escape(obj.id)}"{style}>'
                    f'{escape(obj.label)}</div>')
     return "".join(out)
 

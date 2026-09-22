@@ -73,7 +73,7 @@ function enterOutline(p) {
 async function planTopic(topic) {
   topic = (topic || "").trim(); if (!topic) return;
   state.screen = "studio"; state.phase = "prompt"; state.planning = true; render();
-  try { enterOutline(await api("POST", "/api/projects", { topic })); }
+  try { enterOutline(await api("POST", "/api/projects", { topic, renderer: "browser_v2", recipe: "auto" })); }
   catch (e) { alert("Couldn't plan: " + e.message); state.phase = "prompt"; }
   state.planning = false; render(); loadProjects();
 }
@@ -636,6 +636,7 @@ function sceneDur(s) {
 // A Filmora/Kinemaster-style timeline: clips sized to duration on a video track + an audio track, a
 // ruler, and a playhead. Click a clip to select/edit; drag to reorder; per-clip ↻ regenerate /  delete.
 function timeline(scenes) {
+  const editable = state.project && state.project.renderer !== "browser_v2";
   const PXPS = 46;                                   // px per second
   const durs = scenes.map(sceneDur);
   const starts = []; let acc = 0; for (const d of durs) { starts.push(acc); acc += d; }
@@ -647,10 +648,10 @@ function timeline(scenes) {
   const mini = "display:grid;place-items:center;width:22px;height:22px;border-radius:5px;background:rgba(0,0,0,0.62);border:1px solid var(--line2);color:#fff;font-size:11px;cursor:pointer;";
   const clips = scenes.map((s, i) => {
     const on = i === state.selected, left = starts[i] * PXPS, w = Math.max(24, durs[i] * PXPS - 4);
-    const acts = on ? `<div style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
+    const acts = editable && on ? `<div style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
         <span data-act="regen" title="Regenerate scene" style="${mini}">↻</span>
         <span data-act="delete" title="Delete scene" style="${mini}border-color:rgba(240,85,59,0.5);color:var(--danger);">✕</span></div>` : "";
-    return `<div draggable="true" data-drag2="${i}" data-act="select" data-i="${i}" style="position:absolute;left:${left}px;width:${w}px;top:0;bottom:0;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid ${on ? "var(--accent)" : "var(--line2)"};background:#0B0B10;">
+    return `<div ${editable ? `draggable="true" data-drag2="${i}"` : ""} data-act="select" data-i="${i}" style="position:absolute;left:${left}px;width:${w}px;top:0;bottom:0;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid ${on ? "var(--accent)" : "var(--line2)"};background:#0B0B10;">
       <div style="${thumb(seedOf(s.sid || s.index))}"></div>
       <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.05),rgba(0,0,0,0.6));"></div>
       <span style="position:absolute;top:5px;left:7px;${MONO}font-size:10px;color:#fff;text-shadow:0 1px 2px #000;">${pad2(i + 1)}</span>
@@ -667,13 +668,13 @@ function timeline(scenes) {
   return `<div style="margin-top:22px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Timeline · ${scenes.length} scenes · ${fmt(total)}</span>
-      <span style="${MONO}font-size:11px;color:var(--faint);">drag to reorder · click a clip to edit</span>
+      <span style="${MONO}font-size:11px;color:var(--faint);">${editable ? "drag to reorder · click a clip to edit" : "click a scene to inspect its narration"}</span>
     </div>
     <div class="lt-scroll" style="overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg2);">
       <div style="position:relative;width:${W}px;min-width:100%;padding:0 0 8px;">
         <div style="position:relative;height:20px;border-bottom:1px solid var(--line);">${ticks}</div>
         <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">Video</div>
-        <div style="position:relative;height:56px;margin:0 0 2px;">${clips}<div data-act="insert-end" title="Add scene" style="position:absolute;left:${total * PXPS + 6}px;width:42px;top:0;bottom:0;border:1px dashed var(--line2);border-radius:6px;display:grid;place-items:center;color:var(--muted);cursor:pointer;">＋</div></div>
+        <div style="position:relative;height:56px;margin:0 0 2px;">${clips}${editable ? `<div data-act="insert-end" title="Add scene" style="position:absolute;left:${total * PXPS + 6}px;width:42px;top:0;bottom:0;border:1px dashed var(--line2);border-radius:6px;display:grid;place-items:center;color:var(--muted);cursor:pointer;">＋</div>` : ""}</div>
         <div style="${MONO}font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);padding:6px 0 3px 6px;">Narration</div>
         <div style="position:relative;height:28px;">${audio}</div>
         <div id="playhead" style="position:absolute;top:20px;bottom:8px;left:${(starts[state.selected] || 0) * PXPS}px;width:2px;background:var(--accent);pointer-events:none;box-shadow:0 0 6px var(--accent);"><div style="position:absolute;top:-3px;left:-4px;width:10px;height:8px;background:var(--accent);border-radius:2px;"></div></div>
@@ -757,6 +758,7 @@ function editorPanel(sel) {
   const versions = state.historyOpen ? (state.history || []) : null;
   const util = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:12.5px;cursor:pointer;";
   const danger = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid rgba(240,85,59,0.32);background:transparent;color:var(--danger);font-weight:500;font-size:12.5px;cursor:pointer;";
+  const browserV2 = state.project && state.project.renderer === "browser_v2";
   return `<div class="lt-snap" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
     <div>
       <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video src="/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
@@ -764,15 +766,15 @@ function editorPanel(sel) {
       <div style="${MONO}font-size:11px;color:var(--faint);margin-top:3px;">scene ${state.selected + 1} of ${state.project.scenes.length}</div>
     </div>
     <div style="min-width:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">Edit studio</span>${state.busy ? `<span style="${MONO}font-size:11px;color:var(--accent);display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:lt-pulse 1.2s ease-in-out infinite;"></span>working…</span>` : ""}</div>
-      ${editTabBar()}
-      ${editTabBody(sel)}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><span style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);">${browserV2 ? "Learning sequence" : "Edit studio"}</span>${state.busy ? `<span style="${MONO}font-size:11px;color:var(--accent);display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:lt-pulse 1.2s ease-in-out infinite;"></span>working…</span>` : ""}</div>
+      ${browserV2 ? `<div style="${MONO}font-size:11.5px;line-height:1.7;color:var(--muted);padding:14px;border:1px solid var(--line2);border-radius:8px;background:var(--raise2);">${(sel.narration || []).map((line, i) => `<div><span style="color:var(--accent);">${pad2(i + 1)}</span> ${esc(line)}</div>`).join("")}</div>` : editTabBar() + editTabBody(sel)}
+      ${browserV2 ? "" : `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
         <button class="lt-act" style="${util}" data-act="insert-after">＋ Insert after</button>
         <button class="lt-act" style="${util}" data-act="history">↺ History</button>
         <button class="lt-act" style="${danger}" data-act="delete">Delete</button>
       </div>
-      ${versions ? `<div class="lt-snap" style="margin-top:14px;border:1px solid var(--line);border-radius:6px;overflow:hidden;"><div style="padding:9px 14px;${MONO}font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);background:var(--raise);">Version history</div>${versions.length ? versions.map(v => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);"><div><div style="font-size:13px;color:var(--text);">v${v.version}${v.label ? " · " + esc(v.label) : ""}</div></div><div data-act="rollback" data-v="${v.version}" style="${MONO}font-size:11px;color:var(--accent);padding:5px 10px;border:1px solid var(--line2);border-radius:5px;cursor:pointer;">Restore</div></div>`).join("") : `<div style="padding:12px 14px;${MONO}font-size:12px;color:var(--faint);">No saved versions yet.</div>`}</div>` : ""}
+      ${versions ? `<div class="lt-snap" style="margin-top:14px;border:1px solid var(--line);border-radius:6px;overflow:hidden;"><div style="padding:9px 14px;${MONO}font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);background:var(--raise);">Version history</div>${versions.length ? versions.map(v => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);"><div><div style="font-size:13px;color:var(--text);">v${v.version}${v.label ? " · " + esc(v.label) : ""}</div></div><div data-act="rollback" data-v="${v.version}" style="${MONO}font-size:11px;color:var(--accent);padding:5px 10px;border:1px solid var(--line2);border-radius:5px;cursor:pointer;">Restore</div></div>`).join("") : `<div style="padding:12px 14px;${MONO}font-size:12px;color:var(--faint);">No saved versions yet.</div>`}</div>` : ""}`}
     </div>
   </div>`;
 }

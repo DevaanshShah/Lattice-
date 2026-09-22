@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.schemas.scene_spec import SceneSpec
+from core.schemas.browser_visual_plan import BrowserVisualPlan
+from core.schemas.lesson_plan import LessonPlan
 from core.schemas.outline import Outline, OutlineItem
 from core.schemas.style import StyleSpec
 from narration.narrate import NarratedResult
@@ -16,6 +18,31 @@ SPEC = SceneSpec.model_validate({
     "title": "A", "prompt": "p", "narration": "n",
     "objects": [{"id": "o", "kind": "square"}],
     "beats": [{"action": "create", "targets": ["o"]}]})
+
+LESSON = LessonPlan.model_validate({
+    "topic": "TCP", "skill_id": "workflow_explainer", "learning_objective": "Trace TCP",
+    "scenes": [
+        {"id": "s0", "title": "Connect", "learning_goal": "Open the connection",
+         "beats": [{"id": "b0", "spoken_text": "Send SYN", "claim_ids": ["c0"],
+                    "visual_anchors": ["SYN"]}]},
+        {"id": "s1", "title": "Confirm", "learning_goal": "Confirm the connection",
+         "beats": [{"id": "b1", "spoken_text": "Receive ACK", "claim_ids": ["c1"],
+                    "visual_anchors": ["ACK"]}]},
+    ]})
+
+VISUAL = BrowserVisualPlan.model_validate({
+    "topic": "TCP", "skill_id": "workflow_explainer", "scenes": [
+        {"lesson_scene_id": "s0", "pattern": "workflow",
+         "objects": [{"id": "syn", "kind": "message", "role": "input", "label": "SYN"}],
+         "beats": [{"narration_beat_id": "b0", "actions": [{"kind": "appear", "target_ids": ["syn"]}],
+                    "evidence": [{"claim_ids": ["c0"], "object_ids": ["syn"], "kind": "label"}]}],
+         "opening_visible_ids": [], "closing_visible_ids": ["syn"]},
+        {"lesson_scene_id": "s1", "pattern": "workflow",
+         "objects": [{"id": "ack", "kind": "message", "role": "output", "label": "ACK"}],
+         "beats": [{"narration_beat_id": "b1", "actions": [{"kind": "appear", "target_ids": ["ack"]}],
+                    "evidence": [{"claim_ids": ["c1"], "object_ids": ["ack"], "kind": "label"}]}],
+         "opening_visible_ids": [], "closing_visible_ids": ["ack"]},
+    ]})
 
 
 @pytest.fixture
@@ -99,6 +126,28 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("composition.stitch.stitch", fake_stitch)
     monkeypatch.setattr("editing.tweak.apply_tweak", lambda spec, instruction, **k: spec)
     monkeypatch.setattr("narration.narrate.build", fake_narrate_build)
+    monkeypatch.setattr("planner.lesson_plan.generate", lambda topic, skill, **k: LESSON)
+    monkeypatch.setattr("planner.browser_visual_plan.generate", lambda lesson, skill, **k: VISUAL)
+
+    def fake_browser_build(lesson, plan, skill, *, out_dir, on_scene=None, log=None, **k):
+        from composition.browser_video import BrowserVideoResult
+        out = Path(out_dir)
+        clips = []
+        for index, _scene in enumerate(lesson.scenes):
+            if on_scene:
+                on_scene(index, "rendering")
+            clip = out / f"scene_{index:02d}.mp4"
+            clip.write_bytes(b"v")
+            clips.append(clip)
+            if log:
+                log(f"[browser:scene_stitch] passed: {clip}")
+            if on_scene:
+                on_scene(index, "done")
+        final = out / "browser-video.mp4"
+        final.write_bytes(b"f")
+        return BrowserVideoResult(final, clips, [])
+
+    monkeypatch.setattr("composition.browser_video.build", fake_browser_build)
 
     engine = Engine(root=tmp_path / "web", client=object())
     queue = jobs_mod.JobQueue(synchronous=True)   # jobs complete inline -> deterministic
@@ -142,6 +191,31 @@ def test_build_job_renders_all_scenes_with_per_scene_status(client):
 
     proj = client.get(f"/api/projects/{pid}").json()
     assert all(s["built"] for s in proj["scenes"]) and proj["final_ready"] is True
+
+
+@pytest.mark.unit
+def test_browser_v2_web_project_plans_builds_and_previews_through_existing_api(client):
+    planned = client.post("/api/projects", json={
+        "topic": "TCP", "renderer": "browser_v2", "recipe": "auto", "max_scenes": 2,
+    })
+    assert planned.status_code == 200
+    dto = planned.json()
+    assert dto["renderer"] == "browser_v2"
+    assert [scene["title"] for scene in dto["scenes"]] == ["Connect", "Confirm"]
+    assert [scene["narration"] for scene in dto["scenes"]] == [["Send SYN"], ["Receive ACK"]]
+
+    pid = dto["id"]
+    job_id = client.post(f"/api/projects/{pid}/build", json={"keep": [1]}).json()["job_id"]
+    job = client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "done"
+    assert job["scenes"] == {"0": "done"}
+
+    built = client.get(f"/api/projects/{pid}").json()
+    assert built["renderer"] == "browser_v2" and built["final_ready"] is True
+    assert [scene["title"] for scene in built["scenes"]] == ["Confirm"]
+    assert built["scenes"][0]["narration"] == ["Receive ACK"]
+    assert client.get(f"/api/projects/{pid}/scenes/0/preview").status_code == 200
+    assert client.get(f"/api/projects/{pid}/final").status_code == 200
 
 
 @pytest.mark.unit

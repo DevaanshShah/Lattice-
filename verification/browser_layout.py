@@ -31,6 +31,11 @@ def _issues(data: dict) -> list[str]:
     nodes = data["nodes"]
     labels = data["labels"]
     issues = [f"node {node['id']!r} is clipped" for node in nodes if _clipped(node["rect"], width, height)]
+    for index, node in enumerate(nodes):
+        for other in nodes[index + 1:]:
+            overlap = _intersection(node["rect"], other["rect"])
+            if overlap > min(_area(node["rect"]), _area(other["rect"])) * 0.25:
+                issues.append(f"node {node['id']!r} overlaps node {other['id']!r}")
     for node in nodes:
         if _intersection(title, node["rect"]) > 1:
             issues.append(f"title overlaps node {node['id']!r}")

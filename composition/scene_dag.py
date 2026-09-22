@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,6 +65,7 @@ class VideoProject(BaseModel):
     scenes: list[SceneNode] = Field(default_factory=list)
     final_mp4: str | None = None
     target_seconds: int | None = None   # the user's duration pick (30/60/150); None = no budget
+    renderer: Literal["legacy", "browser_v2"] = "legacy"
 
     @classmethod
     def from_outline(cls, outline: Outline, style: StyleSpec | None = None) -> "VideoProject":
