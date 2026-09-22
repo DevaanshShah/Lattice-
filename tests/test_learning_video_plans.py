@@ -285,6 +285,18 @@ def test_browser_scene_hides_objects_until_their_visual_beat():
 
 
 @pytest.mark.unit
+def test_browser_scene_uses_dense_layout_for_large_workflows():
+    scene = _visual().scenes[0]
+    extra = [scene.objects[0].model_copy(update={"id": f"extra_{i}"}) for i in range(3)]
+    dense = scene.model_copy(update={"objects": [*scene.objects, *extra]})
+    html = page_html(dense, title="Large workflow", active_beat_id="receive_ticket")
+    assert 'class="frame workflow dense"' in html
+
+    comparison = dense.model_copy(update={"pattern": "comparison", "objects": dense.objects[:6]})
+    assert 'class="frame comparison dense"' in page_html(comparison, title="Comparison")
+
+
+@pytest.mark.unit
 def test_browser_layout_rejects_clipping_title_overlap_and_hidden_label_collisions():
     issues = browser_layout._issues({
         "viewport": [1280, 720], "title": [400, 40, 880, 90],
