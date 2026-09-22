@@ -7,6 +7,8 @@ from pathlib import Path
 
 from composition.slides import render_html
 from core.schemas.browser_visual_plan import BrowserScene
+from core.visual_assets import asset_data_uri
+from core.visual_state import VisualState
 from verification.browser_layout import audit_html
 
 
@@ -27,6 +29,86 @@ _CSS = """
 .metric .nodes{flex-wrap:wrap}.metric .role-metric{flex-basis:100%}.feedback_loop .nodes{display:grid;grid-template-columns:repeat(3,1fr);gap:54px}.feedback_loop .node:nth-child(2){transform:translateY(-10px)}.foot{position:absolute;right:28px;bottom:18px;color:var(--amber);font-size:12px;opacity:.7}
 .frame.compact{padding:28px 42px 28px}.compact .title{font-size:34px;margin-bottom:12px}.workflow.compact .nodes,.architecture.compact .nodes,.decision.compact .nodes,.comparison.compact .nodes,.transformation.compact .nodes,.timeline.compact .nodes,.feedback_loop.compact .nodes,.metric.compact .nodes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:minmax(82px,auto);gap:24px 38px;align-content:center;padding-top:0}.compact .node{min-width:0;width:100%;min-height:82px;padding:10px;font-size:16px;transform:none}.compact .kind-metric{font-size:27px}.compact .kind-gate{min-height:112px;padding:28px}.compact .edge-label{font-size:11px;stroke-width:6px}
 """
+
+_SEMANTIC_CSS = """
+.semantic-stage{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px}
+.semantic-object{max-width:100%;text-align:center}.semantic-array{width:100%}
+.semantic-caption{font:600 26px/1.2 Segoe UI,system-ui,sans-serif;margin-bottom:16px;color:var(--ink)}
+.semantic-cells{display:flex;justify-content:center;gap:10px;max-width:100%}
+.semantic-cell{position:relative;width:min(11vw,110px);min-width:60px;height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid #61758c;border-radius:14px;background:#1a2633;font:650 34px/1 Segoe UI,system-ui,sans-serif}
+.semantic-cell.is-discarded{opacity:.22;border-color:#4c4d55;background:#17171b}
+.semantic-cell.is-pointed{border-color:var(--amber);background:#3c2d18;box-shadow:0 0 28px #edb34a55}
+.semantic-index{font:500 15px/1 Segoe UI,system-ui,sans-serif;color:var(--muted);margin-top:11px}
+.semantic-pointer-label{height:26px;margin-bottom:10px;font:700 18px/1 Segoe UI,system-ui,sans-serif;color:var(--amber)}
+.semantic-check{position:absolute;top:5px;right:9px;font:800 21px/1 Segoe UI,system-ui,sans-serif}.semantic-check.is-match{color:var(--green)}.semantic-check.is-miss{color:var(--red)}
+.semantic-cell-wrap{display:flex;flex-direction:column;align-items:center;width:min(11vw,110px);min-width:60px}
+.semantic-counter{font:650 28px/1.2 Segoe UI,system-ui,sans-serif;color:var(--amber)}
+.semantic-formula{font:550 38px/1.25 Cambria,Georgia,serif}.semantic-code{max-width:90%;font:24px/1.45 Consolas,monospace;text-align:left;white-space:pre-wrap}
+.semantic-note{font:600 25px/1.3 Segoe UI,system-ui,sans-serif}.semantic-chart{display:flex;align-items:end;justify-content:center;gap:52px;height:300px;padding-bottom:64px;box-sizing:border-box}
+.semantic-bar{width:min(19vw,185px);min-height:8px;background:var(--cyan);border-radius:8px 8px 0 0;position:relative}.semantic-bar span{position:absolute;left:-8px;right:-8px;bottom:-54px;font:650 22px/1.15 Segoe UI,system-ui,sans-serif}
+.compact .semantic-cell-wrap,.compact .semantic-cell{width:min(9vw,88px);min-width:48px}.compact .semantic-cell{height:86px;font-size:27px}.compact .semantic-cells{gap:7px}.compact .semantic-stage{gap:20px}
+.semantic-media img{max-width:700px;max-height:350px;object-fit:contain}.semantic-icon img{width:120px;height:120px;filter:brightness(0) invert(1)}.semantic-media figcaption{font:600 23px/1.2 Segoe UI,system-ui,sans-serif;margin-top:16px}
+"""
+
+
+def _semantic_html(scene: BrowserScene, state: VisualState) -> str:
+    objects = {obj.id: obj for obj in scene.objects}
+    pointers = [obj for obj in scene.objects if obj.kind == "pointer" and obj.id in state.visible]
+    output: list[str] = []
+    for obj in scene.objects:
+        if obj.id not in state.visible or obj.kind == "pointer":
+            continue
+        payload = state.payloads[obj.id]
+        label = escape(obj.label)
+        if obj.kind == "array":
+            discarded = set(payload.get("discarded_indices", []))
+            cells = []
+            for index, item in enumerate(payload["items"]):
+                here = [pointer for pointer in pointers
+                        if state.payloads[pointer.id]["target_id"] == obj.id
+                        and state.payloads[pointer.id]["index"] == index]
+                pointed = " is-pointed" if here else ""
+                dimmed = " is-discarded" if index in discarded else ""
+                pointer_label = " / ".join(escape(pointer.label) for pointer in here)
+                result = payload.get("checked_results", {}).get(str(index))
+                marker = (f'<span class="semantic-check is-{result}">'
+                          f'{"✓" if result == "match" else "✗"}</span>' if result else "")
+                cells.append(f'<div class="semantic-cell-wrap"><div class="semantic-pointer-label">'
+                             f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}">'
+                             f'{escape(str(item))}{marker}<span class="semantic-index">{index}</span></div></div>')
+            output.append(f'<section class="semantic-object semantic-array" data-object-id="{escape(obj.id)}">'
+                          f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
+                          f'{"".join(cells)}</div></section>')
+        elif obj.kind in {"counter", "metric", "value"}:
+            value = escape(str(payload.get("value") if payload.get("value") is not None else "?"))
+            output.append(f'<div class="semantic-object semantic-counter" data-object-id="{escape(obj.id)}">'
+                          f'{label}: {value}</div>')
+        elif obj.kind == "formula":
+            output.append(f'<div class="semantic-object semantic-formula" data-object-id="{escape(obj.id)}">'
+                          f'{escape(str(payload["expression"]))}</div>')
+        elif obj.kind == "code":
+            output.append(f'<pre class="semantic-object semantic-code" data-object-id="{escape(obj.id)}">'
+                          f'{escape(str(payload["source"]))}</pre>')
+        elif obj.kind == "chart":
+            series = payload["series"]
+            numbers = [float(item["value"]) for item in series]
+            scale = max(numbers + [1.0])
+            bars = "".join(f'<div class="semantic-bar" style="height:{max(8, 210 * value / scale):.1f}px">'
+                           f'<span>{escape(str(item["label"]))}: {escape(str(item["value"]))}</span></div>'
+                           for item, value in zip(series, numbers))
+            output.append(f'<div class="semantic-object" data-object-id="{escape(obj.id)}">'
+                          f'<div class="semantic-caption">{label}</div><div class="semantic-chart">'
+                          f'{bars}</div></div>')
+        elif obj.kind in {"image", "icon"}:
+            uri = asset_data_uri(obj.kind, str(payload["asset_id"]))
+            extra = " semantic-icon" if obj.kind == "icon" else ""
+            output.append(f'<figure class="semantic-object semantic-media{extra}" '
+                          f'data-object-id="{escape(obj.id)}"><img src="{uri}" alt="{label}">'
+                          f'<figcaption>{label}</figcaption></figure>')
+        else:
+            output.append(f'<div class="semantic-object semantic-note" data-object-id="{escape(obj.id)}">'
+                          f'{label}</div>')
+    return "".join(output)
 
 
 def _state(scene: BrowserScene, active_beat_id: str | None) -> tuple[set[str], set[str]]:
@@ -96,7 +178,14 @@ def _pattern_overlay(scene: BrowserScene, active_beat_id: str | None) -> str:
 
 
 def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = None,
-              footer: str = "Lattice", layout_mode: str = "auto") -> str:
+              footer: str = "Lattice", layout_mode: str = "auto",
+              state: VisualState | None = None) -> str:
+    if state is not None:
+        return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}'
+                f'{_SEMANTIC_CSS}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
+                f'<h1 class="title">{escape(title)}</h1><section class="diagram">'
+                f'<div class="semantic-stage">{_semantic_html(scene, state)}</div></section>'
+                f'<div class="foot">{escape(footer)}</div></main></body></html>')
     relations = _relations_json(scene)
     dense = len(scene.objects) > 6 or (scene.pattern == "comparison" and len(scene.objects) > 4)
     frame_class = f"frame {scene.pattern}" + (" dense" if dense else "")
@@ -117,9 +206,9 @@ const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');mar
 
 def render_scene(scene: BrowserScene, out_png: str | Path, *, title: str,
                  active_beat_id: str | None = None, footer: str = "Lattice",
-                 layout_mode: str = "auto") -> Path:
+                 layout_mode: str = "auto", state: VisualState | None = None) -> Path:
     document = page_html(scene, title=title, active_beat_id=active_beat_id, footer=footer,
-                         layout_mode=layout_mode)
+                         layout_mode=layout_mode, state=state)
     out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     out_png.with_name(f"{out_png.stem}.{layout_mode}.html").write_text(document, encoding="utf-8")

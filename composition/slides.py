@@ -145,7 +145,7 @@ def _norm_clip(src: str | Path, out: str | Path, *, seconds: float | None = None
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
     cmd += ["-vf", (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
                     f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,fps={fps},format=yuv420p"),
-            "-af", "apad", "-shortest",
+            "-af", "apad", "-t", f"{float(seconds or (4.0 if is_img else _probe_duration(src))):.3f}",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", str(out)]
     res = subprocess.run(cmd, capture_output=True, timeout=timeout)

@@ -5,9 +5,9 @@ from planner import product_recipe
 
 
 @pytest.mark.unit
-def test_all_five_recipes_load_and_validate():
+def test_recipes_load_and_validate():
     recipes = product_recipe.load_recipes()
-    expected_ids = {"architecture_explainer", "workflow_explainer", "funnel_explainer",
+    expected_ids = {"algorithm_explainer", "architecture_explainer", "workflow_explainer", "funnel_explainer",
                     "metric_story", "before_after"}
     assert set(recipes) == expected_ids
     for recipe in recipes.values():
@@ -41,6 +41,12 @@ def test_auto_keyword_selection_picks_architecture():
     recipe = product_recipe.pick_recipe(
         "Explain how Revenue Brain connects CRM, marketing, billing, and support data", "auto")
     assert recipe.id == "architecture_explainer"
+
+
+@pytest.mark.unit
+def test_auto_keyword_selection_picks_algorithm():
+    recipe = product_recipe.pick_recipe("Explain binary search on a sorted array", "auto")
+    assert recipe.id == "algorithm_explainer"
 
 
 @pytest.mark.unit

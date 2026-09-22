@@ -13,15 +13,16 @@ class LessonPlanError(RuntimeError):
     pass
 
 
-def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3) -> LessonPlan:
+def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3,
+             schema_version: int = 1) -> LessonPlan:
+    if schema_version not in (1, 2):
+        raise ValueError(f"unsupported lesson plan schema version: {schema_version}")
     client = client or get_client()
-    contract = (
-        f"Selected skill: {skill.id}\n"
-        f"Lesson guidance: {skill.outline_guidance}\n"
-        f"Required visual roles: {', '.join(skill.required_roles)}"
-    )
+    contract = f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
+    if schema_version == 1:
+        contract += f"\nRequired visual roles: {', '.join(skill.required_roles)}"
     messages = [
-        {"role": "system", "content": load("lesson-plan")},
+        {"role": "system", "content": load("lesson-plan-v2" if schema_version == 2 else "lesson-plan")},
         {"role": "user", "content": f"Topic: {topic}\n\n{contract}\n\nReturn the lesson plan JSON now."},
     ]
     last: Exception | None = None
@@ -31,6 +32,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             data = extract_json(raw)
             data["topic"] = topic
             data["skill_id"] = skill.id
+            data["schema_version"] = schema_version
             plan = LessonPlan.model_validate(data)
             missing_anchors = [beat.id for scene in plan.scenes for beat in scene.beats
                                if not beat.visual_anchors]

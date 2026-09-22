@@ -11,6 +11,8 @@ from typing import Any, Callable
 def classify_exception(exc: Exception, stage: str) -> str:
     name = type(exc).__name__.lower()
     message = str(exc).lower()
+    if isinstance(exc, PermissionError):
+        return "filesystem"
     if "layout" in name or "clipped" in message or "overlaps" in message:
         return "layout"
     if "validation" in name or "invalid" in message:
@@ -105,4 +107,11 @@ class RunReport:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temp = self.path.with_suffix(".json.tmp")
         temp.write_text(json.dumps(self.data, indent=2, ensure_ascii=False), encoding="utf-8")
-        temp.replace(self.path)
+        for attempt in range(5):
+            try:
+                temp.replace(self.path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))

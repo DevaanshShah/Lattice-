@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -13,16 +13,21 @@ VisualRole = Literal[
     "input", "operation", "output", "source", "destination", "context", "tool", "decision",
     "result", "audit", "before", "after", "metric",
 ]
-ObjectKind = Literal["message", "node", "document", "card", "gate", "tool", "metric", "group"]
+ObjectKind = Literal[
+    "message", "node", "document", "card", "gate", "tool", "metric", "group",
+    "array", "pointer", "counter", "value", "formula", "code", "chart", "image", "icon",
+]
 RelationKind = Literal[
     "flows_to", "connects_to", "checks", "branches_to", "returns_to", "compares_to",
     "transforms_to",
 ]
 ActionKind = Literal[
     "appear", "connect", "highlight", "expand", "transform", "move", "branch", "activate",
-    "deactivate", "hold",
+    "deactivate", "hold", "set_state", "increment", "hide", "focus", "compare",
 ]
-EvidenceKind = Literal["label", "state", "relationship", "value"]
+EvidenceKind = Literal[
+    "label", "state", "relationship", "value", "state_change", "sequence", "comparison", "asset",
+]
 
 
 class VisualObject(BaseModel):
@@ -31,6 +36,28 @@ class VisualObject(BaseModel):
     kind: ObjectKind
     role: VisualRole
     label: str = Field(..., min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _semantic_payload(self) -> "VisualObject":
+        required = {
+            "array": "items", "pointer": "target_id", "counter": "value", "value": "value",
+            "formula": "expression", "code": "source", "chart": "series",
+            "image": "asset_id", "icon": "asset_id",
+        }
+        key = required.get(self.kind)
+        if key and key not in self.payload:
+            raise ValueError(f"{self.kind} object requires payload.{key}")
+        if self.kind == "array" and (not isinstance(self.payload["items"], list)
+                                      or not self.payload["items"]):
+            raise ValueError("array payload.items must be a nonempty list")
+        if self.kind == "pointer" and (not isinstance(self.payload.get("index"), int)
+                                        or self.payload["index"] < 0):
+            raise ValueError("pointer payload.index must be a nonnegative integer")
+        if self.kind == "counter" and self.payload["value"] is not None and not isinstance(
+                self.payload["value"], (int, float)):
+            raise ValueError("counter payload.value must be numeric or initially unknown")
+        return self
 
 
 class VisualRelation(BaseModel):
@@ -46,12 +73,15 @@ class VisualEvidence(BaseModel):
     claim_ids: list[str] = Field(..., min_length=1)
     object_ids: list[str] = Field(..., min_length=1)
     kind: EvidenceKind
+    action_ids: list[str] = Field(default_factory=list)
 
 
 class VisualAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: ActionKind
     target_ids: list[str] = Field(..., min_length=1)
+    id: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class VisualBeat(BaseModel):
@@ -65,6 +95,7 @@ class BrowserScene(BaseModel):
     model_config = ConfigDict(extra="forbid")
     lesson_scene_id: str
     pattern: VisualPattern
+    render_mode: Literal["browser", "manim"] = "browser"
     objects: list[VisualObject] = Field(..., min_length=1)
     relationships: list[VisualRelation] = Field(default_factory=list)
     beats: list[VisualBeat] = Field(..., min_length=1)
@@ -91,6 +122,19 @@ class BrowserScene(BaseModel):
         unknown = sorted(references - known)
         if unknown:
             raise ValueError(f"unknown visual object id(s): {unknown}")
+        action_ids = [action.id for beat in self.beats for action in beat.actions if action.id]
+        if len(action_ids) != len(set(action_ids)):
+            raise ValueError("duplicate visual action id(s)")
+        unknown_actions = {action_id for beat in self.beats for evidence in beat.evidence
+                           for action_id in evidence.action_ids} - set(action_ids)
+        if unknown_actions:
+            raise ValueError(f"unknown visual action id(s): {sorted(unknown_actions)}")
+        object_map = {obj.id: obj for obj in self.objects}
+        bad_pointers = [obj.id for obj in self.objects if obj.kind == "pointer"
+                        and (obj.payload["target_id"] not in object_map
+                             or object_map[obj.payload["target_id"]].kind != "array")]
+        if bad_pointers:
+            raise ValueError(f"pointer targets must name array object(s): {bad_pointers}")
         missing_opening = sorted(set(self.carryover_ids) - set(self.opening_visible_ids))
         if missing_opening:
             raise ValueError(f"carryover object id(s) must be visible at opening: {missing_opening}")
@@ -99,6 +143,7 @@ class BrowserScene(BaseModel):
 
 class BrowserVisualPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    schema_version: Literal[1, 2] = 1
     topic: str = Field(..., min_length=1)
     skill_id: str = Field(..., min_length=1)
     scenes: list[BrowserScene] = Field(..., min_length=1)

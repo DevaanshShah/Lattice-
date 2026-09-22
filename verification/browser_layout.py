@@ -31,6 +31,10 @@ def _issues(data: dict) -> list[str]:
     nodes = data["nodes"]
     labels = data["labels"]
     issues = [f"node {node['id']!r} is clipped" for node in nodes if _clipped(node["rect"], width, height)]
+    issues.extend(f"semantic text {item['id']!r} overflows" for item in data.get("semantic_text", [])
+                  if item["overflow"])
+    issues.extend(f"array cell {item['text']!r} is clipped" for item in data.get("cells", [])
+                  if _clipped(item["rect"], width, height))
     for index, node in enumerate(nodes):
         for other in nodes[index + 1:]:
             overlap = _intersection(node["rect"], other["rect"])
@@ -54,7 +58,7 @@ def _issues(data: dict) -> list[str]:
 def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
     script = """() => {
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
-return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden)')].map(e=>({id:e.dataset.objectId,rect:rect(e)})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)}))};
+return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e)})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
 }"""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,

@@ -1,7 +1,7 @@
-"""Deterministic product-video recipe selection — structured generation guidance, not an agent.
+"""Deterministic product-video recipe selection — structured generation guidance.
 
-A recipe is plain data (keywords + two guidance strings) that biases the EXISTING outline/expand
-prompts (`planner/outline.py`, `planner/expand.py`) toward one of 5 fixed video shapes. No new
+A recipe is plain data (keywords + guidance strings) that biases the existing planning
+prompts toward a teaching approach. No new
 schema, no LLM call: `pick_recipe` is pure keyword matching over
 `prompts/product_video_recipes.json`. Callers that never pass a recipe see byte-identical
 behavior — this module is only ever invoked when `--recipe` is explicitly given.
@@ -38,7 +38,7 @@ def load_recipes() -> dict[str, Recipe]:
 
 
 def pick_recipe(topic: str, requested: str, *, recipes: dict[str, Recipe] | None = None) -> Recipe:
-    """`requested` is "auto" or one of the 5 recipe ids — this is never called for the "no
+    """`requested` is "auto" or a recipe id — this is never called for the "no
     --recipe at all" case, which skips recipe selection entirely upstream.
 
     "auto": score each recipe by counting its keywords found (case-insensitive substring match)

@@ -1,4 +1,12 @@
 {
+  "algorithm_explainer": {
+    "visual_pattern": "workflow_flow",
+    "allowed_patterns": ["workflow", "decision", "comparison", "transformation"],
+    "required_roles": ["input", "operation", "result"],
+    "keywords": ["algorithm", "binary search", "brute-force", "linear search", "sorting", "search procedure"],
+    "outline_guidance": "Teach the algorithm with one concrete input. Establish the input and target, trace the important checks or state changes in order, then show the result and a meaningful comparison. Do not claim a step count unless the shown trace supports it.",
+    "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box."
+  },
   "architecture_explainer": {
     "visual_pattern": "architecture_map",
     "allowed_patterns": ["architecture", "workflow", "transformation", "feedback_loop"],
@@ -6,7 +14,7 @@
     "keywords": ["architecture", "connects", "integrat", "system", "pipeline", "platform",
                  "data flow", "infrastructure", "sources"],
     "outline_guidance": "This is an ARCHITECTURE EXPLAINER: structure the scenes as (1) the separate/fragmented systems or data sources involved, (2) how they connect into one flow, (3) the unified system or outcome that results, (4) optionally, one concrete example of it working. Favor concrete named systems/entities over abstract concepts.",
-    "scene_guidance": "This scene is part of an architecture explainer. Prefer a diagram of connected systems/entities (boxes/nodes with labeled arrows showing data or control flow) over an abstract illustration."
+    "scene_guidance": "Show named components, the information moving between them, and the state or decision each component changes. Use boundaries only where the system has a real boundary."
   },
   "workflow_explainer": {
     "visual_pattern": "workflow_flow",
@@ -14,7 +22,7 @@
     "required_roles": ["input", "operation", "output"],
     "keywords": ["workflow", "process", "step by step", "how it works", "procedure", "sequence"],
     "outline_guidance": "This is a WORKFLOW EXPLAINER: structure the scenes as an ordered sequence of steps from trigger/start to outcome, one clear step per scene, in the order they actually happen.",
-    "scene_guidance": "This scene is part of a workflow explainer. Prefer a linear step-by-step diagram (ordered boxes connected by arrows in sequence) over a static illustration. For an important mechanism, visibly show input -> operation/decision -> output; never use one labeled box as a substitute for explaining what it does. Keep connected boxes on the same grid row whenever possible so arrows are horizontal, clear, and do not cross labels."
+    "scene_guidance": "Show each important step as an action on the actual subject: data cells and pointers for an algorithm, messages and results for a tool flow, or changing values for a calculation. Preserve the subject across steps and show the consequence before moving on."
   },
   "funnel_explainer": {
     "visual_pattern": "funnel",

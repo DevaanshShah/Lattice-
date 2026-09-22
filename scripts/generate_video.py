@@ -13,7 +13,7 @@ import sys
 from composition import browser_video, video
 from core.config import settings
 from core.console import enable_utf8
-from planner import approval
+from planner import approval, product_recipe
 
 
 def _make_approver(auto: bool, max_scenes: int = 0):
@@ -68,13 +68,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cap", type=int, default=0, help="parallel render cap (0 = config default)")
     ap.add_argument("--renderer", choices=["legacy", "browser_v2"], default="legacy",
                     help="legacy keeps the current pipeline; browser_v2 uses lesson and visual plans")
+    ap.add_argument("--semantic-visuals", action="store_true",
+                    help="opt into claim-linked actions and semantic/Manim visuals with browser_v2")
     ap.add_argument("--recipe", default=None,
-                    choices=["auto", "architecture_explainer", "workflow_explainer",
-                             "funnel_explainer", "metric_story", "before_after"],
-                    help="bias generation toward a fixed product-video shape. Omit entirely for "
-                         "today's generic behavior; 'auto' runs the deterministic keyword picker "
+                    choices=["auto", *product_recipe.load_recipes()],
+                    help="select teaching guidance. Omit entirely for "
+                         "the generic legacy behavior; 'auto' runs the deterministic keyword picker "
                          "(falls back to workflow_explainer); or name a recipe directly.")
     args = ap.parse_args(argv)
+    if args.semantic_visuals and args.renderer != "browser_v2":
+        ap.error("--semantic-visuals requires --renderer browser_v2")
 
     out = settings.out_dir / "video"
     if args.renderer == "browser_v2":
@@ -83,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         result = browser_video.generate(
             args.topic, recipe=args.recipe or "auto", approve_fn=_make_lesson_approver(args.yes),
             out_dir=out, transition=0.45, log=print,
+            **({"schema_version": 2} if args.semantic_visuals else {}),
         )
         print("---")
         print(f"[OK] final video: {result.render.mp4}")
