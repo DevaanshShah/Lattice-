@@ -357,3 +357,44 @@ def test_narrated_structural_prepends_base_and_keeps_audio(monkeypatch):
     assert "class LatticeScene(Scene)" in out          # product path now gets the scaffold too
     assert "add_sound" in out                          # narration sync preserved
     assert "setup_scene" in (fake.system or "")        # the structural narrated prompt was used
+
+
+@pytest.mark.unit
+def test_recipe_pattern_can_force_structural_codegen_without_global_flag(monkeypatch):
+    from core.schemas.scene_spec import SceneSpec
+    monkeypatch.setattr(codegen.settings, "structural_layout", False)
+    fake = _Fake(_VALID_NARRATED.replace("self.add_sound('audio/a.mp3')",
+                                         "o = self.labeled_box('A', w=2.0, h=1.0)\n        self.place(o, 'C2')\n        self.add(o)\n        self.add_sound('audio/a.mp3')"))
+    spec = SceneSpec.model_validate({**SPEC_JSON, "visual_pattern": "architecture_map",
+                                     "beats": [{"action": "create", "targets": ["o"],
+                                                "spoken_point": "The object appears."}]})
+    out = codegen.generate_narrated(spec, [("hi", "audio/a.mp3", 1.0)], client=fake, structural=True)
+    assert "class LatticeScene(Scene)" in out
+    assert "architecture map" in (fake.system or "").lower()
+
+
+@pytest.mark.unit
+def test_codegen_instructs_carryover_anchors_to_start_visible(monkeypatch):
+    from core.schemas.scene_spec import SceneSpec
+    monkeypatch.setattr(codegen.settings, "structural_layout", True)
+    fake = _Fake(_VALID_NARRATED.replace("self.add_sound('audio/a.mp3')",
+                                         "o = self.labeled_box('A', w=2.0, h=1.0)\n        self.place(o, 'C2')\n        self.add(o)\n        self.add_sound('audio/a.mp3')"))
+    spec = SceneSpec.model_validate({**SPEC_JSON, "continuity": {
+        "carryover_ids": ["o"], "opening_state": "the source remains visible",
+        "closing_state": "the source connects to the outcome",
+        "anchor_layouts": {"o": {"cell": "C2", "width": 2.0, "height": 1.0}},
+    }, "beats": [{"action": "indicate", "targets": ["o"]}]})
+    codegen.generate_narrated(spec, [("hi", "audio/a.mp3", 1.0)], client=fake)
+    assert "already visible in frame one" in (fake.system or "")
+
+
+@pytest.mark.unit
+def test_continuity_contract_requires_the_declared_grid_cell():
+    from core.schemas.scene_spec import SceneSpec
+    spec = SceneSpec.model_validate({**SPEC_JSON, "continuity": {
+        "carryover_ids": ["o"], "opening_state": "source stays visible",
+        "closing_state": "source leads to the outcome", "anchor_layouts": {"o": {"cell": "C2", "width": 2.0, "height": 1.0}},
+    }, "beats": [{"action": "indicate", "targets": ["o"]}]})
+    good = 'o = self.labeled_box("A", w=2.0, h=1.0)\nself.place(o, "C2")'
+    assert codegen.continuity_issues(good, spec) == []
+    assert codegen.continuity_issues('self.place(o, "D2")', spec)[0].rule == "continuity-layout"

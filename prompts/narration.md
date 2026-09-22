@@ -8,6 +8,9 @@ Return ONLY a JSON object (no prose, no markdown fences):
 
 Rules:
 - Exactly one clear, spoken-style sentence per beat, in beat order (~8–18 words each).
+- Each line must say the matching beat's `spoken_point` and nothing that the listed targets do not visibly
+  show. Never add an unseen decision, mechanism, route, outcome, or example merely to make the narration
+  sound richer. If the plan lacks a visual for a claim, omit that claim rather than inventing it in speech.
 - Conversational and explanatory, not a robotic list of object names. Teach the idea.
 - TELL A STORY, don't just label the screen. If a STORY CONTEXT block is given, this scene is one
   part of a longer video: OPEN by linking to what the viewer already saw ("Now that we've seen…",

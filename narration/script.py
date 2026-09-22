@@ -25,7 +25,8 @@ def generate(spec: SceneSpec, *, context: str | None = None, attempts: int = 3,
     came before/after — so the narration links scenes into one continuous lesson, not isolated clips."""
     client = client or get_client()
     beats = "\n".join(
-        f"{i + 1}. {b.action} {b.targets}" + (f" — {b.notes}" if b.notes else "")
+        f"{i + 1}. {b.action} {b.targets}; spoken point: {b.spoken_point or '(describe only these targets)'}"
+        + (f" — {b.notes}" if b.notes else "")
         for i, b in enumerate(spec.beats)
     )
     ctx = f"{context}\n\n" if context else ""

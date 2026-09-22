@@ -258,7 +258,7 @@ class LatticeScene(Scene):
         cr = style.pop("corner_radius", 0.0)   # tolerate corner_radius via RoundedRectangle (0 == sharp)
         kw = self._style_kw(style); kw.setdefault("color", color)
         box = RoundedRectangle(width=w, height=h, corner_radius=cr, **kw)
-        lbl = self._label(text, 24).move_to(box.get_center())
+        lbl = self._label(text, 30).move_to(box.get_center())
         if lbl.width > w - 0.2:
             lbl.scale_to_fit_width(w - 0.2)
         return VGroup(box, lbl)
@@ -267,7 +267,7 @@ class LatticeScene(Scene):
         style.pop("corner_radius", None)       # circles have no corners -> drop it silently
         kw = self._style_kw(style); kw.setdefault("color", color)
         c = Circle(radius=r, **kw)
-        lbl = self._label(label, 22).move_to(c.get_center())
+        lbl = self._label(label, 28).move_to(c.get_center())
         if lbl.width > 2 * r - 0.1:
             lbl.scale_to_fit_width(2 * r - 0.1)
         return VGroup(c, lbl)
@@ -460,7 +460,7 @@ class LatticeScene(Scene):
         nodes = []
         for it in items:
             label = str(it[0] if isinstance(it, (tuple, list)) else it)
-            probe = Text(label, font_size=24)
+            probe = Text(label, font_size=30)
             nodes.append(self.labeled_box(label, color=color, w=max(1.6, float(probe.width) + 0.5), h=1.0))
         row = VGroup(*nodes).arrange(direction, buff=1.15)
         arrows = VGroup()

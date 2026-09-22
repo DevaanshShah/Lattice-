@@ -1,0 +1,83 @@
+{
+  "topic": "How an agent harness safely handles a password-reset request",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Show how an agent harness turns a customer request into a checked, safe, and auditable action.",
+  "scenes": [
+    {
+      "id": "understand_request",
+      "title": "1. Understand the request",
+      "learning_goal": "Show that the harness converts an informal message into explicit intent.",
+      "example": "A customer says they are locked out and need a password reset.",
+      "beats": [
+        {
+          "id": "request_arrives",
+          "spoken_text": "A customer says, I am locked out. Please reset my password.",
+          "claim_ids": ["customer_requests_reset"]
+        },
+        {
+          "id": "intent_extracted",
+          "spoken_text": "The harness converts that message into a precise password-reset intent.",
+          "claim_ids": ["harness_extracts_intent"]
+        }
+      ],
+      "bridge_to_next": "An understood request is not yet an authorized action."
+    },
+    {
+      "id": "check_context",
+      "title": "2. Check context and policy",
+      "learning_goal": "Show that identity context and tool policy are checked before action.",
+      "example": "The account exists, but the reset tool is allowed only after identity verification.",
+      "beats": [
+        {
+          "id": "load_context",
+          "spoken_text": "Next, the harness loads the account context and the password-reset policy.",
+          "claim_ids": ["context_is_loaded", "policy_is_loaded"]
+        },
+        {
+          "id": "permission_checked",
+          "spoken_text": "Together they show whether this request is verified and permitted.",
+          "claim_ids": ["permission_is_computed"]
+        }
+      ],
+      "bridge_to_next": "The permission result controls the next branch."
+    },
+    {
+      "id": "choose_action",
+      "title": "3. Act or escalate",
+      "learning_goal": "Show the guarded decision between tool execution and human review.",
+      "example": "Verified requests use the reset tool; uncertain requests go to support.",
+      "beats": [
+        {
+          "id": "evaluate_gate",
+          "spoken_text": "The harness evaluates one gate: is the reset both verified and allowed?",
+          "claim_ids": ["decision_uses_permission"]
+        },
+        {
+          "id": "branch_action",
+          "spoken_text": "Yes calls the reset tool. No sends the case to a human instead.",
+          "claim_ids": ["allowed_calls_tool", "blocked_escalates"]
+        }
+      ],
+      "bridge_to_next": "Either branch must produce a clear response and a record."
+    },
+    {
+      "id": "return_and_record",
+      "title": "4. Respond and record",
+      "learning_goal": "Show the safe answer and audit trail produced by the harness.",
+      "example": "The customer receives a secure reset link and the action is logged.",
+      "beats": [
+        {
+          "id": "return_safe_answer",
+          "spoken_text": "For an approved request, the tool returns a secure reset link to the customer.",
+          "claim_ids": ["safe_answer_is_returned"]
+        },
+        {
+          "id": "write_audit_record",
+          "spoken_text": "Finally, the harness records what it checked, which tool ran, and the result.",
+          "claim_ids": ["action_is_audited"]
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}

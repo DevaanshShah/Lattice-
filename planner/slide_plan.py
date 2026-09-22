@@ -139,7 +139,8 @@ def _validate(data: dict) -> Deck:
     return Deck(title=str(data.get("title") or slides[0].title or "Untitled"), slides=slides)
 
 
-def plan_deck(topic: str, *, client: LLMClient | None = None, attempts: int = 4) -> Deck:
+def plan_deck(topic: str, *, client: LLMClient | None = None, attempts: int = 4,
+              recipe_guidance: str | None = None) -> Deck:
     """Topic -> Deck. Retries with the validation error fed back, like planner.outline.
 
     4 attempts, not 3: measured over 6 topics the loop converges in 1.33 calls on average (6/6), but
@@ -149,9 +150,10 @@ def plan_deck(topic: str, *, client: LLMClient | None = None, attempts: int = 4)
     if not topic:
         raise SlidePlanError("topic is empty")
     client = client or get_client()
+    guidance = f"\n\nPRODUCT VIDEO SHAPE:\n{recipe_guidance}" if recipe_guidance else ""
     messages = [
         {"role": "system", "content": load("slide-deck")},
-        {"role": "user", "content": f"Topic: {topic}\n\nReturn the deck JSON now."},
+        {"role": "user", "content": f"Topic: {topic}{guidance}\n\nReturn the deck JSON now."},
     ]
     last: Exception | None = None
     for _ in range(attempts):

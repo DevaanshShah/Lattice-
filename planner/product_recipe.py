@@ -22,12 +22,18 @@ class Recipe:
     keywords: tuple[str, ...]
     outline_guidance: str
     scene_guidance: str
+    visual_pattern: str
+    allowed_patterns: tuple[str, ...]
+    required_roles: tuple[str, ...]
 
 
 def load_recipes() -> dict[str, Recipe]:
     data = json.loads(_RECIPES_PATH.read_text(encoding="utf-8"))
     return {rid: Recipe(id=rid, keywords=tuple(r["keywords"]),
-                       outline_guidance=r["outline_guidance"], scene_guidance=r["scene_guidance"])
+                       outline_guidance=r["outline_guidance"], scene_guidance=r["scene_guidance"],
+                       visual_pattern=r["visual_pattern"],
+                       allowed_patterns=tuple(r["allowed_patterns"]),
+                       required_roles=tuple(r["required_roles"]))
             for rid, r in data.items()}
 
 

@@ -56,6 +56,38 @@ def test_beat_targets_must_exist():
 
 
 @pytest.mark.unit
+def test_every_declared_object_must_receive_a_visible_animation():
+    from core.schemas.scene_spec import SceneSpec
+    bad = {**VALID, "prompt": "p", "beats": [
+        {"action": "create", "targets": ["bucket"]},
+        {"action": "wait", "targets": ["key_a"]},
+    ]}
+    with pytest.raises(ValidationError, match="never receive a visible animation"):
+        SceneSpec.model_validate(bad)
+
+
+@pytest.mark.unit
+def test_continuity_anchor_must_be_declared_and_already_visible():
+    from core.schemas.scene_spec import SceneSpec
+    valid = {**VALID, "prompt": "p", "continuity": {
+        "carryover_ids": ["bucket"], "opening_state": "the bucket remains on the left",
+        "closing_state": "the bucket points to the new key",
+        "anchor_layouts": {"bucket": {"cell": "C2", "width": 2.0, "height": 1.0}},
+    }, "beats": [
+        {"action": "indicate", "targets": ["bucket"]},
+        {"action": "write", "targets": ["key_a"]},
+    ]}
+    assert SceneSpec.model_validate(valid).continuity.carryover_ids == ["bucket"]
+
+    invalid = {**valid, "beats": [
+        {"action": "fade_in", "targets": ["bucket"]},
+        {"action": "write", "targets": ["key_a"]},
+    ]}
+    with pytest.raises(ValidationError, match="must begin visible"):
+        SceneSpec.model_validate(invalid)
+
+
+@pytest.mark.unit
 def test_guardrails_flag_manimgl_and_deprecated():
     from generation.guardrails import check
     code = ("from manimlib import *\n"

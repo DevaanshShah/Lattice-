@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 
-from composition import video
+from composition import browser_video, video
 from core.config import settings
 from core.console import enable_utf8
 from planner import approval
@@ -41,6 +41,21 @@ def _make_approver(auto: bool, max_scenes: int = 0):
     return approve
 
 
+def _make_lesson_approver(auto: bool):
+    def approve(lesson):
+        print(f"Lesson: {lesson.learning_objective}")
+        for index, scene in enumerate(lesson.scenes, 1):
+            print(f"  {index}. {scene.title} — {scene.learning_goal}")
+        if auto:
+            print("(auto-approved with --yes)")
+            return lesson
+        if input("\nApprove lesson plan? [Enter=yes | q=abort]: ").strip().lower() in ("q", "quit", "abort"):
+            raise SystemExit("aborted at the lesson-plan gate.")
+        return lesson
+
+    return approve
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -51,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--quality", choices=["preview", "final"], default="preview")
     ap.add_argument("--max-scenes", type=int, default=0, help="cap scenes (0 = planner default)")
     ap.add_argument("--cap", type=int, default=0, help="parallel render cap (0 = config default)")
+    ap.add_argument("--renderer", choices=["legacy", "browser_v2"], default="legacy",
+                    help="legacy keeps the current pipeline; browser_v2 uses lesson and visual plans")
     ap.add_argument("--recipe", default=None,
                     choices=["auto", "architecture_explainer", "workflow_explainer",
                              "funnel_explainer", "metric_story", "before_after"],
@@ -60,6 +77,19 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     out = settings.out_dir / "video"
+    if args.renderer == "browser_v2":
+        if args.max_scenes or args.cap:
+            ap.error("--max-scenes and --cap are not supported by browser_v2 yet")
+        result = browser_video.generate(
+            args.topic, recipe=args.recipe or "auto", approve_fn=_make_lesson_approver(args.yes),
+            out_dir=out, transition=0.45,
+        )
+        print("---")
+        print(f"[OK] final video: {result.render.mp4}")
+        print(f"     lesson:      {out / 'lesson_plan.json'}")
+        print(f"     visual plan: {out / 'browser_visual_plan.json'}")
+        return 0
+
     proj = video.generate_video(
         args.topic, approve_fn=_make_approver(args.yes, args.max_scenes),
         quality=args.quality, out_dir=out, cap=(args.cap or None), log=print,

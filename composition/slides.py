@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from generation.slide_deck import H, W, Slide, page_html
@@ -44,20 +45,29 @@ def _ffmpeg() -> str:
     return shutil.which("ffmpeg") or "ffmpeg"
 
 
+def render_html(document: str, out_png: str | Path, *, label: str = "page", timeout: int = 60) -> Path:
+    """Rasterise one renderer-owned HTML document to a PNG via headless Chrome."""
+    out_png = Path(out_png).resolve()
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    html = out_png.with_suffix(".html")
+    html.write_text(document, encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="lattice-chrome-") as profile:
+        cmd = [chrome_path(), "--headless=new", "--disable-gpu", "--hide-scrollbars",
+               "--no-first-run", "--no-default-browser-check", f"--user-data-dir={profile}",
+               f"--window-size={W},{H}", f"--screenshot={out_png}", html.resolve().as_uri()]
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    if not out_png.exists():
+        detail = (result.stderr or result.stdout).decode("utf-8", "replace").strip()
+        raise SlideRenderError(f"chrome produced no screenshot for {label}: {detail[:300]}")
+    return out_png
+
+
 def render_slide(slide: Slide, out_png: str | Path, *, footer: str = "", focus: int = -1,
                  timeout: int = 60) -> Path:
     """Rasterise ONE slide to a PNG via headless Chrome. Deterministic: same input -> same pixels.
     `focus` lights up the element the narrator is speaking about and dims the rest."""
-    out_png = Path(out_png)
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    html = out_png.with_suffix(".html")
-    html.write_text(page_html(slide, footer=footer, focus=focus), encoding="utf-8")
-    cmd = [chrome_path(), "--headless=new", "--disable-gpu", "--hide-scrollbars",
-           f"--window-size={W},{H}", f"--screenshot={out_png}", html.resolve().as_uri()]
-    subprocess.run(cmd, capture_output=True, timeout=timeout)
-    if not out_png.exists():
-        raise SlideRenderError(f"chrome produced no screenshot for slide {slide.kind!r}")
-    return out_png
+    return render_html(page_html(slide, footer=footer, focus=focus), out_png,
+                       label=f"slide {slide.kind!r}", timeout=timeout)
 
 
 def render_deck(slides: list[Slide], out_dir: str | Path, *, footer: str = "") -> list[Path]:

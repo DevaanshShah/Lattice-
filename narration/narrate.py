@@ -15,7 +15,7 @@ from core.llm import LLMClient, get_client
 from core.schemas.narration import NarrationScript
 from core.schemas.scene_spec import SceneSpec
 from core.textutil import strip_code_fences
-from generation import codegen
+from generation import codegen, guardrails, lattice_scene
 from narration import captions, tts
 from narration import script as narr_script
 from narration.tts import Clip
@@ -33,7 +33,7 @@ class NarratedResult:
     lines: list[str] = field(default_factory=list)
 
 
-def _narration_aware_fixer(spec: SceneSpec, style, client: LLMClient | None):
+def _narration_aware_fixer(spec: SceneSpec, style, client: LLMClient | None, *, structural: bool = False):
     """Visual-issue fixer for the critic loop that PRESERVES the add_sound narration sync.
 
     The default vision-critic fixer rewrites code with the plain codegen prompt, which would drop
@@ -41,7 +41,10 @@ def _narration_aware_fixer(spec: SceneSpec, style, client: LLMClient | None):
     conventions and explicitly tells the model to keep every add_sound call and its timing.
     """
     client = client or get_client()
-    system = load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated")
+    system = (lattice_scene.structural_system_prompt(narrated=True) if structural
+              else load("manim-conventions") + "\n\n---\n\n" + load("codegen-narrated"))
+    system += codegen._pattern_prompt(spec)
+    system += codegen._continuity_prompt(spec)
     style_block = ("\n\n" + style.as_prompt()) if style else ""
     intent = f"\n\nScene spec (keep the intent):\n{spec.model_dump_json(indent=2)}" if spec else ""
 
@@ -62,6 +65,38 @@ def _narration_aware_fixer(spec: SceneSpec, style, client: LLMClient | None):
         # visual nit beats a silent scene that then drops audio from the whole stitched film.
         if code.count("add_sound") > new.count("add_sound"):
             return code
+        if structural and "class LatticeScene(Scene)" not in new:
+            new = lattice_scene.LATTICE_SCENE_SRC + "\n\n" + new
+        if guardrails.check(new, structural=structural) or codegen.continuity_issues(new, spec):
+            return code
+        return new
+
+    return fix
+
+
+def _narration_compile_fixer(spec: SceneSpec, style, client: LLMClient | None, *, structural: bool = False):
+    """Repair a compile failure without dropping narrated structural/continuity constraints."""
+    client = client or get_client()
+    system = (lattice_scene.structural_system_prompt(narrated=True) if structural
+              else load("manim-conventions") + "\n\n---\n\n" + load("compile-repair"))
+    system += codegen._pattern_prompt(spec)
+    system += codegen._continuity_prompt(spec)
+    style_block = ("\n\n" + style.as_prompt()) if style else ""
+    intent = f"\n\nScene spec (keep its objects, beats, and layout contract):\n{spec.model_dump_json(indent=2)}"
+
+    def fix(code: str, error: str) -> str:
+        user = (f"TRIMMED TRACEBACK:\n{error}\n\nCURRENT CODE:\n{code}{intent}{style_block}\n\n"
+                "Fix the compile error only. Preserve every self.add_sound(...) call and its order/timing. "
+                "Keep the structural base and every continuity anchor exactly as specified. Resend the full "
+                "corrected file (code only).")
+        new = strip_code_fences(client.chat([{"role": "system", "content": system},
+                                              {"role": "user", "content": user}]))
+        if code.count("add_sound") > new.count("add_sound"):
+            return code
+        if structural and "class LatticeScene(Scene)" not in new:
+            new = lattice_scene.LATTICE_SCENE_SRC + "\n\n" + new
+        if guardrails.check(new, structural=structural) or codegen.continuity_issues(new, spec):
+            return code
         return new
 
     return fix
@@ -69,7 +104,8 @@ def _narration_aware_fixer(spec: SceneSpec, style, client: LLMClient | None):
 
 def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
           client: LLMClient | None = None, style=None, lines: list[str] | None = None,
-          context: str | None = None, critic: bool | None = None, log=print) -> NarratedResult:
+          context: str | None = None, critic: bool | None = None, log=print,
+          structural: bool | None = None) -> NarratedResult:
     client = client or get_client()
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
@@ -89,7 +125,9 @@ def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
     say(f"   {len(clips)} clip(s), {sum(c.duration for c in clips):.1f}s total")
 
     say("-> narrated codegen (add_sound sync)")
-    code = codegen.generate_narrated(spec, beats_audio, client=client, style=style)
+    use_structural = settings.structural_layout if structural is None else structural
+    code = codegen.generate_narrated(spec, beats_audio, client=client, style=style,
+                                     structural=use_structural)
 
     use_critic = settings.video_critic_enabled if critic is None else critic
     if use_critic:
@@ -97,7 +135,12 @@ def build(spec: SceneSpec, *, work_dir: str | Path, quality: str = "preview",
         # with a narration-preserving fixer. Returns the best attempt; mp4 is set whenever it compiled.
         say("-> rendering + free layout lint (paid vision off by default for video; audio mounted in)")
         cr = vision_critic.run(code, wd, spec, quality=quality, client=client,
-                               issue_regen_fn=_narration_aware_fixer(spec, style, client),
+                               compile_regen_fn=_narration_compile_fixer(
+                                   spec, style, client, structural=use_structural
+                               ),
+                               issue_regen_fn=_narration_aware_fixer(
+                                   spec, style, client, structural=use_structural
+                               ),
                                vision_confirm=settings.video_vision_confirm, log=say)
         compiled, code_out, mp4 = cr.compiled, cr.code, cr.mp4
     else:

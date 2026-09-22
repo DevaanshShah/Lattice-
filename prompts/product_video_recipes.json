@@ -1,28 +1,43 @@
 {
   "architecture_explainer": {
+    "visual_pattern": "architecture_map",
+    "allowed_patterns": ["architecture", "workflow", "transformation", "feedback_loop"],
+    "required_roles": ["source", "operation", "destination"],
     "keywords": ["architecture", "connects", "integrat", "system", "pipeline", "platform",
                  "data flow", "infrastructure", "sources"],
     "outline_guidance": "This is an ARCHITECTURE EXPLAINER: structure the scenes as (1) the separate/fragmented systems or data sources involved, (2) how they connect into one flow, (3) the unified system or outcome that results, (4) optionally, one concrete example of it working. Favor concrete named systems/entities over abstract concepts.",
     "scene_guidance": "This scene is part of an architecture explainer. Prefer a diagram of connected systems/entities (boxes/nodes with labeled arrows showing data or control flow) over an abstract illustration."
   },
   "workflow_explainer": {
+    "visual_pattern": "workflow_flow",
+    "allowed_patterns": ["workflow", "transformation", "decision", "timeline", "contour"],
+    "required_roles": ["input", "operation", "output"],
     "keywords": ["workflow", "process", "step by step", "how it works", "procedure", "sequence"],
     "outline_guidance": "This is a WORKFLOW EXPLAINER: structure the scenes as an ordered sequence of steps from trigger/start to outcome, one clear step per scene, in the order they actually happen.",
-    "scene_guidance": "This scene is part of a workflow explainer. Prefer a linear step-by-step diagram (ordered boxes connected by arrows in sequence) over a static illustration."
+    "scene_guidance": "This scene is part of a workflow explainer. Prefer a linear step-by-step diagram (ordered boxes connected by arrows in sequence) over a static illustration. For an important mechanism, visibly show input -> operation/decision -> output; never use one labeled box as a substitute for explaining what it does. Keep connected boxes on the same grid row whenever possible so arrows are horizontal, clear, and do not cross labels."
   },
   "funnel_explainer": {
+    "visual_pattern": "funnel",
+    "allowed_patterns": ["workflow", "transformation", "comparison", "metric"],
+    "required_roles": ["input", "output", "metric"],
     "keywords": ["funnel", "conversion", "leads", "mql", "sql", "pipeline stage", "drop-off",
                  "drop off", "stages"],
     "outline_guidance": "This is a FUNNEL EXPLAINER: structure the scenes around a narrowing sequence of stages (e.g. leads -> qualified -> opportunity -> closed), showing where volume drops at each stage and why.",
     "scene_guidance": "This scene is part of a funnel explainer. Prefer a top-to-bottom or left-to-right narrowing stage diagram over an abstract illustration."
   },
   "metric_story": {
+    "visual_pattern": "metric_hero",
+    "allowed_patterns": ["metric", "comparison", "workflow"],
+    "required_roles": ["metric"],
     "keywords": ["metric", "kpi", "revenue", "conversion rate", "percent", "%", "increase",
                  "decrease", "trend"],
     "outline_guidance": "This is a METRIC STORY: structure the scenes around ONE key number/metric — what it was, what changed, why it changed, and what it means — rather than a general concept walkthrough.",
     "scene_guidance": "This scene is part of a metric story. Prefer one large, prominent number or statistic as the visual focus, with at most a couple of short supporting labels, over a busy diagram."
   },
   "before_after": {
+    "visual_pattern": "before_after",
+    "allowed_patterns": ["comparison", "transformation", "workflow"],
+    "required_roles": ["before", "after"],
     "keywords": ["before and after", "before/after", "transform", "migrat", "legacy",
                  "modernize", "old way", "new way"],
     "outline_guidance": "This is a BEFORE/AFTER EXPLAINER: structure the scenes to first show the old/problematic state clearly, then the new/improved state, then (if space) a direct comparison or the transition between them.",
