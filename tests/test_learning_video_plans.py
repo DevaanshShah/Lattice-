@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ from core.schemas.lesson_plan import LessonPlan
 from generation.browser_scene import page_html
 from planner import browser_visual_plan, lesson_plan, product_recipe
 from verification import browser_layout
+from verification.browser_layout import BrowserLayoutError
 from verification.visual_plan_validation import VisualPlanValidationError, validate
 
 
@@ -19,9 +21,10 @@ def _lesson() -> LessonPlan:
             "learning_goal": "Show the harness workflow.",
             "beats": [
                 {"id": "receive_ticket", "spoken_text": "The customer message enters the harness.",
-                 "claim_ids": ["ticket_enters"]},
+                 "claim_ids": ["ticket_enters"], "visual_anchors": ["Agent harness"]},
                 {"id": "check_policy", "spoken_text": "A policy check permits the reset tool.",
-                 "claim_ids": ["policy_checked", "tool_permitted"]},
+                 "claim_ids": ["policy_checked", "tool_permitted"],
+                 "visual_anchors": ["Reset allowed", "Secure reset link"]},
             ],
         }],
     })
@@ -74,6 +77,28 @@ def test_visual_plan_rejects_narration_claim_without_visible_evidence():
 
 
 @pytest.mark.unit
+def test_visual_plan_requires_locked_narration_anchors_to_be_visible():
+    skill = product_recipe.load_recipes()["workflow_explainer"]
+    lesson = _lesson()
+    first = lesson.scenes[0].beats[0].model_copy(update={"visual_anchors": ["Agent harness"]})
+    passing = lesson.model_copy(update={
+        "scenes": [lesson.scenes[0].model_copy(update={
+            "beats": [first, lesson.scenes[0].beats[1]],
+        })],
+    })
+    validate(passing, _visual(), skill)
+
+    missing = first.model_copy(update={"visual_anchors": ["1000 items → ≤10 checks"]})
+    failing = lesson.model_copy(update={
+        "scenes": [lesson.scenes[0].model_copy(update={
+            "beats": [missing, lesson.scenes[0].beats[1]],
+        })],
+    })
+    with pytest.raises(VisualPlanValidationError, match="1000 items"):
+        validate(failing, _visual(), skill)
+
+
+@pytest.mark.unit
 def test_visual_plan_rejects_skill_pattern_drift():
     skill = product_recipe.load_recipes()["workflow_explainer"]
     with pytest.raises(VisualPlanValidationError, match="disallowed pattern"):
@@ -97,6 +122,7 @@ def test_lesson_and_visual_planners_send_the_locked_contract_to_the_llm():
     lesson_client = LessonClient()
     lesson = lesson_plan.generate("Agent harness", skill, client=lesson_client)
     assert "Required visual roles: input, operation, output" in lesson_client.messages[-1]["content"]
+    assert "visual_anchors" in lesson_client.messages[0]["content"]
     assert lesson_client.kwargs == {"max_tokens": 4096, "attempts": 1, "timeout": 60.0}
 
     visual_data = _visual().scenes[0].model_dump_json()
@@ -116,6 +142,30 @@ def test_lesson_and_visual_planners_send_the_locked_contract_to_the_llm():
     assert "Allowed patterns: workflow, transformation, decision, timeline" in visual_client.messages[-1]["content"]
     assert visual_client.kwargs == {"max_tokens": 4096, "attempts": 1, "timeout": 60.0}
     assert plan.skill_id == skill.id
+
+
+@pytest.mark.unit
+def test_lesson_planner_repairs_missing_visual_anchors():
+    skill = product_recipe.load_recipes()["workflow_explainer"]
+    valid = _lesson().model_dump()
+    invalid = json.loads(json.dumps(valid))
+    for scene in invalid["scenes"]:
+        for beat in scene["beats"]:
+            beat.pop("visual_anchors", None)
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        def chat(self, messages, **kwargs):
+            self.calls.append(messages)
+            return json.dumps(invalid if len(self.calls) == 1 else valid)
+
+    client = Client()
+    result = lesson_plan.generate("Agent harness", skill, client=client)
+    assert len(client.calls) == 2
+    assert "visual_anchors required" in client.calls[1][-1]["content"]
+    assert result.scenes[0].beats[0].visual_anchors == ["Agent harness"]
 
 
 def _two_scene_lesson() -> LessonPlan:
@@ -216,6 +266,37 @@ def test_visual_planner_retries_only_the_invalid_scene():
 
 
 @pytest.mark.unit
+def test_visual_planner_repairs_missing_narration_anchor():
+    lesson = _lesson()
+    locked = lesson.scenes[0].beats[0].model_copy(update={"visual_anchors": ["1000 checks"]})
+    lesson = lesson.model_copy(update={
+        "scenes": [lesson.scenes[0].model_copy(update={
+            "beats": [locked, lesson.scenes[0].beats[1]],
+        })],
+    })
+    skill = product_recipe.load_recipes()["workflow_explainer"]
+    first = _visual().scenes[0]
+    fixed_objects = [obj.model_copy(update={"label": "1000 checks"}) if obj.id == "harness" else obj
+                     for obj in first.objects]
+    replies = [first.model_dump_json(),
+               first.model_copy(update={"objects": fixed_objects}).model_dump_json()]
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        def chat(self, messages, **kwargs):
+            self.calls.append(messages)
+            return replies[len(self.calls) - 1]
+
+    client = Client()
+    plan = browser_visual_plan.generate(lesson, skill, client=client)
+    assert len(client.calls) == 2
+    assert "Every visual_anchor" in client.calls[1][-1]["content"]
+    assert next(obj.label for obj in plan.scenes[0].objects if obj.id == "harness") == "1000 checks"
+
+
+@pytest.mark.unit
 def test_repeated_adjacent_pattern_requires_carryover():
     lesson = _two_scene_lesson()
     skill = product_recipe.load_recipes()["workflow_explainer"]
@@ -294,6 +375,8 @@ def test_browser_scene_uses_dense_layout_for_large_workflows():
 
     comparison = dense.model_copy(update={"pattern": "comparison", "objects": dense.objects[:6]})
     assert 'class="frame comparison dense"' in page_html(comparison, title="Comparison")
+    assert 'class="frame comparison dense compact"' in page_html(
+        comparison, title="Comparison", layout_mode="compact")
 
 
 @pytest.mark.unit
@@ -309,6 +392,15 @@ def test_browser_layout_rejects_clipping_title_overlap_and_hidden_label_collisio
     assert "node 'offscreen' is clipped" in issues
     assert "edge label 'routes' overlaps node 'top'" in issues
     assert "edge label 'clipped' is clipped" in issues
+
+
+@pytest.mark.unit
+def test_browser_layout_error_preserves_machine_readable_evidence():
+    geometry = {"viewport": [1280, 720], "nodes": [], "labels": []}
+    error = BrowserLayoutError("scene one", ["node 'x' is clipped"], geometry)
+    assert error.issues == ["node 'x' is clipped"]
+    assert error.geometry is geometry
+    assert "scene one failed browser layout QA" in str(error)
 
 
 @pytest.mark.unit
@@ -365,6 +457,53 @@ def test_browser_video_uses_measured_beat_audio_and_final_scene_hold(monkeypatch
     assert calls == [2.4, 3.0]
     assert result.mp4.exists()
     assert len(result.frames) == 2
+    report = json.loads((tmp_path / "run_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "complete"
+    assert any(event["stage"] == "stitch" and event["status"] == "passed"
+               for event in report["events"])
+
+
+@pytest.mark.unit
+def test_browser_video_records_layout_failure_and_retries_compact(monkeypatch, tmp_path):
+    from composition import browser_video
+    from narration.tts import Clip
+
+    skill = product_recipe.load_recipes()["workflow_explainer"]
+    layouts = []
+
+    def fake_synthesize(text, *, out_dir, engine):
+        path = tmp_path / "audio.mp3"
+        path.write_bytes(b"audio")
+        return Clip(text, path, 1.0)
+
+    def fake_render(scene, out_png, *, title, active_beat_id, layout_mode="auto"):
+        layouts.append(layout_mode)
+        if len(layouts) == 1:
+            raise BrowserLayoutError("scene", ["node 'ticket' is clipped"], {"viewport": [1280, 720]})
+        path = Path(out_png)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"png")
+        return path
+
+    def fake_media(_inputs, out_path, **kwargs):
+        path = Path(out_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"mp4")
+        return path
+
+    monkeypatch.setattr(browser_video, "synthesize", fake_synthesize)
+    monkeypatch.setattr(browser_video, "render_scene", fake_render)
+    monkeypatch.setattr(browser_video, "_norm_clip", fake_media)
+    monkeypatch.setattr(browser_video, "_concat_clips", fake_media)
+
+    browser_video.build(_lesson(), _visual(), skill, out_dir=tmp_path,
+                        transition=0, beat_transition=0)
+    assert layouts[:2] == ["auto", "compact"]
+    report = json.loads((tmp_path / "run_report.json").read_text(encoding="utf-8"))
+    retries = [event for event in report["events"] if event["status"] == "retry"]
+    assert retries[0]["category"] == "layout"
+    assert retries[0]["issues"] == ["node 'ticket' is clipped"]
+    assert retries[0]["action"] == "retry_compact_layout"
 
 
 @pytest.mark.unit
@@ -391,3 +530,21 @@ def test_browser_generation_locks_plans_before_rendering(monkeypatch, tmp_path):
     assert result.render.mp4 == final
     assert (tmp_path / "lesson_plan.json").exists()
     assert (tmp_path / "browser_visual_plan.json").exists()
+    assert json.loads((tmp_path / "run_report.json").read_text(encoding="utf-8"))["status"] == "complete"
+
+
+@pytest.mark.unit
+def test_browser_generation_persists_failure_stage(monkeypatch, tmp_path):
+    from composition import browser_video
+
+    skill = product_recipe.load_recipes()["workflow_explainer"]
+    monkeypatch.setattr(browser_video.product_recipe, "pick_recipe", lambda topic, recipe: skill)
+    monkeypatch.setattr(browser_video.lesson_plan, "generate",
+                        lambda topic, selected, client: (_ for _ in ()).throw(RuntimeError("provider down")))
+
+    with pytest.raises(RuntimeError, match="provider down"):
+        browser_video.generate("Agent harness", out_dir=tmp_path, client=object())
+    report = json.loads((tmp_path / "run_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["events"][-1]["stage"] == "lesson_plan"
+    assert report["events"][-1]["category"] == "model_or_plan"

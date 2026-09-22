@@ -6,7 +6,11 @@ from playwright.sync_api import sync_playwright
 
 
 class BrowserLayoutError(RuntimeError):
-    pass
+    def __init__(self, label: str, issues: list[str], geometry: dict) -> None:
+        self.label = label
+        self.issues = list(issues)
+        self.geometry = geometry
+        super().__init__(f"{label} failed browser layout QA: {'; '.join(issues)}")
 
 
 def _area(rect: list[float]) -> float:
@@ -42,7 +46,7 @@ def _issues(data: dict) -> list[str]:
     return issues
 
 
-def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> None:
+def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
     script = """() => {
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
 return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden)')].map(e=>({id:e.dataset.objectId,rect:rect(e)})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)}))};
@@ -56,4 +60,5 @@ return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.ti
         browser.close()
     issues = _issues(data)
     if issues:
-        raise BrowserLayoutError(f"{label} failed browser layout QA: {'; '.join(issues)}")
+        raise BrowserLayoutError(label, issues, data)
+    return data

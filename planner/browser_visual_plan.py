@@ -80,7 +80,9 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
                                  "'gate' with role 'decision'. For contour, never create axis or contour-line "
                                  "objects because the renderer draws them; use at most one object from each "
                                  "role group: input/source/context, operation/tool, metric/destination/result, "
-                                 "output/audit. Return only the corrected scene JSON."
+                                 "output/audit. Every visual_anchor named in the locked lesson beat must appear "
+                                 "verbatim in a visible object or relationship label by that beat. Return only "
+                                 "the corrected scene JSON."
                              )}]
         else:
             raise BrowserVisualPlanError(

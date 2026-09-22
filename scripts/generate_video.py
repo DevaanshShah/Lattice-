@@ -82,12 +82,13 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--max-scenes and --cap are not supported by browser_v2 yet")
         result = browser_video.generate(
             args.topic, recipe=args.recipe or "auto", approve_fn=_make_lesson_approver(args.yes),
-            out_dir=out, transition=0.45,
+            out_dir=out, transition=0.45, log=print,
         )
         print("---")
         print(f"[OK] final video: {result.render.mp4}")
         print(f"     lesson:      {out / 'lesson_plan.json'}")
         print(f"     visual plan: {out / 'browser_visual_plan.json'}")
+        print(f"     run report:  {out / 'run_report.json'}")
         return 0
 
     proj = video.generate_video(

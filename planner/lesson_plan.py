@@ -31,7 +31,12 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             data = extract_json(raw)
             data["topic"] = topic
             data["skill_id"] = skill.id
-            return LessonPlan.model_validate(data)
+            plan = LessonPlan.model_validate(data)
+            missing_anchors = [beat.id for scene in plan.scenes for beat in scene.beats
+                               if not beat.visual_anchors]
+            if missing_anchors:
+                raise ValueError(f"visual_anchors required for beat(s): {missing_anchors}")
+            return plan
         except (ValueError, ValidationError) as exc:
             last = exc
             messages += [{"role": "assistant", "content": raw},

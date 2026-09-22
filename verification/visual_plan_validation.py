@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 
 from core.schemas.browser_visual_plan import BrowserScene, BrowserVisualPlan, VisualObject
 from core.schemas.lesson_plan import LessonPlan, LessonScene
@@ -9,6 +10,27 @@ from planner.product_recipe import Recipe
 
 class VisualPlanValidationError(ValueError):
     pass
+
+
+def _visible_labels_by_beat(scene: BrowserScene) -> dict[str, list[str]]:
+    objects = {obj.id: obj for obj in scene.objects}
+    visible = set(scene.opening_visible_ids)
+    result: dict[str, list[str]] = {}
+    for beat in scene.beats:
+        for action in beat.actions:
+            if action.kind == "deactivate":
+                visible.difference_update(action.target_ids)
+            elif action.kind != "hold":
+                visible.update(action.target_ids)
+        labels = [objects[obj_id].label for obj_id in visible if obj_id in objects]
+        labels.extend(relation.label for relation in scene.relationships
+                      if relation.label and relation.source_id in visible and relation.target_id in visible)
+        result[beat.narration_beat_id] = labels
+    return result
+
+
+def _normalise_label(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().casefold()
 
 
 def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill: Recipe, *,
@@ -48,6 +70,7 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
     if set(actual_beats) != set(expected_beats):
         raise VisualPlanValidationError(
             f"scene {lesson_scene.id} must map exactly to its narration beats")
+    visible_labels = _visible_labels_by_beat(visual_scene)
     for beat_id, lesson_beat in expected_beats.items():
         covered = {claim for evidence in actual_beats[beat_id].evidence for claim in evidence.claim_ids}
         missing = sorted(set(lesson_beat.claim_ids) - covered)
@@ -55,6 +78,12 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
         if missing or unknown:
             raise VisualPlanValidationError(
                 f"beat {beat_id} has invalid visual claim coverage; missing={missing}, unknown={unknown}")
+        labels = [_normalise_label(label) for label in visible_labels[beat_id]]
+        missing_anchors = [anchor for anchor in lesson_beat.visual_anchors
+                           if not any(_normalise_label(anchor) in label for label in labels)]
+        if missing_anchors:
+            raise VisualPlanValidationError(
+                f"beat {beat_id} is missing visible narration anchor(s): {missing_anchors}")
     missing_prior = sorted(set(visual_scene.carryover_ids) - previous_closing)
     if missing_prior:
         raise VisualPlanValidationError(

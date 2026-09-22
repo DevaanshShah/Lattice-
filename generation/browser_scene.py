@@ -25,6 +25,7 @@ _CSS = """
 .contour .nodes{display:block;min-height:440px;border-left:2px solid #74798c;border-bottom:2px solid #74798c;background:repeating-radial-gradient(ellipse at 58% 53%,transparent 0 42px,#59c5d255 44px 47px,transparent 49px 82px);border-radius:0 0 0 4px}.contour .nodes:before{content:"parameter θ₂";position:absolute;left:-44px;top:8px;color:var(--muted);font-size:14px;transform:rotate(-90deg)}.contour .nodes:after{content:"parameter θ₁";position:absolute;right:8px;bottom:-28px;color:var(--muted);font-size:14px}.contour-path{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}.contour-path polyline{fill:none;stroke:var(--amber);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:9 8}.contour-path circle{fill:var(--amber);stroke:var(--bg);stroke-width:3}.contour .node{position:absolute;min-width:120px;max-width:190px;min-height:62px;padding:12px;border-radius:999px}.contour .role-input,.contour .role-source,.contour .role-context{left:5%;top:12%}.contour .role-operation,.contour .role-tool{right:4%;top:14%}.contour .role-metric,.contour .role-destination,.contour .role-result{left:50%;top:43%;transform:translate(-50%,-50%)}.contour .role-output,.contour .role-audit{right:7%;bottom:8%}.contour .node.is-hidden{transform:translate(-50%,-50%) scale(.92)}.contour .node.is-active{box-shadow:0 0 44px #32b9c566}.contour .role-metric.is-active,.contour .role-destination.is-active,.contour .role-result.is-active{transform:translate(-50%,-50%) scale(1.035)}.contour .role-input.is-hidden,.contour .role-source.is-hidden,.contour .role-context.is-hidden,.contour .role-operation.is-hidden,.contour .role-tool.is-hidden,.contour .role-output.is-hidden,.contour .role-audit.is-hidden{transform:scale(.92)}
 .timeline .nodes{align-items:flex-start;padding-top:170px}.timeline .nodes:before{content:"";position:absolute;left:8%;right:8%;top:164px;height:3px;background:linear-gradient(90deg,var(--blue),var(--purple),var(--green));border-radius:3px}.timeline .node{min-height:90px;border-radius:12px}.timeline .node:before{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:var(--cyan);box-shadow:0 0 20px #59c5d288;transform:translateY(-64px)}
 .metric .nodes{flex-wrap:wrap}.metric .role-metric{flex-basis:100%}.feedback_loop .nodes{display:grid;grid-template-columns:repeat(3,1fr);gap:54px}.feedback_loop .node:nth-child(2){transform:translateY(-10px)}.foot{position:absolute;right:28px;bottom:18px;color:var(--amber);font-size:12px;opacity:.7}
+.frame.compact{padding:28px 42px 28px}.compact .title{font-size:34px;margin-bottom:12px}.workflow.compact .nodes,.architecture.compact .nodes,.decision.compact .nodes,.comparison.compact .nodes,.transformation.compact .nodes,.timeline.compact .nodes,.feedback_loop.compact .nodes,.metric.compact .nodes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:minmax(82px,auto);gap:24px 38px;align-content:center;padding-top:0}.compact .node{min-width:0;width:100%;min-height:82px;padding:10px;font-size:16px;transform:none}.compact .kind-metric{font-size:27px}.compact .kind-gate{min-height:112px;padding:28px}.compact .edge-label{font-size:11px;stroke-width:6px}
 """
 
 
@@ -78,10 +79,12 @@ def _pattern_overlay(scene: BrowserScene, active_beat_id: str | None) -> str:
 
 
 def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = None,
-              footer: str = "Lattice") -> str:
+              footer: str = "Lattice", layout_mode: str = "auto") -> str:
     relations = _relations_json(scene)
     dense = len(scene.objects) > 6 or (scene.pattern == "comparison" and len(scene.objects) > 4)
     frame_class = f"frame {scene.pattern}" + (" dense" if dense else "")
+    if layout_mode == "compact":
+        frame_class += " compact"
     script = """
 const stage=document.querySelector('.diagram'),svg=document.querySelector('.connections');
 const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');marker.id='arrow';marker.setAttribute('viewBox','0 0 10 10');marker.setAttribute('refX','8');marker.setAttribute('refY','5');marker.setAttribute('markerWidth','6');marker.setAttribute('markerHeight','6');marker.setAttribute('orient','auto-start-reverse');const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d','M 0 0 L 10 5 L 0 10 z');shape.setAttribute('fill','#6f7384');marker.append(shape);svg.append(marker);const box=stage.getBoundingClientRect();const point=(a,b)=>{const x=a.left+a.width/2,y=a.top+a.height/2,dx=b.left+b.width/2-x,dy=b.top+b.height/2-y,t=1/Math.max(Math.abs(dx)/(a.width/2),Math.abs(dy)/(a.height/2),1);return [x-box.left+dx*t,y-box.top+dy*t]};for(const r of JSON.parse(document.getElementById('relations').textContent)){const a=document.querySelector(`[data-object-id="${CSS.escape(r.source_id)}"]`),b=document.querySelector(`[data-object-id="${CSS.escape(r.target_id)}"]`);if(!a||!b||a.classList.contains('is-hidden')||b.classList.contains('is-hidden'))continue;const [x1,y1]=point(a.getBoundingClientRect(),b.getBoundingClientRect()),[x2,y2]=point(b.getBoundingClientRect(),a.getBoundingClientRect());const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',x1);line.setAttribute('y1',y1);line.setAttribute('x2',x2);line.setAttribute('y2',y2);line.setAttribute('marker-end','url(#arrow)');line.setAttribute('class',`edge ${r.kind}`);svg.append(line);if(r.label){const label=document.createElementNS('http://www.w3.org/2000/svg','text'),horizontal=Math.abs(y2-y1)<36;label.setAttribute('x',(x1+x2)/2);label.setAttribute('y',(y1+y2)/2-(horizontal?62:10));label.setAttribute('text-anchor','middle');label.setAttribute('class','edge-label');label.textContent=r.label;svg.append(label)}}
@@ -96,8 +99,13 @@ const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');mar
 
 
 def render_scene(scene: BrowserScene, out_png: str | Path, *, title: str,
-                 active_beat_id: str | None = None, footer: str = "Lattice") -> Path:
-    document = page_html(scene, title=title, active_beat_id=active_beat_id, footer=footer)
+                 active_beat_id: str | None = None, footer: str = "Lattice",
+                 layout_mode: str = "auto") -> Path:
+    document = page_html(scene, title=title, active_beat_id=active_beat_id, footer=footer,
+                         layout_mode=layout_mode)
+    out_png = Path(out_png)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    out_png.with_name(f"{out_png.stem}.{layout_mode}.html").write_text(document, encoding="utf-8")
     audit_html(document, label=f"browser scene {scene.lesson_scene_id!r}")
     return render_html(document, out_png,
                        label=f"browser scene {scene.lesson_scene_id!r}")

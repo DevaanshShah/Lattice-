@@ -8,6 +8,7 @@ class LessonBeat(BaseModel):
     id: str = Field(..., min_length=1)
     spoken_text: str = Field(..., min_length=1)
     claim_ids: list[str] = Field(..., min_length=1)
+    visual_anchors: list[str] = Field(default_factory=list)
 
 
 class LessonScene(BaseModel):

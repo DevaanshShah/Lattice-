@@ -10,3 +10,7 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Lattice video diagnostics
+
+For a generated-video crash, layout failure, narration/visual mismatch, interrupted run, or request to make the generator learn from a failure, read and follow `.agents/skills/lattice-video-diagnostics/SKILL.md` before changing code. Start from the output folder's `run_report.json` and saved plans; do not hand-edit one generated video as the final system fix.
