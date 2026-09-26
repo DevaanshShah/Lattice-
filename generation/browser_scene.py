@@ -32,6 +32,8 @@ _CSS = """
 
 _SEMANTIC_CSS = """
 .semantic-stage{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px}
+.frame:has(.semantic-stage) .edge-label{font-size:18px}
+.semantic-linked{gap:64px}
 .semantic-object{max-width:100%;text-align:center}.semantic-array{width:100%}
 .semantic-caption{font:600 26px/1.2 Segoe UI,system-ui,sans-serif;margin-bottom:16px;color:var(--ink)}
 .semantic-cells{display:flex;justify-content:center;gap:10px;max-width:100%}
@@ -180,12 +182,6 @@ def _pattern_overlay(scene: BrowserScene, active_beat_id: str | None) -> str:
 def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = None,
               footer: str = "Lattice", layout_mode: str = "auto",
               state: VisualState | None = None) -> str:
-    if state is not None:
-        return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}'
-                f'{_SEMANTIC_CSS}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
-                f'<h1 class="title">{escape(title)}</h1><section class="diagram">'
-                f'<div class="semantic-stage">{_semantic_html(scene, state)}</div></section>'
-                f'<div class="foot">{escape(footer)}</div></main></body></html>')
     relations = _relations_json(scene)
     dense = len(scene.objects) > 6 or (scene.pattern == "comparison" and len(scene.objects) > 4)
     frame_class = f"frame {scene.pattern}" + (" dense" if dense else "")
@@ -195,6 +191,19 @@ def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = N
 const stage=document.querySelector('.diagram'),svg=document.querySelector('.connections');
 const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');marker.id='arrow';marker.setAttribute('viewBox','0 0 10 10');marker.setAttribute('refX','8');marker.setAttribute('refY','5');marker.setAttribute('markerWidth','6');marker.setAttribute('markerHeight','6');marker.setAttribute('orient','auto-start-reverse');const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d','M 0 0 L 10 5 L 0 10 z');shape.setAttribute('fill','#6f7384');marker.append(shape);svg.append(marker);const box=stage.getBoundingClientRect();const point=(a,b)=>{const x=a.left+a.width/2,y=a.top+a.height/2,dx=b.left+b.width/2-x,dy=b.top+b.height/2-y,t=1/Math.max(Math.abs(dx)/(a.width/2),Math.abs(dy)/(a.height/2),1);return [x-box.left+dx*t,y-box.top+dy*t]};for(const r of JSON.parse(document.getElementById('relations').textContent)){const a=document.querySelector(`[data-object-id="${CSS.escape(r.source_id)}"]`),b=document.querySelector(`[data-object-id="${CSS.escape(r.target_id)}"]`);if(!a||!b||a.classList.contains('is-hidden')||b.classList.contains('is-hidden'))continue;const [x1,y1]=point(a.getBoundingClientRect(),b.getBoundingClientRect()),[x2,y2]=point(b.getBoundingClientRect(),a.getBoundingClientRect());const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',x1);line.setAttribute('y1',y1);line.setAttribute('x2',x2);line.setAttribute('y2',y2);line.setAttribute('marker-end','url(#arrow)');line.setAttribute('class',`edge ${r.kind}`);svg.append(line);if(r.label){const label=document.createElementNS('http://www.w3.org/2000/svg','text'),horizontal=Math.abs(y2-y1)<36;label.setAttribute('x',(x1+x2)/2);label.setAttribute('y',(y1+y2)/2-(horizontal?62:10));label.setAttribute('text-anchor','middle');label.setAttribute('class','edge-label');label.textContent=r.label;svg.append(label)}}
 """
+    if state is not None:
+        script = script.replace("horizontal=Math.abs(y2-y1)<36",
+                                "horizontal=Math.abs(x2-x1)>Math.abs(y2-y1)")
+        script = script.replace("(horizontal?62:10)", "(horizontal?62:-5)")
+        return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}'
+                f'{_SEMANTIC_CSS}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
+                f'<h1 class="title">{escape(title)}</h1><section class="diagram">'
+                f'<svg class="connections" aria-hidden="true"></svg>'
+                f'<div class="semantic-stage{(" semantic-linked" if scene.relationships else "")}">'
+                f'{_semantic_html(scene, state)}</div></section>'
+                f'<div class="foot">{escape(footer)}</div></main>'
+                f'<script id="relations" type="application/json">{relations}</script>'
+                f'<script>{script}</script></body></html>')
     return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}</style></head><body>'
             f'<main class="{escape(frame_class)}"><h1 class="title">{escape(title)}</h1>'
             f'<section class="diagram"><svg class="connections" aria-hidden="true"></svg>'

@@ -134,12 +134,74 @@ def test_semantic_browser_frame_passes_real_layout_audit(tmp_path):
     assert frame.exists()
 
 
+def _related_scene():
+    return BrowserScene.model_validate({
+        "lesson_scene_id": "tool", "pattern": "workflow",
+        "objects": [
+            {"id": "request", "kind": "message", "role": "input", "label": "Request"},
+            {"id": "tool", "kind": "tool", "role": "output", "label": "Search tool"},
+        ],
+        "relationships": [{"source_id": "request", "target_id": "tool",
+                           "kind": "flows_to", "label": "Validated arguments"}],
+        "beats": [{"narration_beat_id": "b", "actions": [
+            {"kind": "appear", "target_ids": ["request", "tool"]}],
+            "evidence": [{"claim_ids": ["c"], "object_ids": ["request", "tool"],
+                          "kind": "relationship"}]}],
+        "opening_visible_ids": [], "closing_visible_ids": ["request", "tool"],
+    })
+
+
+@pytest.mark.unit
+def test_semantic_relationships_use_existing_boundary_anchored_renderer():
+    scene = _related_scene()
+    html = page_html(scene, title="Tool call", state=closing_state(scene))
+    assert '<svg class="connections"' in html
+    assert '"label":"Validated arguments"' in html
+    assert "getBoundingClientRect()" in html
+    assert "marker-end" in html
+
+
 @pytest.mark.integration
-def test_saved_v2_plan_renders_action_frames_and_video(monkeypatch, tmp_path):
+def test_semantic_relationships_render_only_visible_endpoints(tmp_path):
+    from composition.slides import chrome_path, stitch_slides
+    from playwright.sync_api import sync_playwright
+
+    scene = _related_scene()
+    state = closing_state(scene)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 720})
+        for visible, expected in [({"request", "tool"}, 1), ({"request"}, 0), (set(), 0)]:
+            state.visible = visible
+            page.set_content(page_html(scene, title="Tool call", state=state))
+            assert page.locator(".connections line").count() == expected
+            assert page.locator(".edge-label").count() == expected
+            if expected:
+                assert page.locator(".edge-label").text_content() == "Validated arguments"
+                source = page.locator('[data-object-id="request"]').bounding_box()
+                target = page.locator('[data-object-id="tool"]').bounding_box()
+                label = page.locator(".edge-label").bounding_box()
+                assert source["y"] + source["height"] <= label["y"]
+                assert label["y"] + label["height"] <= target["y"]
+        browser.close()
+    state.visible = {"request", "tool"}
+    frame = render_scene(scene, tmp_path / "relationship.png", title="Tool call", state=state)
+    assert stitch_slides([frame], tmp_path / "relationship.mp4", seconds=1).exists()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("timed", [False, True])
+def test_saved_v2_plan_renders_action_frames_and_video(monkeypatch, tmp_path, timed):
     from composition import browser_video
     from narration.tts import Clip
 
     lesson, plan = _binary_search()
+    if timed:
+        for visual_beat in plan.scenes[0].beats:
+            count = len(visual_beat.actions)
+            for index, action in enumerate(visual_beat.actions):
+                action.start_fraction = .1 + .8 * index / count
+                action.end_fraction = .1 + .8 * (index + 1) / count
     audio = tmp_path / "speech.wav"
     subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i",
                     "anullsrc=channel_layout=stereo:sample_rate=44100",
@@ -149,7 +211,15 @@ def test_saved_v2_plan_renders_action_frames_and_video(monkeypatch, tmp_path):
     result = browser_video.build(lesson, plan, load_recipes()["workflow_explainer"],
                                  out_dir=tmp_path / "render", beat_transition=0)
     assert result.mp4.exists()
-    assert len(result.frames) == 8
+    assert len(result.frames) == (10 if timed else 8)
+    timing = [event for event in json.loads((tmp_path / "render" / "run_report.json").read_text())["events"]
+              if event["stage"] == "timing"]
+    assert len(timing) == 2
+    assert timing[0]["evidence"]["windows"][0][0] == pytest.approx(.6 if timed else 0)
+    duration = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                               "-of", "default=noprint_wrappers=1:nokey=1", str(result.mp4)],
+                              check=True, capture_output=True, text=True)
+    assert float(duration.stdout) == pytest.approx(12, abs=.5)
 
 
 @pytest.mark.unit
@@ -316,15 +386,24 @@ def test_manim_compiler_uses_the_same_actions_without_model_written_code():
     assert 'elif kind == "move"' in source
     assert 'elif kind == "set_state"' in source
     assert 'paired_increment = next_action' in source
+    assert "beat_start = self.renderer.time" in source
+    assert "beat_start = self.time" not in source
 
 
 @pytest.mark.integration
-def test_v2_manim_scene_renders_with_the_existing_sandbox(monkeypatch, tmp_path):
+@pytest.mark.parametrize("timed", [False, True])
+def test_v2_manim_scene_renders_with_the_existing_sandbox(monkeypatch, tmp_path, timed):
     from composition import browser_video
     from narration.tts import Clip
 
     lesson, plan = _binary_search()
     plan.scenes[0].render_mode = "manim"
+    if timed:
+        for visual_beat in plan.scenes[0].beats:
+            count = len(visual_beat.actions)
+            for index, action in enumerate(visual_beat.actions):
+                action.start_fraction = .1 + .8 * index / count
+                action.end_fraction = .1 + .8 * (index + 1) / count
     audio = tmp_path / "speech.wav"
     subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i",
                     "anullsrc=channel_layout=stereo:sample_rate=44100",

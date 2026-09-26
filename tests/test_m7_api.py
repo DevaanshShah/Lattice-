@@ -194,11 +194,22 @@ def test_build_job_renders_all_scenes_with_per_scene_status(client):
 
 
 @pytest.mark.unit
-def test_browser_v2_web_project_plans_builds_and_previews_through_existing_api(client):
+def test_browser_v2_web_project_plans_builds_and_previews_through_existing_api(client, monkeypatch):
+    from composition import browser_video
+
+    original_plan = browser_video.plan
+    requested_versions = []
+
+    def capture_plan(*args, **kwargs):
+        requested_versions.append(kwargs.get("schema_version"))
+        return original_plan(*args, **kwargs)
+
+    monkeypatch.setattr(browser_video, "plan", capture_plan)
     planned = client.post("/api/projects", json={
         "topic": "TCP", "renderer": "browser_v2", "recipe": "auto", "max_scenes": 2,
     })
     assert planned.status_code == 200
+    assert requested_versions == [2]
     dto = planned.json()
     assert dto["renderer"] == "browser_v2"
     assert [scene["title"] for scene in dto["scenes"]] == ["Connect", "Confirm"]

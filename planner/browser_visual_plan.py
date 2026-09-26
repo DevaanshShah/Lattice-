@@ -62,6 +62,9 @@ def _normalise_v2_carryover(data: dict, previous: BrowserScene | None) -> dict:
 
 def _normalise_v2_visibility(data: dict) -> dict:
     """Reveal evidence objects the model intended to show but only animated invisibly."""
+    if any(action.get("start_fraction") is not None for beat in data.get("beats", [])
+           for action in beat.get("actions", [])):
+        return data
     visible = set(data.get("opening_visible_ids", []))
     declared = {obj["id"] for obj in data.get("objects", [])}
     used_ids = {action.get("id") for beat in data.get("beats", [])
@@ -165,6 +168,11 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
                 + (f"Visual guidance: {skill.scene_guidance}\n" if schema_version == 2 else "")
                 +
                 f"Scene {index + 1} of {len(lesson.scenes)}.\n"
+                + (f"Audience: {lesson.audience or 'not specified'}\n"
+                   f"Prerequisites: {json.dumps(lesson.prerequisites)}\n"
+                   f"Whole lesson arc: {json.dumps([{'id': item.id, 'goal': item.learning_goal, 'example': item.example, 'bridge': item.bridge_to_next} for item in lesson.scenes])}\n"
+                   if schema_version == 2 else "")
+                +
                 f"Locked lesson scene:\n{lesson_scene.model_dump_json(indent=2)}\n\n"
                 f"{pattern_guidance}"
                 + (f"Available local assets: {json.dumps(inventory)}\n"

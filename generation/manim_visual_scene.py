@@ -16,6 +16,8 @@ def compile_scene(scene: BrowserScene, *, title: str, opening: VisualState,
     data["title"] = title
     data["opening_payloads"] = opening.payloads
     data["audio"] = [{"path": path, "duration": duration} for path, duration in audio]
+    data["timelines"] = [beat.timeline(duration) if beat.actions[0].start_fraction is not None else None
+                         for beat, (_, duration) in zip(scene.beats, audio)]
     encoded = json.dumps(data, ensure_ascii=False)
     return LATTICE_SCENE_SRC + f"\nimport json\nPLAN = json.loads({encoded!r})\n" + '''
 
@@ -70,7 +72,8 @@ class GeneratedScene(LatticeScene):
             self.add(visuals[obj_id])
         if array["id"] in visible:
             self.add(*check_marks.values())
-        for beat, audio in zip(PLAN["beats"], PLAN["audio"]):
+        for beat, audio, timeline in zip(PLAN["beats"], PLAN["audio"], PLAN["timelines"]):
+            beat_start = self.renderer.time
             self.add_sound(audio["path"])
             actions = beat["actions"]
             merged = sum(action["kind"] == "compare" and actions[i + 1]["kind"] == "increment"
@@ -83,6 +86,13 @@ class GeneratedScene(LatticeScene):
                 kind, targets, params = action["kind"], action["target_ids"], action["params"]
                 next_action = actions[action_index + 1] if action_index + 1 < len(actions) else None
                 paired_increment = next_action if kind == "compare" and next_action and next_action["kind"] == "increment" else None
+                if timeline is not None:
+                    paired_increment = None
+                    start, end = timeline[action_index]
+                    gap = beat_start + start - self.renderer.time
+                    if gap > 0:
+                        self.wait(gap)
+                    run = end - start
                 if kind == "appear":
                     new = [target for target in targets if target not in visible]
                     if new:
@@ -150,6 +160,12 @@ class GeneratedScene(LatticeScene):
                     self.play(*[Indicate(visuals[target]) for target in targets], run_time=run)
                 elif kind == "hold":
                     self.wait(run)
+                if timeline is not None:
+                    gap = beat_start + end - self.renderer.time
+                    if gap > 0:
+                        self.wait(gap)
                 action_index += 2 if paired_increment else 1
-            self.wait(max(.05, audio["duration"] - steps * run))
+            remaining = audio["duration"] - (self.renderer.time - beat_start)
+            if remaining > 0:
+                self.wait(remaining)
 '''

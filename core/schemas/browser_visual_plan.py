@@ -82,6 +82,16 @@ class VisualAction(BaseModel):
     target_ids: list[str] = Field(..., min_length=1)
     id: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
+    start_fraction: float | None = Field(default=None, ge=0, lt=1, allow_inf_nan=False)
+    end_fraction: float | None = Field(default=None, gt=0, le=1, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _cue_window(self) -> "VisualAction":
+        if (self.start_fraction is None) != (self.end_fraction is None):
+            raise ValueError("cue requires both start_fraction and end_fraction")
+        if self.start_fraction is not None and self.end_fraction <= self.start_fraction:
+            raise ValueError("cue end must follow its start")
+        return self
 
 
 class VisualBeat(BaseModel):
@@ -89,6 +99,28 @@ class VisualBeat(BaseModel):
     narration_beat_id: str
     actions: list[VisualAction] = Field(..., min_length=1)
     evidence: list[VisualEvidence] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _ordered_cues(self) -> "VisualBeat":
+        timed = [action.start_fraction is not None for action in self.actions]
+        if any(timed) and not all(timed):
+            raise ValueError("all actions in a timed beat must have cue windows")
+        if all(timed):
+            for previous, current in zip(self.actions, self.actions[1:]):
+                if current.start_fraction < previous.end_fraction:
+                    raise ValueError("cue windows must be ordered and nonoverlapping")
+        return self
+
+    def timeline(self, audio_duration: float) -> list[tuple[float, float]]:
+        from math import isfinite
+
+        if not isfinite(audio_duration) or audio_duration <= 0:
+            raise ValueError("audio duration must be positive and finite")
+        return [(action.start_fraction * audio_duration, action.end_fraction * audio_duration)
+                if action.start_fraction is not None else
+                (index * audio_duration / len(self.actions),
+                 (index + 1) * audio_duration / len(self.actions))
+                for index, action in enumerate(self.actions)]
 
 
 class BrowserScene(BaseModel):

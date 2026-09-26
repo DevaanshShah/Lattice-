@@ -78,6 +78,9 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                     rel = f"audio/beat_{beat_index:02d}{clip.path.suffix}"
                     shutil.copyfile(clip.path, work / rel)
                     audio_clips.append((rel, clip.duration))
+                    report.event("timing", "passed", scene=scene_id, beat=beat_id,
+                                 evidence={"audio_duration": clip.duration,
+                                           "windows": visual_scene.beats[beat_index].timeline(clip.duration)})
                     report.event(stage, "passed", scene=scene_id, beat=beat_id,
                                  detail=f"{clip.duration:.3f}s")
                 beat_id = None
@@ -106,20 +109,31 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                              detail=f"{audio.duration:.3f}s")
                 if state is not None:
                     action_clips: list[Path] = []
-                    for action_index, action in enumerate(visual_scene.beats[beat_index].actions):
-                        apply_action(state, action)
+                    visual_beat = visual_scene.beats[beat_index]
+                    timeline = visual_beat.timeline(audio.duration)
+                    report.event("timing", "passed", scene=scene_id, beat=beat_id,
+                                 evidence={"audio_duration": audio.duration, "windows": timeline})
+                    events = [(action, (timeline[index + 1][0] if index + 1 < len(timeline)
+                                        else audio.duration) - timeline[index][0])
+                              for index, action in enumerate(visual_beat.actions)]
+                    if timeline[0][0] > 0:
+                        events.insert(0, (None, timeline[0][0]))
+                    for action_index, (action, seconds) in enumerate(events):
+                        if action is not None:
+                            apply_action(state, action)
+                        action_id = action.id if action is not None else "opening_hold"
                         stage = "layout"
                         frame_path = out / "frames" / (
                             f"scene_{scene_index:02d}_{beat_index:02d}_{action_index:02d}.png")
                         report.event(stage, "start", scene=scene_id, beat=beat_id,
-                                     detail=action.id, attempt=1)
+                                     detail=action_id, attempt=1)
                         try:
                             frame = render_scene(visual_scene, frame_path,
                                                  title=lesson_scene.title, state=state)
                             attempt = 1
                         except BrowserLayoutError as exc:
                             report.event(stage, "retry", scene=scene_id, beat=beat_id,
-                                         detail=action.id, attempt=1, category="layout",
+                                         detail=action_id, attempt=1, category="layout",
                                          issues=exc.issues, action="retry_compact_layout",
                                          evidence={"geometry": exc.geometry})
                             frame = render_scene(visual_scene, frame_path,
@@ -127,14 +141,13 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                                                  layout_mode="compact")
                             attempt = 2
                         report.event(stage, "passed", scene=scene_id, beat=beat_id,
-                                     detail=action.id, attempt=attempt)
+                                     detail=action_id, attempt=attempt)
                         frames.append(frame)
                         stage = "clip"
                         segment = out / "beats" / (
                             f"scene_{scene_index:02d}_{beat_index:02d}_{action_index:02d}.mp4")
                         action_clips.append(_norm_clip(
-                            frame, segment, seconds=audio.duration / len(
-                                visual_scene.beats[beat_index].actions), fps=fps))
+                            frame, segment, seconds=seconds, fps=fps))
                     beat_clip = out / "beats" / f"scene_{scene_index:02d}_{beat_index:02d}.mp4"
                     parts.append(_concat_clips(action_clips, beat_clip, audio=audio.path))
                     report.event(stage, "passed", scene=scene_id, beat=beat_id)

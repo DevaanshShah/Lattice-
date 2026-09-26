@@ -44,6 +44,8 @@ class LessonPlan(BaseModel):
     topic: str = Field(..., min_length=1)
     skill_id: str = Field(..., min_length=1)
     learning_objective: str = Field(..., min_length=1)
+    audience: str | None = None
+    prerequisites: list[str] = Field(default_factory=list)
     scenes: list[LessonScene] = Field(..., min_length=1)
 
     @model_validator(mode="after")
