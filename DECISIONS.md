@@ -10,6 +10,70 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-09 — Keep the structured-plan architecture; work in gated phases behind a harness
+
+**Context.** After two sessions of fixing the new learning-video path one failure at a time, the
+owner asked whether the approach itself was right. A full audit found twelve problems, five
+serious, and no test of how a new-path video looks. A web research pass compared this design with
+model-written Manim code, slide systems, video frameworks and generative video.
+
+**Decision.** Keep "the model writes a typed plan, fixed code draws it, rules check it". Do the
+remaining work as the phases in `docs/learning-video-hardening-plan-2026-10-09.md`: a checkpoint
+and regression harness first, then offline correctness and look fixes, then prompt changes
+measured against a live baseline. Each phase has a gate and is reverted if the gate fails.
+
+**Why not the alternative.** Model-written animation code: in the one direct published test a
+typed plan rendered 99.8% of the time against 82.5%, and layout is that family's weakest part.
+Slides: as reliable, but static. Generative video: the best model gets a quarter of on-screen
+words wrong. Continuing without a harness: the 2026-09-23 renderer change made videos look worse
+while every test passed. A layout engine now: it adds a dependency the original plan forbids and
+is untested in video, so it is a later side experiment.
+
+**Consequence.** No published study compares these designs on the same topics, so "best" is an
+inference. Nobody can yet check automatically that a picture teaches the spoken claim; acceptance
+keeps a person in the loop for that.
+
+### 2026-10-09 — The look comes from the original card renderer, not a new layout
+
+**Context.** The semantic renderer added on 2026-09-23 draws message, tool and document objects as
+plain text in a column. The 2026-09-20 and 2026-09-21 videos looked better because the original
+renderer in the same file has card styles per object kind, a glow for the current step and
+pattern layouts. On 2026-09-29 a left-to-right layout and step dimming were rebuilt inside the
+semantic renderer.
+
+**Decision.** Phase 2 draws those object kinds with the original card styles, with their payload
+values inside the card, and keeps the semantic drawing for arrays, counters, charts, formulas,
+code and images.
+
+**Why not the alternative.** Extending the 2026-09-29 layout code would re-create styling that
+already exists and was already tuned against real output.
+
+**Consequence.** The 2026-09-29 dimming and flow CSS is partly replaced. Old-format plans keep
+using the original renderer unchanged, and one of them is in the fixed regression set.
+
+### 2026-09-29 — Proof is judged from replayed screen effects, not from the plan's own evidence
+
+**Context.** The agent-harness lesson failed at visual planning in every run. The validator
+accepted a claim when the actions the plan cited had approved names (`move`, `set_state`, ...). A
+highlight failed, a `set_state` to the value already shown passed, and an honest document showing
+`status: shipped` failed because of its object kind.
+
+**Decision.** `verification/visual_plan_validation.py` replays every action through
+`core/visual_state.action_effect` and records what was revealed, changed or removed on screen.
+`state_change` and `sequence` proof are decided from those effects. Anchors match the fact (the
+value under a compatible field name) at any moment in the beat.
+
+**Why not the alternative.** Special cases were tried first on the same day: a no-op check, a
+value-proof exception for documents, a repair hint for anchors. Each closed one way of gaming the
+form and left the next one open.
+
+**Consequence.** The checker is stricter, so a saved version-2 plan from before this date can fail
+at build time; the 2026-09-23 binary-search plan does, correctly (a counter increments while
+hidden). Proof still depends on which actions the plan cites and is not tied to the claimed
+objects; both are Phase 1 items in the hardening plan.
+
+---
+
 ### 2026-09-04 — Deploy-readiness before a platform, and a preflight that fails loudly
 
 **Context.** Every way this app breaks in production breaks *quietly*: a missing render image looks
