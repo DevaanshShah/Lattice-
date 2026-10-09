@@ -157,37 +157,165 @@
       ],
       "beats": [
         {
-          "narration_beat_id": "b1",
+          "narration_beat_id": "b0",
           "actions": [
             {
               "kind": "appear",
               "target_ids": [
                 "rider"
               ],
-              "id": "b1_0",
+              "id": "b0_0",
               "params": {},
               "start_fraction": 0.08,
-              "end_fraction": 0.36
+              "end_fraction": 0.248
             },
             {
               "kind": "appear",
               "target_ids": [
                 "gateway"
               ],
-              "id": "b1_1",
+              "id": "b0_1",
               "params": {},
-              "start_fraction": 0.36,
-              "end_fraction": 0.64
+              "start_fraction": 0.248,
+              "end_fraction": 0.416
             },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "matchers"
+              ],
+              "id": "b0_2",
+              "params": {},
+              "start_fraction": 0.416,
+              "end_fraction": 0.584
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "hot"
+              ],
+              "id": "b0_3",
+              "params": {},
+              "start_fraction": 0.584,
+              "end_fraction": 0.752
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "trips",
+                "main"
+              ],
+              "id": "b0_4",
+              "params": {},
+              "start_fraction": 0.752,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c0"
+              ],
+              "object_ids": [
+                "rider",
+                "gateway",
+                "matchers",
+                "hot",
+                "trips"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "b0_0",
+                "b0_1",
+                "b0_2",
+                "b0_3",
+                "b0_4"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b0b",
+          "actions": [
             {
               "kind": "connect",
               "target_ids": [
                 "rider",
                 "gateway"
               ],
-              "id": "b1_2",
+              "id": "b0b_0",
               "params": {},
-              "start_fraction": 0.64,
+              "start_fraction": 0.08,
+              "end_fraction": 0.29
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "gateway",
+                "matchers"
+              ],
+              "id": "b0b_1",
+              "params": {},
+              "start_fraction": 0.29,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "matchers",
+                "hot"
+              ],
+              "id": "b0b_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.71
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "matchers",
+                "main"
+              ],
+              "id": "b0b_3",
+              "params": {},
+              "start_fraction": 0.71,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c0b"
+              ],
+              "object_ids": [
+                "rider",
+                "gateway",
+                "matchers",
+                "hot",
+                "main"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b0b_0",
+                "b0b_1",
+                "b0b_2",
+                "b0b_3"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b1",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "rider",
+                "gateway"
+              ],
+              "id": "b1_0",
+              "params": {},
+              "start_fraction": 0.08,
               "end_fraction": 0.92
             }
           ],
@@ -202,9 +330,7 @@
               ],
               "kind": "relationship",
               "action_ids": [
-                "b1_0",
-                "b1_1",
-                "b1_2"
+                "b1_0"
               ]
             }
           ]
@@ -213,24 +339,14 @@
           "narration_beat_id": "b2",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "trace",
               "target_ids": [
+                "gateway",
                 "matchers"
               ],
               "id": "b2_0",
               "params": {},
               "start_fraction": 0.08,
-              "end_fraction": 0.5
-            },
-            {
-              "kind": "connect",
-              "target_ids": [
-                "gateway",
-                "matchers"
-              ],
-              "id": "b2_1",
-              "params": {},
-              "start_fraction": 0.5,
               "end_fraction": 0.92
             }
           ],
@@ -245,8 +361,7 @@
               ],
               "kind": "relationship",
               "action_ids": [
-                "b2_0",
-                "b2_1"
+                "b2_0"
               ]
             }
           ]
@@ -255,24 +370,14 @@
           "narration_beat_id": "b3",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "trace",
               "target_ids": [
+                "matchers",
                 "hot"
               ],
               "id": "b3_0",
               "params": {},
               "start_fraction": 0.08,
-              "end_fraction": 0.5
-            },
-            {
-              "kind": "connect",
-              "target_ids": [
-                "matchers",
-                "hot"
-              ],
-              "id": "b3_1",
-              "params": {},
-              "start_fraction": 0.5,
               "end_fraction": 0.92
             }
           ],
@@ -287,8 +392,7 @@
               ],
               "kind": "relationship",
               "action_ids": [
-                "b3_0",
-                "b3_1"
+                "b3_0"
               ]
             }
           ]
@@ -297,25 +401,14 @@
           "narration_beat_id": "b4",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "trace",
               "target_ids": [
-                "trips",
+                "matchers",
                 "main"
               ],
               "id": "b4_0",
               "params": {},
               "start_fraction": 0.08,
-              "end_fraction": 0.5
-            },
-            {
-              "kind": "connect",
-              "target_ids": [
-                "matchers",
-                "main"
-              ],
-              "id": "b4_1",
-              "params": {},
-              "start_fraction": 0.5,
               "end_fraction": 0.92
             }
           ],
@@ -330,8 +423,7 @@
               ],
               "kind": "relationship",
               "action_ids": [
-                "b4_0",
-                "b4_1"
+                "b4_0"
               ]
             }
           ]
@@ -524,31 +616,46 @@
               "id": "b5_0",
               "params": {},
               "start_fraction": 0.08,
-              "end_fraction": 0.36
+              "end_fraction": 0.29
+            },
+            {
+              "kind": "trace",
+              "target_ids": [
+                "rider",
+                "gateway",
+                "matchers",
+                "main"
+              ],
+              "id": "b5_1",
+              "params": {
+                "count": 4
+              },
+              "start_fraction": 0.29,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
               "target_ids": [
                 "load"
               ],
-              "id": "b5_1",
+              "id": "b5_2",
               "params": {
                 "value": 100,
                 "tone": "red"
               },
-              "start_fraction": 0.36,
-              "end_fraction": 0.64
+              "start_fraction": 0.5,
+              "end_fraction": 0.71
             },
             {
               "kind": "set_state",
               "target_ids": [
                 "main"
               ],
-              "id": "b5_2",
+              "id": "b5_3",
               "params": {
                 "tone": "red"
               },
-              "start_fraction": 0.64,
+              "start_fraction": 0.71,
               "end_fraction": 0.92
             }
           ],
@@ -565,7 +672,8 @@
               "action_ids": [
                 "b5_0",
                 "b5_1",
-                "b5_2"
+                "b5_2",
+                "b5_3"
               ]
             }
           ]

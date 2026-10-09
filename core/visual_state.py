@@ -84,7 +84,7 @@ def apply_action(state: VisualState, action: VisualAction) -> None:
         state.visible.update(targets)
     elif action.kind in {"deactivate", "hide"}:
         state.visible.difference_update(targets)
-    if action.kind in {"highlight", "focus", "activate", "move", "set_state", "increment"}:
+    if action.kind in {"highlight", "focus", "activate", "move", "set_state", "increment", "trace"}:
         state.focused = set(targets)
     if action.kind in {"move", "set_state", "transform"}:
         for target in targets:

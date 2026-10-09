@@ -13,8 +13,43 @@
       "example": null,
       "beats": [
         {
+          "id": "b0",
+          "spoken_text": "A ride request touches five pieces: the rider's app, a gateway, a group of matchers, a hot list and the trip records.",
+          "claim_ids": [
+            "c0"
+          ],
+          "visual_anchors": [
+            "Rider app",
+            "Gateway",
+            "Matchers",
+            "Hot list",
+            "Trip records"
+          ],
+          "claim_requirements": {
+            "c0": [
+              "label"
+            ]
+          }
+        },
+        {
+          "id": "b0b",
+          "spoken_text": "The arrows show who talks to whom.",
+          "claim_ids": [
+            "c0b"
+          ],
+          "visual_anchors": [
+            "request",
+            "save trip"
+          ],
+          "claim_requirements": {
+            "c0b": [
+              "relationship"
+            ]
+          }
+        },
+        {
           "id": "b1",
-          "spoken_text": "A rider taps request, and the app sends it to one front door, the gateway.",
+          "spoken_text": "Now follow one request. A rider taps request, and the app sends it to one front door, the gateway.",
           "claim_ids": [
             "c1"
           ],

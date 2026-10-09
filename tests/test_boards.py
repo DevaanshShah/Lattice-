@@ -81,8 +81,9 @@ def test_the_ball_rests_on_the_last_piece_it_reached():
     ball = None
     for beat in first.beats:
         ball = ball_after(first, beat, ball)
-    assert ball == ["matchers", "main"]
-    assert ball_after(second, second.beats[0], ball) == ball       # no arrow travelled: it stays put
+    assert ball == ["matchers", "main", "#f4f4f5"]
+    assert ball_after(first, first.beats[1], None) is None         # drawing the arrows moves no ball
+    assert ball_after(second, second.beats[1], ball) == ball       # no trace in that beat: it stays put
 
 
 @pytest.mark.integration
@@ -113,3 +114,28 @@ def test_the_map_keeps_every_piece_in_place_across_scenes_and_arrows_stay_off_la
     assert abs(frame["x"] + route[0][0] - (matchers["x"] + matchers["width"] / 2)) < 1
     upright = frame["x"] + route[0][0]
     assert not label["x"] - 4 < upright < label["x"] + label["width"] + 4
+
+
+@pytest.mark.unit
+def test_a_trace_must_follow_arrows_that_exist():
+    from core.schemas.lesson_plan import LessonPlan
+    from planner.product_recipe import load_recipes
+    from verification.visual_plan_validation import VisualPlanValidationError, validate
+
+    folder = FIXTURES / "system_map"
+    lesson = LessonPlan.model_validate_json((folder / "lesson_plan.json").read_text(encoding="utf-8"))
+    plan = BrowserVisualPlan.model_validate_json(
+        (folder / "browser_visual_plan.json").read_text(encoding="utf-8"))
+    skill = load_recipes()["workflow_explainer"]
+    validate(lesson, plan, skill)
+    trace = next(action for action in plan.scenes[0].beats[2].actions if action.kind == "trace")
+    trace.target_ids = ["rider", "matchers"]                       # no arrow joins these two
+    with pytest.raises(VisualPlanValidationError, match="no arrow for"):
+        validate(lesson, plan, skill)
+
+
+@pytest.mark.unit
+def test_the_diagram_is_built_before_the_ball_moves():
+    first, _ = _scenes("system_map")
+    kinds = [action.kind for beat in first.beats for action in beat.actions]
+    assert kinds.index("trace") > max(i for i, kind in enumerate(kinds) if kind in {"appear", "connect"})

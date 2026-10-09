@@ -14,3 +14,16 @@ Rules:
 ## Lattice video diagnostics
 
 For a generated-video crash, layout failure, narration/visual mismatch, interrupted run, or request to make the generator learn from a failure, read and follow `.agents/skills/lattice-video-diagnostics/SKILL.md` before changing code. Start from the output folder's `run_report.json` and saved plans; do not hand-edit one generated video as the final system fix.
+
+## No patchwork
+
+Clients run this app on their own. Nobody is there to repair a video after it is made, so every
+fix must hold for lessons nobody has seen yet.
+
+- Fix the cause as a general rule in the renderer, the validator or the planner. Never special-case
+  one topic, one fixture, one object id or one label to make a render look right.
+- Never loosen a check or add a blind retry to get a pass.
+- Every fix comes with a test that fails without it, and the whole regression set
+  (`python -m scripts.video_regression`) is run before a commit. The Manim case is part of that set
+  and must pass on every run.
+- Judge a fix by the rendered frames, not by the code.

@@ -24,7 +24,7 @@ RelationKind = Literal[
 ]
 ActionKind = Literal[
     "appear", "connect", "highlight", "expand", "transform", "move", "branch", "activate",
-    "deactivate", "hold", "set_state", "increment", "hide", "focus", "compare",
+    "deactivate", "hold", "set_state", "increment", "hide", "focus", "compare", "trace",
 ]
 EvidenceKind = Literal[
     "label", "state", "relationship", "value", "state_change", "sequence", "comparison", "asset",

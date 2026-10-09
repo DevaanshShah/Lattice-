@@ -96,7 +96,7 @@ body:has(.semantic-stage){background:#0a0a0a}
 .semantic-piece.is-placeholder svg,.semantic-piece.is-placeholder .piece-label{visibility:hidden}
 .semantic-panel{display:flex;flex-direction:column;gap:16px;padding:16px 22px 22px;border:1.5px solid color-mix(in srgb,var(--tone) 45%,transparent);border-radius:20px;background:#0d1114}
 .panel-header{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
-.panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:30px 40px;max-width:400px}
+.panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:64px 56px;max-width:420px}
 .semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
 .semantic-meter{min-width:180px;color:var(--tone)}
 .meter-label{margin-bottom:8px;font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
@@ -108,7 +108,7 @@ body:has(.semantic-stage){background:#0a0a0a}
 .code-line{display:block}.code-line.is-off{opacity:.34}.code-line.is-on{margin:0 -18px;padding:0 15px;border-left:3px solid #fbbf24;background:#fbbf2418}
 .semantic-split{flex-direction:row;align-items:center;gap:60px;width:max-content}
 .split-code{flex:none}.split-rest{display:flex;flex-direction:column;align-items:center;gap:34px}
-.semantic-split .semantic-array{width:auto}.semantic-split .semantic-code{max-width:none;white-space:pre}
+.semantic-split{gap:48px}.semantic-split .semantic-array{width:auto}.semantic-split .semantic-code{max-width:none;white-space:pre;font-size:30px;line-height:1.5;padding:18px 24px}.semantic-split .codewin-bar{font-size:18px;padding:12px 16px}.semantic-split .code-line.is-on{margin:0 -24px;padding:0 21px}
 .semantic-media img{max-width:700px;max-height:350px;object-fit:contain}.semantic-icon img{width:120px;height:120px;filter:brightness(0) invert(1)}.semantic-media figcaption{font:600 23px/1.2 Segoe UI,system-ui,sans-serif;margin-top:16px}
 """
 
@@ -481,6 +481,10 @@ window.fitFlow=()=>{
 };
 window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
   const box=stage.getBoundingClientRect();
+  if(Math.abs(y2-y1)<=14&&Math.abs(x2-x1)>40){
+    // two pieces almost level: a slightly sloping arrow reads as a mistake, so draw it level
+    y1=y2=(y1+y2)/2;line.setAttribute('y1',y1);line.setAttribute('y2',y2);
+  }
   let points=[[x1,y1],[x2,y2]],labelX=(x1+x2)/2,labelY=(y1+y2)/2,bent=false;
   const rowA=a.closest('.semantic-row'),rowB=b.closest('.semantic-row');
   if(rowA&&rowB&&rowA!==rowB){
@@ -604,12 +608,16 @@ def render_scene(scene: BrowserScene, out_png: str | Path, *, title: str,
 
 
 def _ball_step(scene: BrowserScene, action, ball: list[str] | None) -> list[str] | None:
-    """The arrow the ball is on after an action: a connect moves it along that arrow."""
-    if action.kind in {"connect", "branch"}:
-        for relation in scene.relationships:
-            if {relation.source_id, relation.target_id} <= set(action.target_ids):
-                ball = [relation.source_id, relation.target_id]
+    """The arrow the ball is on after an action, as [source, target, colour]. Only a `trace` moves
+    it: the diagram is built first, and the ball comes in when the flow is being explained."""
+    if action.kind == "trace":
+        ball = [*action.target_ids[-2:], _BALL.get(action.params.get("tone"), _BALL[None])]
     return ball
+
+
+_BALL = {None: "#f4f4f5", "pink": "#f472b6", "purple": "#a78bfa", "teal": "#2dd4bf",
+         "yellow": "#fbbf24", "blue": "#60a5fa", "green": "#4ade80", "white": "#f4f4f5",
+         "red": "#f87171"}
 
 
 def ball_after(scene: BrowserScene, beat: VisualBeat, ball: list[str] | None) -> list[str] | None:
@@ -644,6 +652,8 @@ def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
 const plan=JSON.parse(document.getElementById('animation-plan').textContent);
 const stage=document.querySelector('.semantic-stage');
 let current=-2, animations=[], fresh=new Set();
+const BRISK=.6, DRAW=.7, HOP=1.1, EASE='cubic-bezier(.45,0,.2,1)';
+const ease=t=>t<.5?2*t*t:1-(2-2*t)*(2-2*t)/2;
 const edges=()=>[...document.querySelectorAll('.connections line,.connections path.edge')];
 const edgeKey=e=>e.dataset.sourceId+'>'+e.dataset.targetId;
 function restBall(pair){
@@ -652,7 +662,7 @@ function restBall(pair){
   if(!edge)return;
   const points=JSON.parse(edge.dataset.route),end=points[points.length-1];
   const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
-  dot.setAttribute('r','7');dot.setAttribute('fill','#f4f4f5');dot.setAttribute('class','flow-ball');
+  dot.setAttribute('r','7');dot.setAttribute('fill',pair[2]||'#f4f4f5');dot.setAttribute('class','flow-ball');
   dot.setAttribute('transform',`translate(${end[0]} ${end[1]})`);
   document.querySelector('.connections').append(dot);
 }
@@ -673,10 +683,12 @@ function display(index){
   stage.innerHTML=plan.snapshots[index+1];window.fitFlow();
   window.drawConnections();
   fresh=new Set(edges().map(edgeKey).filter(k=>!had.has(k)));   // these arrows draw themselves
-  if(!['connect','branch'].includes(plan.actions[index].kind))restBall(plan.rest[index+1]);
+  if(plan.actions[index].kind!=='trace')restBall(plan.rest[index+1]);
   const seconds=plan.windows[index][1]-plan.windows[index][0];
-  const animate=(e,frames)=>{const a=e.animate(frames,{duration:seconds*1000,
-    fill:'both',easing:'linear'});a.pause();animations.push(a);};
+  // A change takes a brisk, eased moment at the start of its step and then holds, rather than
+  // crawling at one speed for as long as the sentence lasts.
+  const animate=(e,frames,most=BRISK,easing=EASE)=>{const a=e.animate(frames,{
+    duration:Math.min(seconds,most)*1000,fill:'both',easing});a.pause();animations.push(a);};
   const after=new Set();
   for(const element of nodes()){
     const id=key(element);after.add(id);
@@ -702,24 +714,30 @@ function display(index){
         {filter:'brightness(1)'},{filter:'brightness(1.8)',offset:.5},{filter:'brightness(1)'}]);
     }
   }
-  if(['connect','branch'].includes(action.kind)){
-    const svg=document.querySelector('.connections');
-    for(const relation of plan.relations){
-      if(!action.target_ids.includes(relation.source_id)||!action.target_ids.includes(relation.target_id))continue;
-      const source=stage.querySelector(`[data-object-id="${CSS.escape(relation.source_id)}"]`);
-      const target=stage.querySelector(`[data-object-id="${CSS.escape(relation.target_id)}"]`);
-      if(!source||!target)continue;
-      const edge=[...svg.querySelectorAll('line,path.edge')].find(e=>
-        e.dataset.sourceId===relation.source_id&&e.dataset.targetId===relation.target_id);
+  if(action.kind==='trace'){
+    // The ball follows the named pieces along their arrows, one hop after another. `count` sends
+    // several in a stream (a busy system); `tone` colours them (a failing request in red).
+    const svg=document.querySelector('.connections'),points=[];
+    let hops=0;
+    for(let i=1;i<action.target_ids.length;i++){
+      const edge=edges().find(e=>edgeKey(e)===action.target_ids[i-1]+'>'+action.target_ids[i]);
       if(!edge)continue;
+      points.push(...JSON.parse(edge.dataset.route));hops++;
+    }
+    const distances=[0];
+    for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
+      Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]));
+    const total=distances[distances.length-1],count=action.params.count||1,gap=.14;
+    const run=1-gap*(count-1),fill=plan.rest[index+1]?plan.rest[index+1][2]:'#f4f4f5';
+    for(let k=0;points.length&&k<count;k++){
       const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
-      dot.setAttribute('r','7');dot.setAttribute('fill','#f4f4f5');dot.setAttribute('class','flow-packet');
-      const points=JSON.parse(edge.dataset.route),distances=[0];
-      for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
-        Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]));
-      const total=distances[distances.length-1];
-      svg.append(dot);animate(dot,points.map((p,i)=>({
-        transform:`translate(${p[0]}px,${p[1]}px)`,offset:total?distances[i]/total:i/(points.length-1)})));
+      dot.setAttribute('r','7');dot.setAttribute('fill',fill);dot.setAttribute('class','flow-packet');
+      const start=gap*k,frames=points.map((p,i)=>({transform:`translate(${p[0]}px,${p[1]}px)`,
+        opacity:1,offset:start+run*(total?distances[i]/total:i/(points.length-1))}));
+      // a later ball waits unseen at the start; all but the last fade out on arrival
+      if(start)frames.unshift({...frames[0],opacity:0,offset:0},{...frames[0],opacity:0,offset:start-.001});
+      if(k<count-1)frames.push({...frames[frames.length-1],opacity:0,offset:1});
+      svg.append(dot);animate(dot,frames,HOP*hops*(1+gap*(count-1)),count>1?'linear':EASE);
     }
   }
 }
@@ -734,8 +752,8 @@ window.seekAnimation=seconds=>{
   }
   window.drawConnections();
   if(index>=0&&fresh.size){
-    const span=plan.windows[index][1]-plan.windows[index][0];
-    const done=span?Math.min(1,Math.max(0,(seconds-plan.windows[index][0])/span)):1;
+    const span=Math.min(DRAW,plan.windows[index][1]-plan.windows[index][0]);
+    const done=span?ease(Math.min(1,Math.max(0,(seconds-plan.windows[index][0])/span))):1;
     if(done<1)for(const edge of edges()){
       if(!fresh.has(edgeKey(edge)))continue;
       const length=edge.getTotalLength();

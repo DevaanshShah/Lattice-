@@ -67,6 +67,7 @@ def test_flow_packet_moves_and_seeking_is_reproducible(tmp_path):
 
     scene = flow()
     scene.beats[0].actions[0].end_fraction = 1
+    scene.beats[0].actions[0].kind = "trace"       # the ball belongs to a trace, not to a connect
     document = animation_html(scene, scene.beats[0], title="Tool call",
                               opening=opening_state(scene), duration=2)
     with sync_playwright() as playwright:

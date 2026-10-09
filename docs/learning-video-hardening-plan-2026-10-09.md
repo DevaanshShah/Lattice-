@@ -324,7 +324,18 @@ is organised and the palette. Its drawings, wording and example are not copied.
       plays out on the right.
     - **Ideas beside the map**, with a ring around the piece being discussed (next).
     - **Compare**, two things side by side (after that).
+    - **Formula and graph**, drawn by Manim (after compare): an equation that changes step by
+      step and a plotted curve, on the same black palette. Manim already draws array scenes; this
+      extends that route, and its case stays in the regression set.
     One hand-written test board each for problem-and-fix, code-into-system and recap follows.
+11. **The ball is its own step.** A `connect` only draws the arrow. A `trace` action sends the
+    ball along a named path of pieces, so the diagram is built first and the ball comes in when
+    the flow is explained. `count` sends a stream of balls for a busy system; `tone` colours them.
+    The validator rejects a trace with no arrow under it.
+12. **Motion.** Every change is eased and takes a brisk moment at the start of its step (0.6 s
+    for a fade or move, 0.7 s for a line, 1.1 s per hop for the ball) instead of running at one
+    speed for the length of the sentence. No animation library is added: frames are captured by
+    seeking to an exact time, so smoothness comes from easing and frame rate, not from a runtime.
 
 Status on 2026-10-10: items 1 to 8 and the first two boards are built and tested. A piece with
 several arrows out sends a stepped arrow from its top or bottom, so it does not cross another

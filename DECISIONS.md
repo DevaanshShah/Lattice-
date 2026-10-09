@@ -10,6 +10,25 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-10 — The ball is a step of its own, not a side effect of drawing an arrow
+
+**Context.** The first map board sent the ball along each arrow as the arrow was drawn. The owner
+watched it and said the diagram should be built first and the ball should come in afterwards,
+when the flow is explained, and that the ball should adapt to the situation.
+
+**Decision.** `connect` only draws the arrow. A new `trace` action names a path of pieces and
+sends the ball along the arrows between them; `count` sends several for a busy system and `tone`
+colours them. The ball rests where its trace ended until the scene ends. The validator requires an
+arrow under every hop and every piece on screen.
+
+**Why not the alternative.** Keeping the ball on `connect` and delaying it would still tie one
+ball to one arrow at the moment of drawing, so a flow could never be replayed over a finished
+diagram or shown under load. A free-form ball position was rejected: a path over named arrows is
+something the checker can verify without rendering.
+
+**Consequence.** Old plans that relied on a connect to move the ball now show only the arrow
+drawing itself. A planner that wants the ball must ask for it, which Phase 4 has to teach.
+
 ### 2026-10-10 — A scene is one of a few fixed board types, not a free layout
 
 **Context.** The owner asked whether code could be taught with the code fixed on one side, the

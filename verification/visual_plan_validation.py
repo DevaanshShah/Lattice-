@@ -313,6 +313,23 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
             if (len(action.target_ids) != 2 or objects[action.target_ids[0]].kind != "pointer"
                     or objects[action.target_ids[1]].kind != "value"):
                 raise VisualPlanValidationError("compare action requires a pointer and fixed value")
+        if action.kind == "trace":
+            # the ball follows arrows that exist, through pieces that are on screen
+            arrows = {(relation.source_id, relation.target_id) for relation in scene.relationships}
+            hops = list(zip(action.target_ids, action.target_ids[1:]))
+            missing = [f"{a}->{b}" for a, b in hops if (a, b) not in arrows]
+            if not hops or missing:
+                raise VisualPlanValidationError(
+                    f"trace action {action.id!r} needs a path of two or more pieces joined by "
+                    f"relationships in that order; no arrow for {missing or action.target_ids}")
+            unseen = sorted(set(action.target_ids) - seen)
+            if unseen:
+                raise VisualPlanValidationError(
+                    f"trace action {action.id!r} passes through pieces not on screen: {unseen}")
+            count, tone = action.params.get("count", 1), action.params.get("tone")
+            if type(count) is not int or not 1 <= count <= 5 or (tone is not None and tone not in TONES):
+                raise VisualPlanValidationError(
+                    f"trace action {action.id!r}: count is 1 to 5 and tone one of {list(TONES)}")
         if action.kind == "set_state" and not action.params:
             raise VisualPlanValidationError("set_state action requires changed state")
         if action.kind == "set_state":
