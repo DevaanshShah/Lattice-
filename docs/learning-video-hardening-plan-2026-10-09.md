@@ -129,7 +129,7 @@ The new path can replace the old one on `main` when all of these are true:
 | 0 | Checkpoint and safety net | none | medium | Harness green; owner accepts the starting contact sheets |
 | 1 | Correctness fixes | none | medium | Tests green; saved-plan verdicts as expected; frames change only where intended |
 | 2 | Look | none | large | No compact-layout fallback on the fixed set; owner approves contact sheets |
-| 3 | Map pieces: the target style in the renderer | none | large | The hand-written system map renders; owner approves it against the reference frames |
+| 3 | Map pieces: the target style in the renderer | none | large | The hand-written system map renders; owner approves its style against the reference frames |
 | 4 | One map per lesson: lesson step and prompts | yes, capped | large | Plan battery beats the baseline; lesson length within budget |
 | 5 | Acceptance and merge | yes, capped | small | Definition of done; owner sign-off |
 
@@ -289,8 +289,9 @@ videos for each changed case, and the gold video with its sheet. Approve with
 
 ### Phase 3: map pieces (the target style in the renderer)
 
-No AI calls. The renderer learns the target style, and a hand-written plan of the reference
-video's own diagram proves it, before the planner is asked to write such plans.
+No AI calls. The renderer learns the target style, and a hand-written plan on a topic of our own
+proves it, before the planner is asked to write such plans. The reference gives the way a lesson
+is organised and the palette. Its drawings, wording and example are not copied.
 
 1. **Icon pieces.** An icon object becomes a piece of a flow: an outlined icon in its colour with
    a one- or two-word label under it. It takes part in the layout, the glow and the dimming like
@@ -306,9 +307,9 @@ video's own diagram proves it, before the planner is asked to write such plans.
    the full map, so a piece keeps its place and size across scenes.
 7. **Icons that are missing.** A lightning bolt for the cache and a load-balancer icon, from the
    Lucide set the other 43 come from.
-8. **A hand-written fixture, `system_design_map`.** App, load balancer, three servers, cache, and
-   a database panel with indexes, a replica and two shards, revealed in eight to ten steps. It
-   joins the fixed regression set.
+8. **A hand-written fixture, `system_map`.** A system of our own choosing with the same kinds of
+   piece: a client, a router, several workers, a fast store, and a panel holding a main store
+   with its copies. It is revealed in eight to ten steps and joins the fixed regression set.
 9. **Supporting pieces,** after items 1 to 8 work: code as an editor window; a load bar with a
    value; a piece repeated to show a quantity; a piece that changes colour when its state
    changes; a card with a small figure, a title and one line; a takeaway line with a tick. A
@@ -320,7 +321,7 @@ piece has the same rectangle in every scene of a shared map; the ball is on the 
 after its move; old-format frames stay identical.
 
 Gate: unit tests green. The regression set passes with no compact-layout fallback, and the
-old-format case is frame-identical. The owner compares the `system_design_map` video and contact
+old-format case is frame-identical. The owner compares the `system_map` video and contact
 sheet with the reference frames and approves.
 
 ### Phase 4: one map per lesson (lesson step and prompts)
@@ -356,7 +357,7 @@ spend for the phase is about one to two US dollars, as an estimate from measured
 ### Phase 5: acceptance and merge
 
 1. Three full videos through the web engine with `scripts/selftest.py --renderer browser_v2`:
-   a system topic in the target style (the reference's own subject is the obvious one), the
+   a system topic of our own in the target style, the
    order-lookup harness, and binary search.
 2. The owner reviews them against section 3. Results are written into this file.
 3. Update the status lines in `docs/learning-video-implementation-plan.md`, `MEMORY.md` and
