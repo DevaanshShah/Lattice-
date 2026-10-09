@@ -13,7 +13,13 @@ FIELD_KINDS = {"message", "node", "document", "card", "gate", "tool", "group"}
 _DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results"),
                "pointer": ("target_id", "index"), "counter": ("value",), "metric": ("value",),
                "value": ("value",), "formula": ("expression",), "code": ("source",),
-               "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id",)}
+               "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id", "count")}
+
+
+# Payload keys that say HOW a piece is drawn, not what it holds. They are never shown as rows.
+STYLE_KEYS = {"tone", "icon", "placeholder", "members", "header", "count", "tick", "max"}
+# One colour per idea, on black. `red` is reserved for a problem.
+TONES = ("pink", "purple", "teal", "yellow", "blue", "green", "white", "red")
 
 
 def displayed_fields(kind: str, payload: dict[str, Any]) -> list[tuple[str, str]]:
@@ -21,15 +27,17 @@ def displayed_fields(kind: str, payload: dict[str, Any]) -> list[tuple[str, str]
     if kind not in FIELD_KINDS:
         return []
     return [(str(key), "✓" if value is True else "✗" if value is False else str(value))
-            for key, value in payload.items()
+            for key, value in payload.items() if key not in STYLE_KEYS
             if isinstance(value, (str, int, float, bool)) and str(value) != ""]
 
 
 def drawn_view(kind: str, payload: dict[str, Any]) -> str:
     """The part of an object's state a viewer can see; equal views look identical."""
+    # the colour and the dashed "not built yet" outline are part of what a viewer sees
+    look = [payload.get("tone"), bool(payload.get("placeholder"))]
     if kind in FIELD_KINDS:
-        return repr(displayed_fields(kind, payload))
-    return repr([payload.get(key) for key in _DRAWN_KEYS.get(kind, ())])
+        return repr([displayed_fields(kind, payload), look])
+    return repr([[payload.get(key) for key in _DRAWN_KEYS.get(kind, ())], look])
 
 
 @dataclass

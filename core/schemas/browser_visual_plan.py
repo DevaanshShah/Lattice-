@@ -16,6 +16,7 @@ VisualRole = Literal[
 ObjectKind = Literal[
     "message", "node", "document", "card", "gate", "tool", "metric", "group",
     "array", "pointer", "counter", "value", "formula", "code", "chart", "image", "icon",
+    "caption",
 ]
 RelationKind = Literal[
     "flows_to", "connects_to", "checks", "branches_to", "returns_to", "compares_to",
@@ -134,6 +135,9 @@ class BrowserScene(BaseModel):
     opening_visible_ids: list[str]
     closing_visible_ids: list[str] = Field(..., min_length=1)
     carryover_ids: list[str] = Field(default_factory=list)
+    # Objects that keep a place on screen for the whole scene even if this scene never shows
+    # them: scenes that share one map list the full map here, so a piece does not move between them.
+    layout_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _references_known_objects(self) -> "BrowserScene":
@@ -147,6 +151,9 @@ class BrowserScene(BaseModel):
             raise ValueError(f"duplicate narration beat id(s): {duplicate_beats}")
         known = set(ids)
         references = set(self.opening_visible_ids) | set(self.closing_visible_ids) | set(self.carryover_ids)
+        references |= set(self.layout_ids)
+        references |= {member for obj in self.objects for member in obj.payload.get("members", [])
+                       if isinstance(obj.payload.get("members"), list)}
         references |= {relation.source_id for relation in self.relationships}
         references |= {relation.target_id for relation in self.relationships}
         references |= {target for beat in self.beats for action in beat.actions for target in action.target_ids}

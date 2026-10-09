@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "topic": "How a ride request finds a driver, and what happens when one store is not enough",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Follow one request through a system and see why a store gets a copy.",
+  "audience": "Beginners",
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "path",
+      "title": "A ride request",
+      "learning_goal": "Follow the request through each piece.",
+      "example": null,
+      "beats": [
+        {
+          "id": "b1",
+          "spoken_text": "A rider taps request, and the app sends it to one front door, the gateway.",
+          "claim_ids": [
+            "c1"
+          ],
+          "visual_anchors": [
+            "Rider app",
+            "Gateway"
+          ],
+          "claim_requirements": {
+            "c1": [
+              "relationship"
+            ]
+          }
+        },
+        {
+          "id": "b2",
+          "spoken_text": "The gateway hands it to one of several matchers, so no single machine does all the work.",
+          "claim_ids": [
+            "c2"
+          ],
+          "visual_anchors": [
+            "Matchers"
+          ],
+          "claim_requirements": {
+            "c2": [
+              "relationship"
+            ]
+          }
+        },
+        {
+          "id": "b3",
+          "spoken_text": "A matcher first asks the hot list, a small fast store of nearby drivers.",
+          "claim_ids": [
+            "c3"
+          ],
+          "visual_anchors": [
+            "Hot list"
+          ],
+          "claim_requirements": {
+            "c3": [
+              "relationship"
+            ]
+          }
+        },
+        {
+          "id": "b4",
+          "spoken_text": "Then it saves the trip in the main store, inside the trip records.",
+          "claim_ids": [
+            "c4"
+          ],
+          "visual_anchors": [
+            "Trip records",
+            "Main store"
+          ],
+          "claim_requirements": {
+            "c4": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": "That works until every trip lands on one store."
+    },
+    {
+      "id": "strain",
+      "title": "When one store is not enough",
+      "learning_goal": "See the store overload and how a copy and an archive relieve it.",
+      "example": null,
+      "beats": [
+        {
+          "id": "b5",
+          "spoken_text": "On a busy night every trip lands on that one store, and its load climbs to the top.",
+          "claim_ids": [
+            "c5"
+          ],
+          "visual_anchors": [
+            "Load: 100"
+          ],
+          "claim_requirements": {
+            "c5": [
+              "state_change"
+            ]
+          }
+        },
+        {
+          "id": "b6",
+          "spoken_text": "So we plan a second store beside it.",
+          "claim_ids": [
+            "c6"
+          ],
+          "visual_anchors": [
+            "Main store"
+          ],
+          "claim_requirements": {
+            "c6": [
+              "label"
+            ]
+          }
+        },
+        {
+          "id": "b7",
+          "spoken_text": "The copy mirrors the main store, readers can use either one, and the load falls.",
+          "claim_ids": [
+            "c7"
+          ],
+          "visual_anchors": [
+            "Copy",
+            "Load: 55"
+          ],
+          "claim_requirements": {
+            "c7": [
+              "state_change"
+            ]
+          }
+        },
+        {
+          "id": "b8",
+          "spoken_text": "Old trips move to an archive, so the main store stays small.",
+          "claim_ids": [
+            "c8"
+          ],
+          "visual_anchors": [
+            "Archive"
+          ],
+          "claim_requirements": {
+            "c8": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}

@@ -76,7 +76,7 @@ def test_arrow_labels_split_onto_two_lines_and_size_the_gap():
     assert _label_lines("antidisestablishment") == ["antidisestablishment"]      # nowhere to split
     short, long = _chain(2, label="then"), _chain(2, label="send the validated request")
     gap = lambda scene: int(re.search(r"--flow-gap:(\d+)px", _semantic_html(scene, closing_state(scene)))[1])
-    assert gap(short) == 96 and gap(long) > gap(short)
+    assert gap(short) == 84 and gap(long) > gap(short)
     assert '"lines":["send the","validated request"]' in page_html(long, title="t", state=closing_state(long))
 
 

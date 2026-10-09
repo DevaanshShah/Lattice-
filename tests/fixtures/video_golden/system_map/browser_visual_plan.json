@@ -1,0 +1,770 @@
+{
+  "schema_version": 2,
+  "topic": "How a ride request finds a driver, and what happens when one store is not enough",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "path",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "rider",
+          "kind": "icon",
+          "role": "input",
+          "label": "Rider app",
+          "payload": {
+            "asset_id": "smartphone",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "gateway",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Gateway",
+          "payload": {
+            "asset_id": "split",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "matchers",
+          "kind": "icon",
+          "role": "tool",
+          "label": "Matchers",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal",
+            "count": 3
+          }
+        },
+        {
+          "id": "hot",
+          "kind": "icon",
+          "role": "result",
+          "label": "Hot list",
+          "payload": {
+            "asset_id": "zap",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "trips",
+          "kind": "group",
+          "role": "destination",
+          "label": "Trip records",
+          "payload": {
+            "tone": "teal",
+            "members": [
+              "main",
+              "load",
+              "copy",
+              "archive"
+            ]
+          }
+        },
+        {
+          "id": "main",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Main store",
+          "payload": {
+            "asset_id": "database",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Load",
+          "payload": {
+            "value": 40,
+            "max": 100,
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "copy",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Copy",
+          "payload": {
+            "asset_id": "database",
+            "tone": "purple",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "archive",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Archive",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "lesson",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One store was the weak point",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "rider",
+          "target_id": "gateway",
+          "kind": "flows_to",
+          "label": "request"
+        },
+        {
+          "source_id": "gateway",
+          "target_id": "matchers",
+          "kind": "flows_to",
+          "label": null
+        },
+        {
+          "source_id": "matchers",
+          "target_id": "hot",
+          "kind": "checks",
+          "label": "ask first"
+        },
+        {
+          "source_id": "matchers",
+          "target_id": "main",
+          "kind": "flows_to",
+          "label": "save trip"
+        },
+        {
+          "source_id": "main",
+          "target_id": "copy",
+          "kind": "transforms_to",
+          "label": null
+        },
+        {
+          "source_id": "main",
+          "target_id": "archive",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "rider"
+              ],
+              "id": "b1_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.36
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "gateway"
+              ],
+              "id": "b1_1",
+              "params": {},
+              "start_fraction": 0.36,
+              "end_fraction": 0.64
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "rider",
+                "gateway"
+              ],
+              "id": "b1_2",
+              "params": {},
+              "start_fraction": 0.64,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c1"
+              ],
+              "object_ids": [
+                "rider",
+                "gateway"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b1_0",
+                "b1_1",
+                "b1_2"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "matchers"
+              ],
+              "id": "b2_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "gateway",
+                "matchers"
+              ],
+              "id": "b2_1",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c2"
+              ],
+              "object_ids": [
+                "gateway",
+                "matchers"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b2_0",
+                "b2_1"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "hot"
+              ],
+              "id": "b3_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "matchers",
+                "hot"
+              ],
+              "id": "b3_1",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c3"
+              ],
+              "object_ids": [
+                "matchers",
+                "hot"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b3_0",
+                "b3_1"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "trips",
+                "main"
+              ],
+              "id": "b4_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "matchers",
+                "main"
+              ],
+              "id": "b4_1",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c4"
+              ],
+              "object_ids": [
+                "matchers",
+                "main"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b4_0",
+                "b4_1"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main"
+      ],
+      "carryover_ids": [],
+      "layout_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main",
+        "load",
+        "copy",
+        "archive",
+        "lesson"
+      ]
+    },
+    {
+      "lesson_scene_id": "strain",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "rider",
+          "kind": "icon",
+          "role": "input",
+          "label": "Rider app",
+          "payload": {
+            "asset_id": "smartphone",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "gateway",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Gateway",
+          "payload": {
+            "asset_id": "split",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "matchers",
+          "kind": "icon",
+          "role": "tool",
+          "label": "Matchers",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal",
+            "count": 3
+          }
+        },
+        {
+          "id": "hot",
+          "kind": "icon",
+          "role": "result",
+          "label": "Hot list",
+          "payload": {
+            "asset_id": "zap",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "trips",
+          "kind": "group",
+          "role": "destination",
+          "label": "Trip records",
+          "payload": {
+            "tone": "teal",
+            "members": [
+              "main",
+              "load",
+              "copy",
+              "archive"
+            ]
+          }
+        },
+        {
+          "id": "main",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Main store",
+          "payload": {
+            "asset_id": "database",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Load",
+          "payload": {
+            "value": 40,
+            "max": 100,
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "copy",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Copy",
+          "payload": {
+            "asset_id": "database",
+            "tone": "purple",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "archive",
+          "kind": "icon",
+          "role": "destination",
+          "label": "Archive",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "lesson",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One store was the weak point",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "rider",
+          "target_id": "gateway",
+          "kind": "flows_to",
+          "label": "request"
+        },
+        {
+          "source_id": "gateway",
+          "target_id": "matchers",
+          "kind": "flows_to",
+          "label": null
+        },
+        {
+          "source_id": "matchers",
+          "target_id": "hot",
+          "kind": "checks",
+          "label": "ask first"
+        },
+        {
+          "source_id": "matchers",
+          "target_id": "main",
+          "kind": "flows_to",
+          "label": "save trip"
+        },
+        {
+          "source_id": "main",
+          "target_id": "copy",
+          "kind": "transforms_to",
+          "label": null
+        },
+        {
+          "source_id": "main",
+          "target_id": "archive",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "b5",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "load"
+              ],
+              "id": "b5_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.36
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "b5_1",
+              "params": {
+                "value": 100,
+                "tone": "red"
+              },
+              "start_fraction": 0.36,
+              "end_fraction": 0.64
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "main"
+              ],
+              "id": "b5_2",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.64,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c5"
+              ],
+              "object_ids": [
+                "load",
+                "main"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "b5_0",
+                "b5_1",
+                "b5_2"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b6",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "copy"
+              ],
+              "id": "b6_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c6"
+              ],
+              "object_ids": [
+                "main"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "b6_0"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b7",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "copy"
+              ],
+              "id": "b7_0",
+              "params": {
+                "placeholder": false
+              },
+              "start_fraction": 0.08,
+              "end_fraction": 0.29
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "main",
+                "copy"
+              ],
+              "id": "b7_1",
+              "params": {},
+              "start_fraction": 0.29,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "b7_2",
+              "params": {
+                "value": 55,
+                "tone": "teal"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.71
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "main"
+              ],
+              "id": "b7_3",
+              "params": {
+                "tone": "teal"
+              },
+              "start_fraction": 0.71,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c7"
+              ],
+              "object_ids": [
+                "copy",
+                "load",
+                "main"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "b7_0",
+                "b7_1",
+                "b7_2",
+                "b7_3"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b8",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "archive"
+              ],
+              "id": "b8_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.36
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "main",
+                "archive"
+              ],
+              "id": "b8_1",
+              "params": {},
+              "start_fraction": 0.36,
+              "end_fraction": 0.64
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "lesson"
+              ],
+              "id": "b8_2",
+              "params": {},
+              "start_fraction": 0.64,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c8"
+              ],
+              "object_ids": [
+                "main",
+                "archive"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "b8_0",
+                "b8_1",
+                "b8_2"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main"
+      ],
+      "closing_visible_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main",
+        "load",
+        "copy",
+        "archive",
+        "lesson"
+      ],
+      "carryover_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main"
+      ],
+      "layout_ids": [
+        "rider",
+        "gateway",
+        "matchers",
+        "hot",
+        "trips",
+        "main",
+        "load",
+        "copy",
+        "archive",
+        "lesson"
+      ]
+    }
+  ]
+}

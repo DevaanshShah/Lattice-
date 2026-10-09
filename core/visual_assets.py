@@ -29,6 +29,12 @@ def asset_data_uri(kind: str, asset_id: str) -> str:
     return f"data:{_MIME[path.suffix.lower()]};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
 
 
+def icon_svg(asset_id: str) -> str:
+    """The icon's SVG markup for inlining, so it takes the colour of the piece it is drawn in."""
+    text = resolve_asset("icon", asset_id).read_text(encoding="utf-8")
+    return text[text.index("<svg"):].strip()
+
+
 def asset_inventory() -> dict[str, list[str]]:
     icons = sorted(path.stem for path in (ASSET_ROOT / "icons").glob("*.svg"))
     images = sorted(path.name for path in (ASSET_ROOT / "images").glob("*")

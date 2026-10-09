@@ -37,6 +37,8 @@ def _issues(data: dict) -> list[str]:
                   if _clipped(item["rect"], width, height))
     for index, node in enumerate(nodes):
         for other in nodes[index + 1:]:
+            if node.get("parent") == other["id"] or other.get("parent") == node["id"]:
+                continue    # a piece sits inside its panel by design
             overlap = _intersection(node["rect"], other["rect"])
             if overlap > min(_area(node["rect"]), _area(other["rect"])) * 0.25:
                 issues.append(f"node {node['id']!r} overlaps node {other['id']!r}")
@@ -50,6 +52,8 @@ def _issues(data: dict) -> list[str]:
         if _intersection(title, rect) > _area(rect) * 0.25:
             issues.append(f"edge label {label['text']!r} overlaps title")
         for node in nodes:
+            if node.get("panel"):
+                continue    # an arrow between two pieces of a panel is labelled inside the panel
             # A card on the semantic stage leaves a gap sized for the label, so any overlap there is
             # a defect; the original pattern layouts keep their looser allowance.
             allowed = 1 if node.get("card") else _area(rect) * 0.25
@@ -61,7 +65,7 @@ def _issues(data: dict) -> list[str]:
 def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
     script = """() => {
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
-return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card')})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
+return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card'),panel:e.classList.contains('semantic-panel'),parent:(e.parentElement.closest('[data-object-id]')||{dataset:{}}).dataset.objectId||null})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
 }"""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,

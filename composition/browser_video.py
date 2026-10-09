@@ -11,7 +11,7 @@ from core.schemas.browser_visual_plan import BrowserVisualPlan
 from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, apply_action, closing_state, opening_state
 from generation.manim_visual_scene import compile_scene
-from generation.browser_scene import render_scene, render_animated_beat
+from generation.browser_scene import ball_after, render_scene, render_animated_beat
 from narration.tts import synthesize
 from planner.product_recipe import Recipe
 from planner import browser_visual_plan, lesson_plan, product_recipe
@@ -60,6 +60,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
         scene_mp4s: list[Path] = []
         audio_dir = out / "audio"
         previous_state: VisualState | None = None
+        ball: list[str] | None = None    # the arrow the travelling ball last moved along
         for scene_index, lesson_scene in enumerate(lesson.scenes):
             scene_id = lesson_scene.id
             if on_scene:
@@ -119,7 +120,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                         try:
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
                                 title=lesson_scene.title, opening=state, duration=audio.duration,
-                                audio=audio.path, fps=fps)
+                                audio=audio.path, fps=fps, ball=ball)
                             attempt = 1
                         except BrowserLayoutError as exc:
                             report.event(stage, "retry", scene=scene_id, beat=beat_id,
@@ -128,8 +129,9 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                                          evidence={"geometry": exc.geometry})
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
                                 title=lesson_scene.title, opening=state, duration=audio.duration,
-                                audio=audio.path, fps=fps, layout_mode="compact")
+                                audio=audio.path, fps=fps, layout_mode="compact", ball=ball)
                             attempt = 2
+                        ball = ball_after(visual_scene, visual_beat, ball)
                         for action in visual_beat.actions:
                             apply_action(state, action)
                         frames.extend(captured)

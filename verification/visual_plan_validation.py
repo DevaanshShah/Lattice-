@@ -6,7 +6,7 @@ import re
 
 from core.schemas.browser_visual_plan import BrowserScene, BrowserVisualPlan, VisualObject
 from core.schemas.lesson_plan import LessonPlan, LessonScene
-from core.visual_state import (ActionEffect, VisualState, action_effect, apply_action,
+from core.visual_state import (TONES, ActionEffect, VisualState, action_effect, apply_action,
                                closing_state, displayed_fields, opening_state)
 from core.visual_assets import resolve_asset
 from planner.product_recipe import Recipe
@@ -239,6 +239,19 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
                 raise VisualPlanValidationError(
                     f"new incremented counter {obj.id!r} must start at 0; "
                     f"it starts at {obj.payload.get('value')!r} before any increments")
+        for obj in visual_scene.objects:
+            tone, members = obj.payload.get("tone"), obj.payload.get("members")
+            if tone is not None and tone not in TONES:
+                raise VisualPlanValidationError(
+                    f"object {obj.id!r} has unknown tone {tone!r}; use one of {list(TONES)}")
+            if members is not None and (obj.kind != "group" or not isinstance(members, list)):
+                raise VisualPlanValidationError(
+                    f"object {obj.id!r}: only a group can hold members, as a list of object ids")
+            if obj.kind != "icon" and obj.payload.get("icon") is not None:
+                try:
+                    resolve_asset("icon", str(obj.payload["icon"]))
+                except ValueError as exc:
+                    raise VisualPlanValidationError(str(exc)) from exc
         for obj in visual_scene.objects:
             if obj.kind in {"image", "icon"}:
                 try:

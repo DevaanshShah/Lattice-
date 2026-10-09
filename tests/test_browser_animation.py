@@ -84,7 +84,8 @@ def test_flow_packet_moves_and_seeking_is_reproducible(tmp_path):
         label = page.locator(".edge-label").bounding_box()
         assert label["y"] + label["height"] < boxes[0]["y"]  # label sits clear of the packet
         page.evaluate("() => window.seekAnimation(2)")
-        assert page.locator(".flow-packet").evaluate("e=>getComputedStyle(e).opacity") == "0"
+        # the ball stays on the piece it reached instead of vanishing
+        assert page.locator(".flow-packet").evaluate("e=>getComputedStyle(e).opacity") == "1"
         completed_frame = page.screenshot(animations="allow")
         browser.close()
     audio = tmp_path / "speech.wav"

@@ -130,8 +130,10 @@ def test_curated_icon_is_embedded_and_asset_escape_is_rejected():
     })
     html = page_html(scene, title="A person makes a request",
                      state=after_beat(opening_state(scene), scene, "b"))
-    assert "data:image/svg+xml;base64," in html
-    assert '<figcaption>Person</figcaption>' in html
+    # an icon is a map piece: the SVG is inlined so it takes the piece's colour, label underneath
+    assert re.search(r'class="semantic-object semantic-piece tone-\w+" data-object-id="person">'
+                     r'<div class="piece-icons"><svg', html)
+    assert '<div class="piece-label">Person</div>' in html
 
 
 @pytest.mark.integration

@@ -13,9 +13,9 @@ from playwright.sync_api import sync_playwright
 
 from composition.slides import render_html, chrome_path, _ffmpeg, SlideRenderError
 from core.schemas.browser_visual_plan import BrowserScene, VisualBeat
-from core.visual_assets import asset_data_uri
+from core.visual_assets import asset_data_uri, icon_svg
 from core import cancel
-from core.visual_state import VisualState, apply_action, displayed_fields
+from core.visual_state import TONES, VisualState, apply_action, displayed_fields
 from verification.browser_layout import audit_html, BrowserLayoutError
 
 
@@ -76,18 +76,72 @@ _SEMANTIC_CSS = """
 .semantic-flow .semantic-code{max-width:560px;overflow-wrap:anywhere;font-size:21px;margin:0;padding:14px 18px;border:1px solid var(--line);border-radius:10px;background:#0d0f15}
 .compact .semantic-row{gap:calc(var(--flow-gap,110px) * .75)}.compact .semantic-column{gap:24px}
 .compact .semantic-card{width:auto;min-width:0;min-height:70px;padding:10px 16px;font-size:19px}.compact .semantic-card .semantic-field{font-size:16px}
+/* Map pieces: thin outlines on black, one colour (tone) per idea, red for a problem. */
+body:has(.semantic-stage){background:#0a0a0a}
+.tone-pink{--tone:#f472b6}.tone-purple{--tone:#a78bfa}.tone-teal{--tone:#2dd4bf}.tone-yellow{--tone:#fbbf24}.tone-blue{--tone:#60a5fa}.tone-green{--tone:#4ade80}.tone-white{--tone:#e5e7eb}.tone-red{--tone:#f87171}
+.frame:has(.semantic-stage) .edge{stroke:#8d919e}
+.semantic-card.node{background:#0f1013;border-color:var(--tone);box-shadow:none}
+.semantic-card .semantic-title{color:var(--tone)}
+.semantic-card.is-active{border-color:var(--tone);box-shadow:0 0 30px color-mix(in srgb,var(--tone) 55%,transparent)}
+.semantic-card.kind-gate{background:#16130b}
+.semantic-card.is-placeholder{border-style:dashed}.semantic-card.is-placeholder>*{visibility:hidden}
+.card-icon svg{display:block;width:34px;height:34px;margin:0 auto 6px;color:var(--tone)}
+.semantic-piece{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:120px;color:var(--tone)}
+.piece-icons{display:grid;grid-template-columns:repeat(var(--cols,1),auto);gap:10px;padding:10px;border:2px dashed transparent;border-radius:14px}
+.piece-icons svg{display:block;width:96px;height:96px;stroke-width:1.3}
+.piece-icons.is-many svg{width:46px;height:46px}
+.piece-label{font:700 19px/1.15 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.semantic-piece.is-active .piece-icons{filter:drop-shadow(0 0 12px var(--tone))}
+.semantic-piece.is-placeholder .piece-icons{border-color:var(--tone)}
+.semantic-piece.is-placeholder svg,.semantic-piece.is-placeholder .piece-label{visibility:hidden}
+.semantic-panel{display:flex;flex-direction:column;gap:16px;padding:16px 22px 22px;border:1.5px solid color-mix(in srgb,var(--tone) 45%,transparent);border-radius:20px;background:#0d1114}
+.panel-header{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:30px 40px;max-width:400px}
+.semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
+.semantic-meter{min-width:180px;color:var(--tone)}
+.meter-label{margin-bottom:8px;font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.meter-bar{height:14px;border:1.5px solid var(--tone);border-radius:4px}.meter-bar i{display:block;height:100%;background:var(--tone)}
+.semantic-codewin{overflow:hidden;border:1px solid #2a2f3a;border-radius:10px;background:#0d0f15;text-align:left}
+.codewin-bar{display:flex;align-items:center;gap:7px;padding:9px 12px;background:#141821;color:#8d919e;font:500 14px/1 Consolas,monospace}
+.codewin-bar i{width:10px;height:10px;border-radius:50%;background:#f87171}.codewin-bar i:nth-child(2){background:#fbbf24}.codewin-bar i:nth-child(3){background:#4ade80}.codewin-bar span{margin-left:8px}
+.semantic-codewin .semantic-code{max-width:560px;margin:0;padding:14px 18px;border:0;background:none;overflow-wrap:anywhere;font-size:21px}
 .semantic-media img{max-width:700px;max-height:350px;object-fit:contain}.semantic-icon img{width:120px;height:120px;filter:brightness(0) invert(1)}.semantic-media figcaption{font:600 23px/1.2 Segoe UI,system-ui,sans-serif;margin-top:16px}
 """
 
 
+_ROLE_TONES = {"input": "pink", "source": "pink", "context": "pink", "before": "pink",
+               "operation": "teal", "tool": "teal", "decision": "yellow", "metric": "yellow",
+               "audit": "yellow", "output": "purple", "result": "purple",
+               "destination": "purple", "after": "purple"}
+
+
+def _tone(obj, payload: dict) -> str:
+    """The piece's colour: the one the plan gave it, else one that follows its role."""
+    tone = payload.get("tone")
+    return tone if tone in TONES else _ROLE_TONES.get(obj.role, "white")
+
+
+def _containers(scene: BrowserScene) -> dict[str, str]:
+    """Member id -> the panel (a group with `members`) that holds it."""
+    ids = {obj.id for obj in scene.objects}
+    return {member: obj.id for obj in scene.objects
+            if obj.kind == "group" and isinstance(obj.payload.get("members"), list)
+            for member in obj.payload["members"] if member in ids and member != obj.id}
+
+
 def _flow_layers(scene: BrowserScene) -> dict[str, int]:
-    """Column per object from the relationship arrows, so a flow reads left to right."""
+    """Column per top-level object from the relationship arrows, so a flow reads left to right.
+    A piece inside a panel counts as its panel, and a caption line is not part of the flow."""
     if not scene.relationships:
         return {}
-    order = [obj.id for obj in scene.objects]
+    containers = _containers(scene)
+    top = lambda obj_id: containers.get(obj_id, obj_id)
+    order = [obj.id for obj in scene.objects if obj.id not in containers and obj.kind != "caption"]
     edges: dict[str, list[str]] = {obj_id: [] for obj_id in order}
     for relation in scene.relationships:
-        edges[relation.source_id].append(relation.target_id)
+        source, target = top(relation.source_id), top(relation.target_id)
+        if source != target and source in edges and target in edges:
+            edges[source].append(target)
     dag: list[tuple[str, str]] = []
     state: dict[str, str] = {}
 
@@ -147,18 +201,21 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
     """The stage for one moment of a scene. `active` is what the beat has touched so far and
     `current` what the latest action touches; in a flow the first dims the rest and the second glows."""
     objects = {obj.id: obj for obj in scene.objects}
-    slots = _shown_in_scene(scene) | state.visible
+    containers = _containers(scene)
+    slots = _shown_in_scene(scene) | state.visible | set(scene.layout_ids)
     placed = [obj.id for obj in scene.objects if obj.kind != "pointer" and obj.id in slots]
     layers = _flow_layers(scene)
-    # A flow is boxes joined by arrows. An array or chart is the subject of every step even when
+    # A flow is pieces joined by arrows. An array or chart is the subject of every step even when
     # the action names its pointer or counter, so such a scene is never dimmed or lit as "steps".
     flow = bool(layers) and not any(objects[obj_id].kind in {"array", "chart"} for obj_id in placed)
     pointers = [obj for obj in scene.objects if obj.kind == "pointer" and obj.id in state.visible]
-    output: list[str] = []
-    for obj_id in placed:
+    inside = {obj_id: containers[obj_id] for obj_id in placed if containers.get(obj_id) in placed}
+    drawn: dict[str, str] = {}
+    for obj_id in sorted(placed, key=lambda item: item not in inside):   # members before their panel
         obj = objects[obj_id]
         payload = state.payloads[obj.id]
         label = escape(obj.label)
+        tone = f" tone-{_tone(obj, payload)}"
         if obj.id not in state.visible:
             flags = " is-hidden"     # holds its place, drawn with no opacity until it appears
         elif flow and active and obj.id in (current or ()):
@@ -167,6 +224,9 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
             flags = " is-past"       # earlier steps stay readable but step back
         else:
             flags = ""
+        if payload.get("placeholder"):
+            flags += " is-placeholder"   # a dashed outline where a piece is about to go
+        ident = f'data-object-id="{escape(obj.id)}"'
         if obj.kind == "array":
             discarded = set(payload.get("discarded_indices", []))
             cells = []
@@ -187,19 +247,31 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                              f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}" '
                              f'data-visual-key="{escape(obj.id)}:cell:{index}">'
                              f'{escape(str(item))}{marker}<span class="semantic-index">{index}</span></div></div>')
-            output.append(f'<section class="semantic-object{flags} semantic-array" data-object-id="{escape(obj.id)}">'
-                          f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
-                          f'{"".join(cells)}</div></section>')
+            html = (f'<section class="semantic-object{flags} semantic-array" {ident}>'
+                    f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
+                    f'{"".join(cells)}</div></section>')
         elif obj.kind in {"counter", "metric", "value"}:
-            value = escape(str(payload.get("value") if payload.get("value") is not None else "?"))
-            output.append(f'<div class="semantic-object{flags} semantic-counter" data-object-id="{escape(obj.id)}">'
-                          f'{label}: {value}</div>')
+            raw = payload.get("value")
+            value = escape(str(raw if raw is not None else "?"))
+            ceiling = payload.get("max")
+            if (obj.kind == "metric" and isinstance(ceiling, (int, float)) and ceiling > 0
+                    and isinstance(raw, (int, float))):
+                # a load bar: the value is shown as a filled part of its maximum
+                filled = max(0.0, min(100.0, 100.0 * raw / ceiling))
+                html = (f'<div class="semantic-object{flags} semantic-meter{tone}" {ident}>'
+                        f'<div class="meter-label">{label}: {value}</div>'
+                        f'<div class="meter-bar"><i style="width:{filled:.0f}%"></i></div></div>')
+            else:
+                html = (f'<div class="semantic-object{flags} semantic-counter" {ident}>'
+                        f'{label}: {value}</div>')
         elif obj.kind == "formula":
-            output.append(f'<div class="semantic-object{flags} semantic-formula" data-object-id="{escape(obj.id)}">'
-                          f'{escape(str(payload["expression"]))}</div>')
+            html = (f'<div class="semantic-object{flags} semantic-formula" {ident}>'
+                    f'{escape(str(payload["expression"]))}</div>')
         elif obj.kind == "code":
-            output.append(f'<pre class="semantic-object{flags} semantic-code" data-object-id="{escape(obj.id)}">'
-                          f'{escape(str(payload["source"]))}</pre>')
+            # an editor window: the label is the file name in its title bar
+            html = (f'<div class="semantic-object{flags} semantic-codewin" {ident}>'
+                    f'<div class="codewin-bar"><i></i><i></i><i></i><span>{label}</span></div>'
+                    f'<pre class="semantic-code">{escape(str(payload["source"]))}</pre></div>')
         elif obj.kind == "chart":
             series = payload["series"]
             numbers = [float(item["value"]) for item in series]
@@ -207,32 +279,53 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
             bars = "".join(f'<div class="semantic-bar" style="height:{max(8, 210 * value / scale):.1f}px">'
                            f'<span>{escape(str(item["label"]))}: {escape(str(item["value"]))}</span></div>'
                            for item, value in zip(series, numbers))
-            output.append(f'<div class="semantic-object{flags}" data-object-id="{escape(obj.id)}">'
-                          f'<div class="semantic-caption">{label}</div><div class="semantic-chart">'
-                          f'{bars}</div></div>')
-        elif obj.kind in {"image", "icon"}:
+            html = (f'<div class="semantic-object{flags}" {ident}>'
+                    f'<div class="semantic-caption">{label}</div><div class="semantic-chart">'
+                    f'{bars}</div></div>')
+        elif obj.kind == "image":
             uri = asset_data_uri(obj.kind, str(payload["asset_id"]))
-            extra = " semantic-icon" if obj.kind == "icon" else ""
-            output.append(f'<figure class="semantic-object{flags} semantic-media{extra}" '
-                          f'data-object-id="{escape(obj.id)}"><img src="{uri}" alt="{label}">'
-                          f'<figcaption>{label}</figcaption></figure>')
+            html = (f'<figure class="semantic-object{flags} semantic-media" {ident}>'
+                    f'<img src="{uri}" alt="{label}"><figcaption>{label}</figcaption></figure>')
+        elif obj.kind == "icon":
+            # a map piece: an outlined icon in its colour with a short label under it; `count`
+            # repeats the icon to show a quantity
+            count = payload.get("count")
+            count = count if isinstance(count, int) and 1 <= count <= 12 else 1
+            many = f' is-many" style="--cols:{min(count, 3)}' if count > 1 else ""
+            html = (f'<div class="semantic-object{flags} semantic-piece{tone}" {ident}>'
+                    f'<div class="piece-icons{many}">{icon_svg(str(payload["asset_id"])) * count}</div>'
+                    f'<div class="piece-label">{label}</div></div>')
+        elif obj.kind == "caption":
+            tick = "✓ " if payload.get("tick") else ""
+            html = (f'<div class="semantic-object{flags} semantic-caption-line{tone}" {ident}>'
+                    f'{tick}{label}</div>')
+        elif obj.kind == "group" and any(holder == obj.id for holder in inside.values()):
+            # a panel: its members are drawn inside it
+            members = "".join(drawn[member] for member in placed if inside.get(member) == obj.id)
+            html = (f'<div class="semantic-object{flags} semantic-panel{tone}" {ident}>'
+                    f'<div class="panel-header">{label}</div><div class="panel-body">{members}</div></div>')
         else:
-            # Message, tool, document, card, node, gate, group: the original card styles (`.node`,
-            # `.kind-*`, `.role-*`), with the object's values inside the card.
+            # Message, tool, document, card, node, gate, group: the original card shapes, with
+            # the object's values inside the card.
             pairs = displayed_fields(obj.kind, payload)
             fields = "".join(
                 f'<div class="semantic-field" data-visual-key="{escape(obj.id)}:field:'
                 f'{escape(key)}:{escape(value)}">{escape(key)}: {escape(value)}</div>'
                 for key, value in pairs)
             shape = " has-fields" if pairs else ""
-            output.append(f'<div class="semantic-object{flags} semantic-note semantic-card node '
-                          f'kind-{obj.kind} role-{obj.role}{shape}" data-object-id="{escape(obj.id)}">'
-                          f'<div class="semantic-title">{label}</div>{fields}</div>')
+            figure = (f'<div class="card-icon">{icon_svg(str(payload["icon"]))}</div>'
+                      if payload.get("icon") else "")
+            html = (f'<div class="semantic-object{flags} semantic-note semantic-card node '
+                    f'kind-{obj.kind} role-{obj.role}{shape}{tone}" {ident}>'
+                    f'{figure}<div class="semantic-title">{label}</div>{fields}</div>')
+        drawn[obj_id] = html
+    top = [obj_id for obj_id in placed if obj_id not in inside and objects[obj_id].kind != "caption"]
+    captions = "".join(drawn[obj_id] for obj_id in placed if objects[obj_id].kind == "caption")
     if not flow:
-        return f'<div class="semantic-stack">{"".join(output)}</div>'
+        return f'<div class="semantic-stack">{"".join(drawn[obj_id] for obj_id in top)}</div>{captions}'
     columns: dict[int, list[str]] = {}
-    for obj_id, html in zip(placed, output):
-        columns.setdefault(layers[obj_id], []).append(html)
+    for obj_id in top:
+        columns.setdefault(layers[obj_id], []).append(drawn[obj_id])
     ordered = [columns[index] for index in sorted(columns)]
     rows = [ordered[first:first + MAX_FLOW_COLUMNS]
             for first in range(0, len(ordered), MAX_FLOW_COLUMNS)]
@@ -240,12 +333,12 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
     lines = [_label_lines(relation.label) for relation in scene.relationships if relation.label
              and relation.source_id in slots and relation.target_id in slots]
     longest = max((len(line) for label in lines for line in label), default=0)
-    gap = max(96, 40 + 11 * longest)
+    gap = max(84, 40 + 11 * longest)
     row_gap = 132 if any(len(label) > 1 for label in lines) else 96   # room for a wrapped arrow's label
     return f'<div class="semantic-flow" style="--flow-gap:{gap}px;--row-gap:{row_gap}px">' + "".join(
         '<div class="semantic-row">' + "".join(
             f'<div class="semantic-column">{"".join(column)}</div>' for column in row) + "</div>"
-        for row in rows) + "</div>"
+        for row in rows) + "</div>" + captions
 
 
 def _state(scene: BrowserScene, active_beat_id: str | None) -> tuple[set[str], set[str]]:
@@ -360,7 +453,10 @@ window.fitFlow=()=>{
   block.style.zoom=1;
   const flow=block.classList.contains('semantic-flow');
   const need=block.getBoundingClientRect(),room=stage.getBoundingClientRect();
-  const fit=Math.min(flow?1.3:1,flow?room.width*.96/need.width:1,room.height*.94/need.height);
+  let lines=0;
+  for(const line of stage.querySelectorAll(':scope > .semantic-caption-line'))
+    lines+=line.getBoundingClientRect().height+34;
+  const fit=Math.min(flow?1.3:1,flow?room.width*.96/need.width:1,(room.height*.94-lines)/need.height);
   block.style.zoom=fit;window.flowFit=fit;
   document.documentElement.style.setProperty('--fit',fit);
 };
@@ -379,6 +475,19 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     points=[[ax,(down?ra.bottom:ra.top)-box.top],[ax,lane],[bx,lane],
             [bx,(down?rb.top:rb.bottom)-box.top]];
     labelX=(ax+bx)/2;labelY=lane;bent=true;
+  }else if(a.closest('.semantic-column')&&b.closest('.semantic-column')
+      &&a.closest('.semantic-column')!==b.closest('.semantic-column')
+      &&!a.contains(b)&&!b.contains(a)&&Math.abs(y2-y1)>14){
+    // Two pieces in different columns at different heights: leave sideways, turn in the empty
+    // gap between the columns, and arrive sideways. The turn never crosses a piece.
+    const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(),right=rb.left>=ra.left;
+    const ca=a.closest('.semantic-column').getBoundingClientRect();
+    const cb=b.closest('.semantic-column').getBoundingClientRect();
+    const sx=(right?ra.right:ra.left)-box.left,ex=(right?rb.left:rb.right)-box.left;
+    const turn=((right?ca.right:ca.left)+(right?cb.left:cb.right))/2-box.left;
+    const sy=ra.top+ra.height/2-box.top,ey=rb.top+rb.height/2-box.top;
+    points=[[sx,sy],[turn,sy],[turn,ey],[ex,ey]];
+    labelX=turn;labelY=Math.min(sy,ey);bent=true;
   }else{
     const intersects=r=>{
       let low=0,high=1;
@@ -390,7 +499,9 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
       }
       return low<=high;
     };
-    const blocked=[...stage.querySelectorAll('[data-object-id]')].filter(e=>e!==a&&e!==b)
+    const blocked=[...stage.querySelectorAll('[data-object-id]')].filter(e=>e!==a&&e!==b
+        &&!e.contains(a)&&!e.contains(b)&&!a.contains(e)&&!b.contains(e)
+        &&!e.classList.contains('semantic-caption-line'))
       .map(e=>e.getBoundingClientRect()).filter(intersects);
     if(blocked.length){
       bent=true;
@@ -460,19 +571,39 @@ def render_scene(scene: BrowserScene, out_png: str | Path, *, title: str,
                        label=f"browser scene {scene.lesson_scene_id!r}")
 
 
+def _ball_step(scene: BrowserScene, action, ball: list[str] | None) -> list[str] | None:
+    """The arrow the ball is on after an action: a connect moves it along that arrow."""
+    if action.kind in {"connect", "branch"}:
+        for relation in scene.relationships:
+            if {relation.source_id, relation.target_id} <= set(action.target_ids):
+                ball = [relation.source_id, relation.target_id]
+    return ball
+
+
+def ball_after(scene: BrowserScene, beat: VisualBeat, ball: list[str] | None) -> list[str] | None:
+    """Where the ball rests when a beat ends, as the [source, target] of the arrow it travelled."""
+    for action in beat.actions:
+        ball = _ball_step(scene, action, ball)
+    return ball
+
+
 def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
-                   opening: VisualState, duration: float, layout_mode: str = "auto") -> str:
+                   opening: VisualState, duration: float, layout_mode: str = "auto",
+                   ball: list[str] | None = None) -> str:
     windows = beat.timeline(duration)
     state = deepcopy(opening)
     snapshots = [_semantic_html(scene, state)]
     active: set[str] = set()
+    rest = [ball]   # where the ball sits at each snapshot: it stays on the piece it last reached
     for action in beat.actions:
         apply_action(state, action)
         # an object being cleared away is not the step in progress
         current = set() if action.kind in {"hide", "deactivate"} else set(action.target_ids)
         active.update(current)
         snapshots.append(_semantic_html(scene, state, active, current))
-    data = json.dumps({"snapshots": snapshots, "windows": windows,
+        ball = _ball_step(scene, action, ball)
+        rest.append(ball)
+    data = json.dumps({"snapshots": snapshots, "windows": windows, "rest": rest,
                        "actions": [action.model_dump() for action in beat.actions],
                        "relations": [relation.model_dump() for relation in scene.relationships]},
                       ensure_ascii=False).replace("</", "<\\/")
@@ -480,20 +611,37 @@ def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
     script = r"""
 const plan=JSON.parse(document.getElementById('animation-plan').textContent);
 const stage=document.querySelector('.semantic-stage');
-let current=-2, animations=[];
+let current=-2, animations=[], fresh=new Set();
+const edges=()=>[...document.querySelectorAll('.connections line,.connections path.edge')];
+const edgeKey=e=>e.dataset.sourceId+'>'+e.dataset.targetId;
+function restBall(pair){
+  // the ball waits at the end of the arrow it last travelled, on the piece being talked about
+  const edge=pair&&edges().find(e=>edgeKey(e)===pair[0]+'>'+pair[1]);
+  if(!edge)return;
+  const points=JSON.parse(edge.dataset.route),end=points[points.length-1];
+  const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('r','7');dot.setAttribute('fill','#f4f4f5');dot.setAttribute('class','flow-ball');
+  dot.setAttribute('transform',`translate(${end[0]} ${end[1]})`);
+  document.querySelector('.connections').append(dot);
+}
 const nodes=()=>[...stage.querySelectorAll('[data-object-id],[data-visual-key]')];
 const key=e=>e.dataset.visualKey||e.dataset.objectId;
 function display(index){
   for(const animation of animations)animation.cancel();
   animations=[];
-  document.querySelectorAll('.animation-ghost,.flow-packet').forEach(e=>e.remove());
+  document.querySelectorAll('.animation-ghost,.flow-packet,.flow-ball').forEach(e=>e.remove());
+  fresh=new Set();
   stage.innerHTML=plan.snapshots[Math.max(0,index)];window.fitFlow();
   const before=new Map(nodes().map(e=>[key(e),{rect:e.getBoundingClientRect(),
     opacity:getComputedStyle(e).opacity,element:e.cloneNode(true),
     parent:e.parentElement.closest('[data-object-id],[data-visual-key]')?.dataset.objectId}]));
-  if(index<0){window.drawConnections();return;}
+  window.drawConnections();
+  if(index<0){restBall(plan.rest[0]);return;}
+  const had=new Set(edges().map(edgeKey));
   stage.innerHTML=plan.snapshots[index+1];window.fitFlow();
   window.drawConnections();
+  fresh=new Set(edges().map(edgeKey).filter(k=>!had.has(k)));   // these arrows draw themselves
+  if(!['connect','branch'].includes(plan.actions[index].kind))restBall(plan.rest[index+1]);
   const seconds=plan.windows[index][1]-plan.windows[index][0];
   const animate=(e,frames)=>{const a=e.animate(frames,{duration:seconds*1000,
     fill:'both',easing:'linear'});a.pause();animations.push(a);};
@@ -533,7 +681,7 @@ function display(index){
         e.dataset.sourceId===relation.source_id&&e.dataset.targetId===relation.target_id);
       if(!edge)continue;
       const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
-      dot.setAttribute('r','7');dot.setAttribute('fill','#edb34a');dot.setAttribute('class','flow-packet');
+      dot.setAttribute('r','7');dot.setAttribute('fill','#f4f4f5');dot.setAttribute('class','flow-packet');
       const points=JSON.parse(edge.dataset.route),distances=[0];
       for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
         Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]));
@@ -551,10 +699,18 @@ window.seekAnimation=seconds=>{
   if(index>=0){const elapsed=Math.max(0,Math.min(seconds-plan.windows[index][0],
     plan.windows[index][1]-plan.windows[index][0]));
     for(const animation of animations)animation.currentTime=elapsed*1000;
-    document.querySelectorAll('.flow-packet').forEach(e=>e.style.opacity=
-      seconds>=plan.windows[index][1]?'0':'1');
   }
   window.drawConnections();
+  if(index>=0&&fresh.size){
+    const span=plan.windows[index][1]-plan.windows[index][0];
+    const done=span?Math.min(1,Math.max(0,(seconds-plan.windows[index][0])/span)):1;
+    if(done<1)for(const edge of edges()){
+      if(!fresh.has(edgeKey(edge)))continue;
+      const length=edge.getTotalLength();
+      edge.style.strokeDasharray=length;edge.style.strokeDashoffset=length*(1-done);
+      edge.removeAttribute('marker-end');     // the arrowhead arrives with the end of the line
+    }
+  }
 };
 window.animationReady=async()=>{
   await document.fonts.ready;
@@ -578,7 +734,7 @@ CAPTURE_ARGS = ["--disable-gpu"]
 def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | Path, *,
                          title: str, opening: VisualState, duration: float,
                          audio: str | Path, fps: int = 30,
-                         layout_mode: str = "auto") -> list[Path]:
+                         layout_mode: str = "auto", ball: list[str] | None = None) -> list[Path]:
     if type(fps) is not int or not 1 <= fps <= 60:
         raise ValueError("animation fps must be an integer from 1 to 60")
     for action, (start, end) in zip(beat.actions, beat.timeline(duration)):
@@ -589,7 +745,7 @@ def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | P
     deadline = time.monotonic() + 300
     cancel.check()
     document = animation_html(scene, beat, title=title, opening=opening,
-                              duration=duration, layout_mode=layout_mode)
+                              duration=duration, layout_mode=layout_mode, ball=ball)
     out_mp4 = Path(out_mp4)
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
     out_mp4.with_suffix(f".{layout_mode}.html").write_text(document, encoding="utf-8")
