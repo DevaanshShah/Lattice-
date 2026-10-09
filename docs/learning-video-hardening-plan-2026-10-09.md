@@ -80,6 +80,14 @@ Three more frames from the owner (8 to 10 in the same folder) add these points:
 The motion in points 5 and 7 is read from differences between still frames and from the owner's
 description, not from the video itself.
 
+Owner's choices on 2026-10-10: use the icons the project already has (the Lucide set in
+`assets/icons`), and keep this colour combination as the only palette: black background, thin
+outlines, pink, purple, teal and yellow, with red for a problem. The first five minutes of the
+reference also showed a story shape the lesson step should follow: a simple system, a problem
+shown in red, a dashed empty box where the fix will go, the fix filling it, and a one-line
+takeaway, repeated on the same diagram, then a recap. Phase 3 therefore also needs a dashed
+placeholder box, a red problem state, a bottom caption line and a heading that can change colour.
+
 Not part of this target, and moved to section 5: graphs, equations that transform, and other
 mathematics visuals.
 
