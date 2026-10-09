@@ -10,6 +10,45 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-10 — Every object of a scene has a fixed place, and the stage is sized to the frame
+
+**Context.** On the semantic stage only the visible objects were laid out, so a box jumped when its
+neighbour appeared, and two or three small boxes sat in a mostly empty frame. Flows of more than
+three boxes overflowed and needed the compact fallback.
+
+**Decision.** An object the scene will show is laid out from the first frame and drawn with no
+opacity until it appears. The stage content is then scaled once to the frame: a flow grows up to
+1.3 times or shrinks to fit; a stack only shrinks. Flows wrap after four columns, and the arrow that
+wraps runs through the gap between the rows.
+
+**Why not the alternative.** Laying out only what is visible is what caused the jumps. A layout
+engine for placement adds a dependency the original plan forbids and is untested in video, so it
+stays a side experiment. Shrinking a long flow onto one row makes its text unreadable past five
+or six boxes.
+
+**Consequence.** Early in a scene one box can sit off-centre beside the empty place of a box that
+has not appeared yet. A box that is removed leaves a gap. Carried objects change size between
+scenes, because each scene is fitted on its own.
+
+### 2026-10-10 — Frames are rasterised in software so that they are repeatable
+
+**Context.** With cards scaled to fit, the last frame of a beat differed from the same moment
+drawn by a second browser process in 2 of 14 runs: one pixel of a soft shadow, by one level out of
+255. It is invisible, but the regression harness and one test rely on identical frames.
+
+**Decision.** `render_animated_beat` launches Chrome with `--disable-gpu`, as the layout check
+already did. CSS transitions are switched off on the stage, because they run in real time while
+frames are captured at chosen moments.
+
+**Why not the alternative.** Tolerating a few differing pixels in the test would have hidden the
+cause and left the output dependent on the process that drew it. Keeping whole-pixel sizes is not
+possible once the stage is scaled by an arbitrary factor.
+
+**Consequence.** 0 differences in 38 runs afterwards. Every animated frame changed very slightly
+(anti-aliasing), so the baseline for animated cases has to be re-approved once.
+
+---
+
 ### 2026-10-09 — A cut or reordered learning video is refused only when the scene chain breaks
 
 **Context.** Scenes of a learning video usually build on each other: an object one scene leaves on

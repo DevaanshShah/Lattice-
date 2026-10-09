@@ -50,7 +50,10 @@ def _issues(data: dict) -> list[str]:
         if _intersection(title, rect) > _area(rect) * 0.25:
             issues.append(f"edge label {label['text']!r} overlaps title")
         for node in nodes:
-            if _intersection(rect, node["rect"]) > _area(rect) * 0.25:
+            # A card on the semantic stage leaves a gap sized for the label, so any overlap there is
+            # a defect; the original pattern layouts keep their looser allowance.
+            allowed = 1 if node.get("card") else _area(rect) * 0.25
+            if _intersection(rect, node["rect"]) > allowed:
                 issues.append(f"edge label {label['text']!r} overlaps node {node['id']!r}")
     return issues
 
@@ -58,7 +61,7 @@ def _issues(data: dict) -> list[str]:
 def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
     script = """() => {
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
-return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e)})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
+return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card')})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
 }"""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,

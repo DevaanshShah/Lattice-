@@ -1,7 +1,8 @@
 # Learning video hardening plan
 
 Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phases 0 and 1
-done on 2026-10-09; Phase 2 (look) is next
+done on 2026-10-09; Phase 2 (look) built on 2026-10-10 and waiting for the owner to approve the
+contact sheets
 
 This plan covers the new learning-video path: the web Teach tab, renderer `browser_v2`, plan
 format version 2. It replaces one-off fixing with phases, and every phase ends with a test gate.
@@ -200,6 +201,41 @@ before and after another box appears; a label never overlaps a box.
 Gate: unit tests green. No compact-layout fallback on the fixed set. The owner compares three
 contact sheets per case (Phase 0 baseline, new, and the 2026-09-20 gold video) and approves.
 Then the baseline is updated.
+
+**Result, 2026-10-10.** Built; the owner's approval is the part of the gate still open. 572 unit
+tests pass. All seven regression cases pass with no compact-layout fallback. The original card
+renderer (`legacy_cards`), the Manim case, the still-frame case and the chart are frame-identical
+to the baseline. `tool_flow` and `structured_args` changed as intended. `binary_search` changed
+only in how its first fade-in is drawn. Two runs of the new code match on every frame.
+
+What was built, beyond the five items above:
+
+- **Fit to the frame.** The stage content is sized to the frame once per scene: a flow grows up to
+  1.3 times or shrinks until it fits. This is why two- and three-box scenes are no longer small.
+- **Arrow labels** sit just above the arrow inside the gap, on at most two lines. The gap is as
+  wide as the longest label line.
+- **A flow that wraps** runs its connector through the empty gap between the rows, so each row
+  still reads left to right and no arrow crosses a box.
+- **The current step** is the latest action's targets, which glow. Objects the beat has not
+  touched dim to 62%. An object being cleared away is never lit.
+- **Decision diamonds** come with the card styles; yes and no are the arrow labels (item 5).
+- **Code snippets in a flow** get a thin dark panel. Code in algorithm scenes is unchanged.
+- **Frames are rasterised in software.** With cards scaled to fit, the GPU path drew one shadow
+  pixel one level differently in 2 of 14 runs; software rasterising gave 0 in 38. CSS transitions
+  are also switched off on the stage, because they run in real time.
+
+Things for the owner to judge on the contact sheets:
+
+- A box's place is reserved before it appears, so early in a scene one box can sit off-centre
+  with empty space beside it.
+- When a value changes, the old and new text overlap for a moment while they cross-fade. This
+  was already so before this phase.
+- Scene 3 of `tool_flow` still shows `missing` beside `validated: ✓`. That is the old saved plan,
+  and it is a Phase 3 matter.
+
+Review material: `out/video_regression/phase2_review/` holds a before-over-after sheet and both
+videos for each changed case, and the gold video with its sheet. Approve with
+`python -m scripts.video_regression`, then `--accept-last`.
 
 ### Phase 3: lesson step and prompts
 

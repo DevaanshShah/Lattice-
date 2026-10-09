@@ -1,5 +1,6 @@
-import subprocess
 import json
+import re
+import subprocess
 
 import pytest
 
@@ -8,7 +9,7 @@ from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.browser_visual_plan import BrowserVisualPlan
 from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import apply_action, opening_state
-from generation.browser_scene import animation_html, render_animated_beat
+from generation.browser_scene import CAPTURE_ARGS, animation_html, render_animated_beat
 
 
 def flow():
@@ -69,7 +70,8 @@ def test_flow_packet_moves_and_seeking_is_reproducible(tmp_path):
     document = animation_html(scene, scene.beats[0], title="Tool call",
                               opening=opening_state(scene), duration=2)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True)
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,
+                                             args=CAPTURE_ARGS)     # rasterise as the renderer does
         page = browser.new_page(viewport={"width": 1280, "height": 720})
         page.set_content(document)
         page.evaluate("() => window.animationReady()")
@@ -201,11 +203,11 @@ def test_an_array_is_never_dimmed_as_an_earlier_step():
 
 
 @pytest.mark.unit
-def test_a_flow_still_dims_the_step_the_beat_has_not_touched():
+def test_a_flow_lights_the_current_step_and_dims_the_untouched_one():
     scene = flow()
     scene.beats[0].actions[0].kind = "highlight"
     scene.beats[0].actions[0].target_ids = ["tool"]
     last = _snapshots(animation_html(scene, scene.beats[0], title="Tool call",
                                      opening=opening_state(scene), duration=2))[-1]
-    assert 'class="semantic-object is-past semantic-note" data-object-id="request"' in last
-    assert 'class="semantic-object semantic-note" data-object-id="tool"' in last
+    assert re.search(r'class="semantic-object is-past [^"]*" data-object-id="request"', last)
+    assert re.search(r'class="semantic-object is-active [^"]*" data-object-id="tool"', last)
