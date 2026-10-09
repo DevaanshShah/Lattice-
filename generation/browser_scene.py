@@ -105,6 +105,10 @@ body:has(.semantic-stage){background:#0a0a0a}
 .codewin-bar{display:flex;align-items:center;gap:7px;padding:9px 12px;background:#141821;color:#8d919e;font:500 14px/1 Consolas,monospace}
 .codewin-bar i{width:10px;height:10px;border-radius:50%;background:#f87171}.codewin-bar i:nth-child(2){background:#fbbf24}.codewin-bar i:nth-child(3){background:#4ade80}.codewin-bar span{margin-left:8px}
 .semantic-codewin .semantic-code{max-width:560px;margin:0;padding:14px 18px;border:0;background:none;overflow-wrap:anywhere;font-size:21px}
+.code-line{display:block}.code-line.is-off{opacity:.34}.code-line.is-on{margin:0 -18px;padding:0 15px;border-left:3px solid #fbbf24;background:#fbbf2418}
+.semantic-split{flex-direction:row;align-items:center;gap:60px;width:max-content}
+.split-code{flex:none}.split-rest{display:flex;flex-direction:column;align-items:center;gap:34px}
+.semantic-split .semantic-array{width:auto}.semantic-split .semantic-code{max-width:none;white-space:pre}
 .semantic-media img{max-width:700px;max-height:350px;object-fit:contain}.semantic-icon img{width:120px;height:120px;filter:brightness(0) invert(1)}.semantic-media figcaption{font:600 23px/1.2 Segoe UI,system-ui,sans-serif;margin-top:16px}
 """
 
@@ -269,9 +273,16 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                     f'{escape(str(payload["expression"]))}</div>')
         elif obj.kind == "code":
             # an editor window: the label is the file name in its title bar
+            # `active_lines` (1-based) are the lines being explained: they stay bright, the rest dim
+            lit = {line for line in payload.get("active_lines") or [] if isinstance(line, int)}
+            rows = str(payload["source"]).split("\n")
+            body = escape(rows[0]) if len(rows) == 1 and not lit else "".join(
+                f'<span class="code-line{" is-on" if number in lit else " is-off" if lit else ""}" '
+                f'data-visual-key="{escape(obj.id)}:line:{number}">{escape(row) or " "}</span>'
+                for number, row in enumerate(rows, 1))
             html = (f'<div class="semantic-object{flags} semantic-codewin" {ident}>'
                     f'<div class="codewin-bar"><i></i><i></i><i></i><span>{label}</span></div>'
-                    f'<pre class="semantic-code">{escape(str(payload["source"]))}</pre></div>')
+                    f'<pre class="semantic-code">{body}</pre></div>')
         elif obj.kind == "chart":
             series = payload["series"]
             numbers = [float(item["value"]) for item in series]
@@ -322,6 +333,13 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
     top = [obj_id for obj_id in placed if obj_id not in inside and objects[obj_id].kind != "caption"]
     captions = "".join(drawn[obj_id] for obj_id in placed if objects[obj_id].kind == "caption")
     if not flow:
+        code = [obj_id for obj_id in top if objects[obj_id].kind == "code"]
+        rest = [obj_id for obj_id in top if objects[obj_id].kind != "code"]
+        if code and rest:
+            # code and picture: the code is pinned on the left, what it does plays out on the right
+            return ('<div class="semantic-stack semantic-split"><div class="split-code">'
+                    + "".join(drawn[obj_id] for obj_id in code) + '</div><div class="split-rest">'
+                    + "".join(drawn[obj_id] for obj_id in rest) + f'</div></div>{captions}')
         return f'<div class="semantic-stack">{"".join(drawn[obj_id] for obj_id in top)}</div>{captions}'
     columns: dict[int, list[str]] = {}
     for obj_id in top:
@@ -452,11 +470,12 @@ window.fitFlow=()=>{
   if(!block)return;
   block.style.zoom=1;
   const flow=block.classList.contains('semantic-flow');
+  const sized=flow||block.classList.contains('semantic-split');   // these have a width of their own
   const need=block.getBoundingClientRect(),room=stage.getBoundingClientRect();
   let lines=0;
   for(const line of stage.querySelectorAll(':scope > .semantic-caption-line'))
     lines+=line.getBoundingClientRect().height+34;
-  const fit=Math.min(flow?1.3:1,flow?room.width*.96/need.width:1,(room.height*.94-lines)/need.height);
+  const fit=Math.min(flow?1.3:1,sized?room.width*.96/need.width:1,(room.height*.94-lines)/need.height);
   block.style.zoom=fit;window.flowFit=fit;
   document.documentElement.style.setProperty('--fit',fit);
 };
@@ -488,6 +507,18 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     const sy=ra.top+ra.height/2-box.top,ey=rb.top+rb.height/2-box.top;
     points=[[sx,sy],[turn,sy],[turn,ey],[ex,ey]];
     labelX=turn;labelY=Math.min(sy,ey);bent=true;
+    // A piece with several arrows out would stack them in the one gap, a turn through another
+    // arrow's label. Leave from its top or bottom instead when nothing in its column is in the way.
+    const several=JSON.parse(document.getElementById('relations').textContent)
+      .filter(r=>r.source_id===a.dataset.objectId).length>1;
+    const edge=(ey<sy?ra.top:ra.bottom)-box.top,low=Math.min(edge,ey)-8,high=Math.max(edge,ey)+8;
+    const clear=![...a.closest('.semantic-column').querySelectorAll('[data-object-id]')]
+      .filter(e=>e!==a&&!e.contains(a)&&!a.contains(e)).map(e=>e.getBoundingClientRect())
+      .some(r=>r.bottom-box.top>low&&r.top-box.top<high);
+    if(several&&clear){
+      const cx=ra.left+ra.width/2-box.left;
+      points=[[cx,edge],[cx,ey],[ex,ey]];labelX=(cx+ex)/2;labelY=ey;
+    }
   }else{
     const intersects=r=>{
       let low=0,high=1;
@@ -499,7 +530,8 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
       }
       return low<=high;
     };
-    const blocked=[...stage.querySelectorAll('[data-object-id]')].filter(e=>e!==a&&e!==b
+    const together=a.closest('.panel-body')&&a.closest('.panel-body')===b.closest('.panel-body');
+    const blocked=together?[]:[...stage.querySelectorAll('[data-object-id]')].filter(e=>e!==a&&e!==b
         &&!e.contains(a)&&!e.contains(b)&&!a.contains(e)&&!b.contains(e)
         &&!e.classList.contains('semantic-caption-line'))
       .map(e=>e.getBoundingClientRect()).filter(intersects);

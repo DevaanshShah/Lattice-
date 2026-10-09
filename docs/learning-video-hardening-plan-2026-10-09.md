@@ -316,6 +316,22 @@ is organised and the palette. Its drawings, wording and example are not copied.
    second hand-written fixture, an overload board (many users, one red server, load at 100%),
    shows them together.
 
+10. **Board types.** A scene is one of a small fixed set of boards, each with its own layout,
+    so the planner later picks a board instead of inventing a layout. Built in this order:
+    - **Map** (done, fixture `system_map`): pieces and arrows, shared by several scenes.
+    - **Code and picture** (done, fixture `code_and_picture`): the code stays fixed on the left,
+      `active_lines` lights the lines being explained and dims the rest, and what those lines do
+      plays out on the right.
+    - **Ideas beside the map**, with a ring around the piece being discussed (next).
+    - **Compare**, two things side by side (after that).
+    One hand-written test board each for problem-and-fix, code-into-system and recap follows.
+
+Status on 2026-10-10: items 1 to 8 and the first two boards are built and tested. A piece with
+several arrows out sends a stepped arrow from its top or bottom, so it does not cross another
+arrow's label. Still open in item 9: a heading that changes colour, and the card with a small
+figure. The owner has not yet reviewed the videos in `out/video_regression/phase3_review/`, and
+the regression baseline for this phase is not accepted until then.
+
 Tests to add: an icon piece carries its tone and label; panel members sit inside the panel; a
 piece has the same rectangle in every scene of a shared map; the ball is on the reached piece
 after its move; old-format frames stay identical.

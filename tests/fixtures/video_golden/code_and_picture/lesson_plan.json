@@ -1,0 +1,80 @@
+{
+  "schema_version": 2,
+  "topic": "Binary search explained line by line",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Connect each line of binary search to what it does to the list.",
+  "audience": "Beginners",
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "walk",
+      "title": "Binary search, line by line",
+      "learning_goal": "See which line runs and what it changes.",
+      "example": null,
+      "beats": [
+        {
+          "id": "b1",
+          "spoken_text": "We keep two ends, low and high, around the part of the list still in play.",
+          "claim_ids": [
+            "c1"
+          ],
+          "visual_anchors": [
+            "Target: 30"
+          ],
+          "claim_requirements": {
+            "c1": [
+              "label"
+            ]
+          }
+        },
+        {
+          "id": "b2",
+          "spoken_text": "Each round looks at the middle item. Here that is seventeen.",
+          "claim_ids": [
+            "c2"
+          ],
+          "visual_anchors": [
+            "mid: 17"
+          ],
+          "claim_requirements": {
+            "c2": [
+              "value"
+            ]
+          }
+        },
+        {
+          "id": "b3",
+          "spoken_text": "Seventeen is smaller than thirty, so everything up to it is thrown away.",
+          "claim_ids": [
+            "c3"
+          ],
+          "visual_anchors": [
+            "17 ✗"
+          ],
+          "claim_requirements": {
+            "c3": [
+              "state_change"
+            ]
+          }
+        },
+        {
+          "id": "b4",
+          "spoken_text": "The new middle is thirty. It matches, so we return its position, five.",
+          "claim_ids": [
+            "c4"
+          ],
+          "visual_anchors": [
+            "30 ✓",
+            "Index: 5"
+          ],
+          "claim_requirements": {
+            "c4": [
+              "sequence"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}

@@ -8,7 +8,7 @@ from scripts.video_regression import (CaseResult, cases, exit_code, parse_ssim_s
 from verification.visual_plan_validation import validate
 
 EXPECTED = {"binary_search", "binary_search_manim", "binary_search_stills", "chart_compare",
-            "legacy_cards", "structured_args", "system_map", "tool_flow"}
+            "code_and_picture", "legacy_cards", "structured_args", "system_map", "tool_flow"}
 
 
 @pytest.mark.unit

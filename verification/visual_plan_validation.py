@@ -71,6 +71,9 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
                         labels.append(str(payload["expression"]))
                     elif obj.kind == "code":
                         labels.append(str(payload["source"]))
+                        rows = str(payload["source"]).split("\n")
+                        labels.extend(rows[line - 1].strip() for line in payload.get("active_lines") or []
+                                      if isinstance(line, int) and 0 < line <= len(rows))
                     elif obj.kind == "chart":
                         labels.extend(f"{item['label']}: {item['value']}"
                                       for item in payload["series"])

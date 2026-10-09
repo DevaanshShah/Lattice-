@@ -10,6 +10,26 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-10 — A scene is one of a few fixed board types, not a free layout
+
+**Context.** The owner asked whether code could be taught with the code fixed on one side, the
+highlight moving part by part and the effect animated on the other, and then what to do for flows
+and similar scenes. The reference video uses a handful of repeating arrangements.
+
+**Decision.** The renderer offers a small fixed set of boards, each with its own layout rule: map,
+code and picture, ideas beside the map, compare. A board is chosen by what the scene contains (a
+code object beside other objects in a non-flow scene is pinned left), and each is proved by a
+hand-written fixture before the planner is asked for it. The lit code lines are plain state
+(`active_lines`), so the validator sees a moved highlight as a change on screen.
+
+**Why not the alternative.** Letting the planner place things freely is what failed in September:
+positions it cannot see produce overlaps that only a render reveals. A separate renderer per board
+was rejected too; the boards share the stage, the slots, the fit and the checks, so a fix lands
+once.
+
+**Consequence.** A lesson that needs an arrangement outside the set cannot be drawn until a board
+is added for it. The planner prompt in Phase 4 can name boards instead of describing layouts.
+
 ### 2026-10-10 — The target is one named reference style, and the renderer learns it before the planner
 
 **Context.** After the card look was approved, the owner asked whether videos were only boxes and

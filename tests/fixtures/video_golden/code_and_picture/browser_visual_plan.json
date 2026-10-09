@@ -1,0 +1,311 @@
+{
+  "schema_version": 2,
+  "topic": "Binary search explained line by line",
+  "skill_id": "algorithm_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "walk",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "find.py",
+          "payload": {
+            "source": "def find(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+          }
+        },
+        {
+          "id": "list",
+          "kind": "array",
+          "role": "input",
+          "label": "Sorted list",
+          "payload": {
+            "items": [
+              3,
+              8,
+              12,
+              17,
+              21,
+              30,
+              44
+            ]
+          }
+        },
+        {
+          "id": "mid",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "mid",
+          "payload": {
+            "target_id": "list",
+            "index": 3
+          }
+        },
+        {
+          "id": "target",
+          "kind": "value",
+          "role": "context",
+          "label": "Target",
+          "payload": {
+            "value": 30
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b1_0",
+              "params": {},
+              "start_fraction": 0.08,
+              "end_fraction": 0.36
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "list",
+                "target"
+              ],
+              "id": "b1_1",
+              "params": {},
+              "start_fraction": 0.36,
+              "end_fraction": 0.64
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b1_2",
+              "params": {
+                "active_lines": [
+                  2
+                ]
+              },
+              "start_fraction": 0.64,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c1"
+              ],
+              "object_ids": [
+                "target"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "b1_0",
+                "b1_1",
+                "b1_2"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b2_0",
+              "params": {
+                "active_lines": [
+                  4
+                ]
+              },
+              "start_fraction": 0.08,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "mid"
+              ],
+              "id": "b2_1",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c2"
+              ],
+              "object_ids": [
+                "mid"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "b2_0",
+                "b2_1"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b3_0",
+              "params": {
+                "active_lines": [
+                  7,
+                  8
+                ]
+              },
+              "start_fraction": 0.08,
+              "end_fraction": 0.36
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "mid",
+                "target"
+              ],
+              "id": "b3_1",
+              "params": {},
+              "start_fraction": 0.36,
+              "end_fraction": 0.64
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "list"
+              ],
+              "id": "b3_2",
+              "params": {
+                "discarded_indices": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              },
+              "start_fraction": 0.64,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c3"
+              ],
+              "object_ids": [
+                "list",
+                "mid"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "b3_0",
+                "b3_1",
+                "b3_2"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "b4",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b4_0",
+              "params": {
+                "active_lines": [
+                  4
+                ]
+              },
+              "start_fraction": 0.08,
+              "end_fraction": 0.29
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "mid"
+              ],
+              "id": "b4_1",
+              "params": {
+                "index": 5
+              },
+              "start_fraction": 0.29,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "b4_2",
+              "params": {
+                "active_lines": [
+                  5,
+                  6
+                ]
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.71
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "mid",
+                "target"
+              ],
+              "id": "b4_3",
+              "params": {},
+              "start_fraction": 0.71,
+              "end_fraction": 0.92
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c4"
+              ],
+              "object_ids": [
+                "list",
+                "mid"
+              ],
+              "kind": "sequence",
+              "action_ids": [
+                "b4_0",
+                "b4_1",
+                "b4_2",
+                "b4_3"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "code",
+        "list",
+        "mid",
+        "target"
+      ],
+      "carryover_ids": [],
+      "layout_ids": []
+    }
+  ]
+}
