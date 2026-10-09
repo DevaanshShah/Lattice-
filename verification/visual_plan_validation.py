@@ -162,14 +162,20 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
             f"scene {lesson_scene.id} must map exactly to its narration beats")
     if require_v2 and [beat.narration_beat_id for beat in visual_scene.beats] != list(expected_beats):
         raise VisualPlanValidationError("visual beats must follow the narration order")
+    # Checked before the replay: replaying a scene that carries an object its predecessor never
+    # left on screen (a cut or reordered outline) would fail on a missing state, not on this reason.
+    missing_prior = sorted(set(visual_scene.carryover_ids) - previous_closing)
+    if missing_prior:
+        raise VisualPlanValidationError(
+            f"scene {lesson_scene.id} carries object(s) absent from prior closing state: {missing_prior}")
     visible_labels = _visible_labels_by_beat(visual_scene, require_v2=require_v2,
                                             previous_state=previous_state)
     state_by_beat: dict[str, VisualState] = {}
     seen_by_beat: dict[str, set[str]] = {}
     effects_by_beat: dict[str, dict[str, ActionEffect]] = {}
     if require_v2:
-        # Replay every action and record what it visibly did; proof is judged from these
-        # screen effects, never from the action names the plan cites.
+        # Replay every action and record what it visibly did. Proof is judged from these screen
+        # effects on the objects a claim names, whichever actions the plan happens to cite.
         kinds = {obj.id: obj.kind for obj in visual_scene.objects}
         state = opening_state(visual_scene, previous_state)
         for beat in visual_scene.beats:
@@ -211,10 +217,6 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
                               seen_by_beat[beat_id])
             prior_actions.update({action.id: action for action in actual_beats[beat_id].actions})
             prior_effects.update(effects_by_beat[beat_id])
-    missing_prior = sorted(set(visual_scene.carryover_ids) - previous_closing)
-    if missing_prior:
-        raise VisualPlanValidationError(
-            f"scene {lesson_scene.id} carries object(s) absent from prior closing state: {missing_prior}")
     current_objects = {obj.id: obj for obj in visual_scene.objects}
     reused = sorted(set(current_objects) & previous_closing - set(visual_scene.carryover_ids))
     if reused:
@@ -276,7 +278,6 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
     if None in current_actions or len(current_actions) != len(visual_beat.actions):
         raise VisualPlanValidationError(f"beat {lesson_beat.id} needs unique action ids")
     actions = {**prior_actions, **current_actions}
-    effects = {**prior_effects, **current_effects}
     for action in visual_beat.actions:
         if action.kind == "move":
             if any(objects[target].kind != "pointer" for target in action.target_ids):
@@ -327,31 +328,64 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
             evidence_by_claim[claim].append(evidence)
     for claim, requirements in lesson_beat.claim_requirements.items():
         for requirement in requirements:
-            if not any(_proves(requirement, evidence, effects, objects, scene, beat_state, seen)
-                       for evidence in evidence_by_claim[claim]):
-                cited = dict.fromkeys(action_id for evidence in evidence_by_claim[claim]
-                                      for action_id in evidence.action_ids)
-                seen = "; ".join(f"{action_id}: {effects[action_id].describe()}"
-                                 for action_id in cited) or "no actions cited"
-                raise VisualPlanValidationError(
-                    f"beat {lesson_beat.id} claim {claim!r} lacks {requirement} visual proof. "
-                    f"On screen: {seen}. {_PROOF_NEEDS.get(requirement, '')}".rstrip())
+            earlier = requirement == "sequence"     # only a sequence may lean on earlier beats
+            if any(_proves(requirement, evidence,
+                           _steps(_claimed([evidence], objects), evidence.action_ids,
+                                  prior_effects, current_effects, earlier=earlier),
+                           objects, scene, beat_state, seen)
+                   for evidence in evidence_by_claim[claim]):
+                continue
+            claimed = _claimed(evidence_by_claim[claim], objects)
+            cited = [action_id for evidence in evidence_by_claim[claim]
+                     for action_id in evidence.action_ids]
+            shown = "; ".join(f"{action_id}: {effect.describe()}" for action_id, effect in _steps(
+                claimed, cited, prior_effects, current_effects, earlier=earlier)) or "no actions"
+            raise VisualPlanValidationError(
+                f"beat {lesson_beat.id} claim {claim!r} lacks {requirement} visual proof. "
+                f"What the actions did to {sorted(claimed)}: {shown}. "
+                f"{_PROOF_NEEDS.get(requirement, '')}".rstrip())
 
 
 _PROOF_NEEDS = {
-    "state_change": "Needed: an object already on screen visibly changes or is removed.",
-    "sequence": ("Needed: two or more visible steps in order, at least one changing an object "
-                 "already on screen; appearing, highlighting, or re-setting a value already "
-                 "shown is not a step that changes it."),
+    "state_change": "Needed: an object the claim names, already on screen, visibly changes or is removed.",
+    "sequence": ("Needed: two or more visible steps in order on the objects the claim names, at "
+                 "least one changing an object already on screen; appearing, highlighting, or "
+                 "re-setting a value already shown is not a step that changes it."),
     "value": "Needed: a visible object that draws the value.",
 }
+# Hides the planner adds to tidy the screen. They are not the model's demonstration, so an object
+# they remove must not count as "it changed".
+_CLEANUP_PREFIXES = ("clear_finished_steps", "hide_final_")
 
 
-def _proves(requirement, evidence, effects: dict[str, ActionEffect], objects,
+def _claimed(evidence_items, objects) -> set[str]:
+    """Objects a claim is about: the ones its evidence names, plus the array under a named pointer
+    (a compare marks the array cell, not the pointer)."""
+    ids = {obj_id for evidence in evidence_items for obj_id in evidence.object_ids}
+    return ids | {objects[obj_id].payload["target_id"] for obj_id in ids
+                  if objects[obj_id].kind == "pointer"}
+
+
+def _steps(claimed: set[str], cited: list[str], prior_effects: dict[str, ActionEffect],
+           current_effects: dict[str, ActionEffect], *, earlier: bool) -> list[tuple[str, ActionEffect]]:
+    """What each action did to the claimed objects, in order: every action of this beat, cited or
+    not, preceded by the earlier-beat actions the evidence cites when `earlier` allows them."""
+    before = [action_id for action_id in dict.fromkeys(cited)
+              if earlier and action_id in prior_effects and action_id not in current_effects]
+    steps = []
+    for action_id in [*before, *current_effects]:
+        if action_id.startswith(_CLEANUP_PREFIXES):
+            continue
+        effect = (current_effects if action_id in current_effects else prior_effects)[action_id]
+        steps.append((action_id, ActionEffect(effect.revealed & claimed, effect.changed & claimed,
+                                              effect.removed & claimed)))
+    return steps
+
+
+def _proves(requirement, evidence, steps: list[tuple[str, ActionEffect]], objects,
             scene: BrowserScene, beat_state: VisualState, seen: set[str]) -> bool:
     if evidence.kind != requirement:
         return False
-    steps = [effects[action_id] for action_id in evidence.action_ids]
     if requirement == "label":
         return True
     if requirement == "value":
@@ -363,9 +397,9 @@ def _proves(requirement, evidence, effects: dict[str, ActionEffect], objects,
         return any({relation.source_id, relation.target_id} <= set(evidence.object_ids)
                    for relation in scene.relationships)
     if requirement == "state_change":
-        return any(step.changed or step.removed for step in steps)
+        return any(step.changed or step.removed for _, step in steps)
     if requirement == "sequence":
-        visible_steps = [step for step in steps if step.describe() != "no visible change"]
+        visible_steps = [step for _, step in steps if step.revealed or step.changed or step.removed]
         return len(visible_steps) >= 2 and any(step.changed for step in visible_steps)
     if requirement == "comparison":
         ids = set(evidence.object_ids)

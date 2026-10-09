@@ -216,3 +216,10 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 - `python -m scripts.selftest --renderer browser_v2` drives the new path through the web engine (live). `python -m scripts.plan_battery` plans three fixed topics and scores plan rate and first-try scene rate against a baseline (live, call cap; scoring in `eval/plan_score.py`). Neither has been run live yet: the first battery run is the Phase 3 baseline.
 - The Docker image `lattice-render:0.2` had been deleted from this machine; rebuilt with `python -m scripts.setup_env`. Unit tests: 552 pass, including the two that need Docker.
 - Gate still open: the owner looks at the starting contact sheets. Next is Phase 1 (correctness fixes, no model calls).
+
+### 2026-10-09 — Hardening plan Phase 1: correctness fixes (no model calls)
+- Proof (`verification/visual_plan_validation._proves`) now looks at what every action of the beat did to the objects the claim names (plus the array under a named pointer); citations no longer matter, a change to an unrelated object no longer counts, and planner-added tidy-up hides (`clear_finished_steps`, `hide_final_*`) are excluded. The evidence kind must still match the requirement.
+- A carryover object missing from the previous scene is reported before the replay, so a cut or reordered chain fails with a reason instead of a `KeyError`. `web/engine.Engine.check_build` validates the approved scenes before a job is queued and the build endpoint answers 400 with the reason; cutting still works when the remaining scenes validate. The outline screen hides "Add a scene" for learning-video projects.
+- Step dimming applies only to flow layouts, never to a scene with an array or chart. Planner calls use three transport attempts (`planner.lesson_plan.TRANSPORT_ATTEMPTS`).
+- Regression threshold tightened to 0.9999: unchanged code scores exactly 1.0 and the dimming fix only moved one case to 0.9989.
+- Gate: 561 unit tests pass; all 15 saved attempts keep their verdict; only `binary_search` frames changed, as intended, and its baseline was updated. Next is Phase 2 (original card look, no model calls).

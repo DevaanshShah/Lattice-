@@ -195,6 +195,10 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     @app.post("/api/projects/{pid}/build")
     def build(pid: str, body: BuildReq) -> dict:
         project = _load_or_404(pid)
+        try:    # an unbuildable scene selection is the user's to fix now, not a failed job later
+            engine.check_build(pid, body.keep)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
         usage.tag(surface="video")
 
         def run(job: jobs_mod.Job):

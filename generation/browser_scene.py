@@ -171,14 +171,16 @@ def _semantic_html(scene: BrowserScene, state: VisualState,
                 for key, value in displayed_fields(obj.kind, payload))
             output.append(f'<div class="semantic-object semantic-note" data-object-id="{escape(obj.id)}">'
                           f'{label}{fields}</div>')
+    layers = _flow_layers(scene)
+    if not layers or any(objects[obj_id].kind in {"array", "chart"} for obj_id in placed):
+        # Not a flow. An array or chart is the subject of every step even when the action names
+        # its pointer or counter, so nothing here is dimmed as "an earlier step".
+        return "".join(output)
     if active:
         # Earlier steps stay readable but step back, so the eye follows the current one.
         output = [html if obj_id in active else html.replace(
                       'class="semantic-object', 'class="semantic-object is-past', 1)
                   for obj_id, html in zip(placed, output)]
-    layers = _flow_layers(scene)
-    if not layers or any(objects[obj_id].kind in {"array", "chart"} for obj_id in placed):
-        return "".join(output)
     columns: dict[int, list[str]] = {}
     for obj_id, html in zip(placed, output):
         columns.setdefault(layers[obj_id], []).append(html)

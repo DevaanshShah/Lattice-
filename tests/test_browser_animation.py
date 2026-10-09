@@ -7,7 +7,7 @@ from composition.slides import chrome_path
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.browser_visual_plan import BrowserVisualPlan
 from core.schemas.lesson_plan import LessonPlan
-from core.visual_state import opening_state
+from core.visual_state import apply_action, opening_state
 from generation.browser_scene import animation_html, render_animated_beat
 
 
@@ -179,3 +179,33 @@ def test_harness_request_result_and_rejected_arguments_build_as_one_video(tmp_pa
                 or edge["y"] + edge["height"] <= obstacle["y"]
                 or obstacle["y"] + obstacle["height"] <= edge["y"])  # arrow avoids the error box
         browser.close()
+
+
+def _snapshots(document: str) -> list[str]:
+    data = document.split('<script id="animation-plan" type="application/json">')[1]
+    return json.loads(data.split("</script>")[0].replace("<\\/", "</"))["snapshots"]
+
+
+@pytest.mark.unit
+def test_an_array_is_never_dimmed_as_an_earlier_step():
+    from scripts.video_regression import cases
+
+    scene = BrowserVisualPlan.model_validate_json(
+        (cases()["binary_search"] / "browser_visual_plan.json").read_text(encoding="utf-8")).scenes[0]
+    state = opening_state(scene)
+    for beat in scene.beats:    # actions name the pointer and the target far more often than the array
+        document = animation_html(scene, beat, title="Search", opening=state, duration=4)
+        assert not any("is-past" in snapshot for snapshot in _snapshots(document))
+        for action in beat.actions:
+            apply_action(state, action)
+
+
+@pytest.mark.unit
+def test_a_flow_still_dims_the_step_the_beat_has_not_touched():
+    scene = flow()
+    scene.beats[0].actions[0].kind = "highlight"
+    scene.beats[0].actions[0].target_ids = ["tool"]
+    last = _snapshots(animation_html(scene, scene.beats[0], title="Tool call",
+                                     opening=opening_state(scene), duration=2))[-1]
+    assert 'class="semantic-object is-past semantic-note" data-object-id="request"' in last
+    assert 'class="semantic-object semantic-note" data-object-id="tool"' in last

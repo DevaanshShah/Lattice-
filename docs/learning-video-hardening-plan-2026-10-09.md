@@ -1,7 +1,7 @@
 # Learning video hardening plan
 
-Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phase 0 built on
-2026-10-09 and waiting for the owner to look at the contact sheets; Phase 1 is next
+Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phases 0 and 1
+done on 2026-10-09; Phase 2 (look) is next
 
 This plan covers the new learning-video path: the web Teach tab, renderer `browser_v2`, plan
 format version 2. It replaces one-off fixing with phases, and every phase ends with a test gate.
@@ -133,7 +133,7 @@ beat of `binary_search` (problem 8), and code text overlaps a box for a moment w
 While this ran, the Docker render image `lattice-render:0.2` was found deleted and was rebuilt
 with `python -m scripts.setup_env`.
 
-Still open for this gate: the owner looks at the contact sheets.
+The owner gave the go-ahead for Phase 1 on 2026-10-09.
 
 ### Phase 1: correctness fixes
 
@@ -158,6 +158,27 @@ forgotten citation is accepted; a transient error is retried; an array is never 
 
 Gate: unit tests green. Replaying the saved attempts gives the same verdicts as today (honest
 plans pass, fakes fail). The regression frames change only in array scenes.
+
+**Result, 2026-10-09.** Gate passed: 561 unit tests pass, all 15 saved attempts keep their verdict
+(5 honest plans pass, 10 fakes fail), and the only frames that changed are in `binary_search`,
+where "Target: 8" no longer fades out. Three things differ from the plan above.
+
+- **Scene cutting is refused only when it breaks the chain.** An existing test showed that
+  dropping a scene is a supported feature when scenes do not depend on each other, so a blanket
+  refusal would have removed working behaviour. The build endpoint now checks the selection
+  first and answers with a clear message when the remaining scenes depend on a removed one. The
+  outline screen keeps its switch and drag handle, hides "Add a scene" for these projects, and
+  says that dropping or reordering may not be possible. The validator reports a broken chain as
+  a reason instead of crashing.
+- **The evidence kind still has to match the requirement.** An existing test treats "a label
+  cannot prove a state change" as intended, so only citations stopped mattering. Hides that the
+  planner adds to tidy the screen are excluded from proof.
+- **The regression threshold was too loose.** The dimming fix moved the lowest frame score only
+  to 0.9989, which the first threshold of 0.995 called "same". Unchanged code scores exactly 1.0,
+  so anything below 0.9999 is now reported as changed.
+
+Left for later phases: the kind label is still the model's own paperwork, and a hide the model
+adds itself counts as a state change even when it was not cited.
 
 ### Phase 2: look
 

@@ -20,26 +20,28 @@ SPEC = SceneSpec.model_validate({
     "beats": [{"action": "create", "targets": ["o"]}]})
 
 LESSON = LessonPlan.model_validate({
+    "schema_version": 2,
     "topic": "TCP", "skill_id": "workflow_explainer", "learning_objective": "Trace TCP",
     "scenes": [
         {"id": "s0", "title": "Connect", "learning_goal": "Open the connection",
          "beats": [{"id": "b0", "spoken_text": "Send SYN", "claim_ids": ["c0"],
-                    "visual_anchors": ["SYN"]}]},
+                    "visual_anchors": ["SYN"], "claim_requirements": {"c0": ["label"]}}]},
         {"id": "s1", "title": "Confirm", "learning_goal": "Confirm the connection",
          "beats": [{"id": "b1", "spoken_text": "Receive ACK", "claim_ids": ["c1"],
-                    "visual_anchors": ["ACK"]}]},
+                    "visual_anchors": ["ACK"], "claim_requirements": {"c1": ["label"]}}]},
     ]})
 
 VISUAL = BrowserVisualPlan.model_validate({
+    "schema_version": 2,
     "topic": "TCP", "skill_id": "workflow_explainer", "scenes": [
         {"lesson_scene_id": "s0", "pattern": "workflow",
          "objects": [{"id": "syn", "kind": "message", "role": "input", "label": "SYN"}],
-         "beats": [{"narration_beat_id": "b0", "actions": [{"kind": "appear", "target_ids": ["syn"]}],
+         "beats": [{"narration_beat_id": "b0", "actions": [{"id": "show_syn", "kind": "appear", "target_ids": ["syn"]}],
                     "evidence": [{"claim_ids": ["c0"], "object_ids": ["syn"], "kind": "label"}]}],
          "opening_visible_ids": [], "closing_visible_ids": ["syn"]},
         {"lesson_scene_id": "s1", "pattern": "workflow",
          "objects": [{"id": "ack", "kind": "message", "role": "output", "label": "ACK"}],
-         "beats": [{"narration_beat_id": "b1", "actions": [{"kind": "appear", "target_ids": ["ack"]}],
+         "beats": [{"narration_beat_id": "b1", "actions": [{"id": "show_ack", "kind": "appear", "target_ids": ["ack"]}],
                     "evidence": [{"claim_ids": ["c1"], "object_ids": ["ack"], "kind": "label"}]}],
          "opening_visible_ids": [], "closing_visible_ids": ["ack"]},
     ]})
@@ -375,3 +377,48 @@ def test_build_failure_is_surfaced_as_failed_job(client):
     job_id = client.post(f"/api/projects/{pid}/build", json={"keep": []}).json()["job_id"]
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "failed" and job["error"]
+
+
+def _chained_project(client, tmp_path) -> str:
+    """A planned learning-video project whose saved plan is the three-scene chained fixture."""
+    import shutil
+
+    from scripts.video_regression import cases
+
+    pid = client.post("/api/projects", json={
+        "topic": "TCP", "renderer": "browser_v2", "recipe": "auto"}).json()["id"]
+    for name in ("lesson_plan.json", "browser_visual_plan.json"):
+        shutil.copyfile(cases()["tool_flow"] / name, tmp_path / "web" / pid / name)
+    return pid
+
+
+@pytest.mark.unit
+def test_browser_v2_build_refuses_a_selection_that_breaks_the_scene_chain(client, tmp_path):
+    pid = _chained_project(client, tmp_path)
+    cut = client.post(f"/api/projects/{pid}/build", json={"keep": [0, 2]})
+    assert cut.status_code == 400
+    assert "build on each other" in cut.json()["detail"]
+    assert "absent from prior closing state" in cut.json()["detail"]     # the reason, not a crash
+    added = client.post(f"/api/projects/{pid}/build", json={"keep": [0, 1, 2, -1]})
+    assert added.status_code == 400 and "cannot take a new scene" in added.json()["detail"]
+
+    whole = client.post(f"/api/projects/{pid}/build", json={"keep": [0, 1, 2]})
+    assert whole.status_code == 200
+    assert client.get(f"/api/jobs/{whole.json()['job_id']}").json()["status"] == "done"
+
+
+@pytest.mark.unit
+def test_browser_v2_build_says_when_a_saved_plan_predates_the_checker(client, tmp_path):
+    import json
+
+    pid = _chained_project(client, tmp_path)
+    path = tmp_path / "web" / pid / "browser_visual_plan.json"
+    plan = json.loads(path.read_text(encoding="utf-8"))
+    for action in plan["scenes"][0]["beats"][0]["actions"]:
+        if action["kind"] == "set_state":       # what an older checker accepted: a glow as "proof"
+            action["kind"], action["params"] = "highlight", {}
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    stale = client.post(f"/api/projects/{pid}/build", json={})
+    assert stale.status_code == 400
+    assert "planned with an older version" in stale.json()["detail"]
+    assert "Plan the video again" in stale.json()["detail"]

@@ -10,6 +10,47 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-09 — A cut or reordered learning video is refused only when the scene chain breaks
+
+**Context.** Scenes of a learning video usually build on each other: an object one scene leaves on
+screen opens the next. Dropping the middle scene in the outline crashed the build with a raw
+`KeyError`. The hardening plan said to refuse every cut or reorder for these projects.
+
+**Decision.** `Engine.check_build` narrows the saved plan to the approved scenes and runs the
+validator on what remains, before a job is queued. The build endpoint answers 400 with the
+validator's reason when the chain is broken, and builds normally when the remaining scenes still
+validate. The validator checks carryover against the previous scene before it replays anything,
+so a broken chain is a reason, not a crash.
+
+**Why not the alternative.** A blanket refusal: an existing API test builds a project after
+dropping its first scene, with independent scenes, so that would remove behaviour that works.
+Hiding the outline controls: same loss, and the server would still need the check for any other
+caller. Letting the job fail later: the user waits for a failure they could have been told at once.
+
+**Consequence.** Whether a cut is allowed depends on the plan, which the user cannot see, so the
+outline text now warns that it may not be possible. Adding a scene after planning is always
+refused, and that control is hidden for these projects.
+
+### 2026-10-09 — Proof looks at the objects a claim names, not at the actions the plan cites
+
+**Context.** After 2026-09-29 the validator judged proof from screen effects, but only the effects
+of the actions the plan cited, on any object. A correct screen failed when the model forgot to
+cite one action, and a change to an unrelated card passed as proof.
+
+**Decision.** For `state_change` and `sequence`, every action of the beat is considered, and a step
+counts only when it reveals, changes or removes an object the claim's evidence names, or the array
+under a named pointer. Earlier-beat actions count only for `sequence` and only when cited. Hides
+the planner inserts to tidy the screen never count.
+
+**Why not the alternative.** Dropping the evidence block entirely: the claim still has to say which
+objects it is about, and nothing else in the plan does. Ignoring the evidence kind as well: an
+existing test treats "a label cannot prove a state change" as intended behaviour, so that stays.
+
+**Consequence.** A hide the model adds itself now counts as a state change without being cited.
+The evidence kind is still the model's own label and can still cause a false failure.
+
+---
+
 ### 2026-10-09 — The video regression compares against local videos rendered with silent narration
 
 **Context.** Nothing checked how a learning video looks; the 2026-09-23 renderer change passed
@@ -30,7 +71,8 @@ dependency for something FFmpeg already does.
 
 **Consequence.** A fresh clone has no baseline until the regression is run once and accepted, so
 the first run on a new machine cannot detect a change. Two runs of the same code match at SSIM
-1.0000 on this machine, so the threshold of 0.995 flags real differences only.
+exactly 1.0 on this machine. The first threshold of 0.995 was too loose: a label that stopped
+fading moved the lowest frame only to 0.9989. Anything below 0.9999 is now reported as changed.
 
 ---
 

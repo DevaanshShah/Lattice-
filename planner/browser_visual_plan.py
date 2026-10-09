@@ -12,6 +12,7 @@ from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, closing_state
 from core.visual_assets import asset_inventory
 from core.textutil import extract_json
+from planner.lesson_plan import TRANSPORT_ATTEMPTS
 from planner.product_recipe import Recipe
 from prompts.loader import load
 from verification.visual_plan_validation import VisualPlanValidationError, validate, validate_scene
@@ -230,7 +231,7 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
         ]
         last: Exception | None = None
         for attempt in range(attempts):
-            raw = client.chat(messages, max_tokens=4096, attempts=1, timeout=60.0)
+            raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0)
             if diagnostic_dir is not None:
                 folder = Path(diagnostic_dir)
                 folder.mkdir(parents=True, exist_ok=True)

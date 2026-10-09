@@ -40,7 +40,9 @@ from core.console import enable_utf8
 GOLDEN = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "video_golden"
 WORDS_PER_SECOND = 2.3      # the narration pace composition.decoupled budgets for
 MIN_BEAT_SECONDS = 2.0
-SSIM_SAME = 0.995           # below this on any frame the case is reported as CHANGED
+# Two runs of unchanged code give identical frames (SSIM exactly 1.0), and a small label changing
+# opacity only moves a whole-frame score to about 0.999. So anything short of identical is a change.
+SSIM_SAME = 0.9999
 
 
 @dataclass

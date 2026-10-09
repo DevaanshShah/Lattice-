@@ -623,3 +623,60 @@ def test_planner_clears_finished_steps_to_reach_the_declared_closing_screen():
     scene.closing_visible_ids = ["call", "never_shown"]
     browser_visual_plan.derive_closing(scene, None)
     assert scene.closing_visible_ids == ["call"]
+
+
+def _validated_request_scene():
+    return _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "check", "kind": "set_state", "target_ids": ["args"], "params": {"validated": True}},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "check", "send"])
+
+
+def test_a_change_to_an_object_the_claim_does_not_name_is_not_proof():
+    lesson, plan = _validated_request_scene()
+    scene = plan.scenes[0]
+    scene.objects.append(VisualObject.model_validate(
+        {"id": "note", "kind": "card", "role": "context", "label": "Note", "payload": {"x": 1}}))
+    scene.opening_visible_ids.append("note")
+    scene.closing_visible_ids.append("note")
+    check = scene.beats[0].actions[1]
+    check.target_ids, check.params = ["note"], {"x": 2}      # the request itself never changes
+    with pytest.raises(VisualPlanValidationError, match="check: no visible change"):
+        validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_a_shown_state_change_counts_even_when_the_evidence_forgets_to_cite_it():
+    lesson, plan = _validated_request_scene()
+    plan.scenes[0].beats[0].evidence[0].action_ids = ["show", "send"]
+    validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_a_hide_the_planner_added_to_tidy_the_screen_is_not_proof():
+    def plan_with_hide(action_id):
+        lesson, plan = _tool_call_scene([
+            {"id": "show", "kind": "appear", "target_ids": ["args", "call"]},
+            {"id": action_id, "kind": "hide", "target_ids": ["args"]},
+        ], ["show"])
+        lesson.scenes[0].beats[0].claim_requirements = {"validate": ["state_change"]}
+        plan.scenes[0].beats[0].evidence[0].kind = "state_change"
+        plan.scenes[0].closing_visible_ids = ["call"]
+        return lesson, plan
+
+    skill = load_recipes()["workflow_explainer"]
+    validate(*plan_with_hide("remove_request"), skill)          # the model's own removal is a change
+    with pytest.raises(VisualPlanValidationError, match="lacks state_change visual proof"):
+        validate(*plan_with_hide("clear_finished_steps"), skill)
+
+
+def test_a_scene_cut_from_a_chained_plan_fails_with_the_reason_not_a_crash():
+    from scripts.video_regression import cases
+
+    folder = cases()["tool_flow"]
+    lesson = LessonPlan.model_validate_json((folder / "lesson_plan.json").read_text(encoding="utf-8"))
+    plan = BrowserVisualPlan.model_validate_json(
+        (folder / "browser_visual_plan.json").read_text(encoding="utf-8"))
+    lesson = lesson.model_copy(update={"scenes": [lesson.scenes[0], lesson.scenes[2]]})
+    plan = plan.model_copy(update={"scenes": [plan.scenes[0], plan.scenes[2]]})
+    with pytest.raises(VisualPlanValidationError, match="absent from prior closing state"):
+        validate(lesson, plan, load_recipes()[lesson.skill_id])

@@ -587,14 +587,21 @@ function phaseOutline() {
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;"><div data-act="ol-toggle" data-i="${i}" title="Include">${toggle(sc.enabled)}</div><div data-act="ol-remove" data-i="${i}" title="Remove" style="width:30px;height:30px;border-radius:5px;display:grid;place-items:center;cursor:pointer;color:var(--faint);font-size:13px;">✕</div></div>
     </div>`).join("");
   const n = state.outline.filter(o => o.enabled).length;
+  // A learning video's scenes are planned as a chain: one scene's closing screen opens the next. A
+  // scene cannot be added after planning, and a cut or reorder is refused by the server when the
+  // scenes that remain depend on the one that moved.
+  const chained = state.project && state.project.renderer === "browser_v2";
+  const hint = chained
+    ? "Check the scenes in this plan. They build on each other, so dropping or reordering one may not be possible. Nothing has been made yet."
+    : "Check the theme and scenes in this plan. Reorder or drop any scene. Nothing has been made yet.";
   return `<div class="lt-fade" style="max-width:780px;margin:0 auto;padding:38px 32px 64px;">
     <div style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Step 2 · Review theme &amp; storyboard</div>
     <h2 style="${DISPLAY}font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--text);margin:0 0 8px;line-height:1.03;">Here's the plan for your video</h2>
-    <p style="color:var(--muted);font-size:15px;margin:0 0 24px;">Check the theme and scenes in this plan. Reorder or drop any scene. Nothing has been made yet.</p>
+    <p style="color:var(--muted);font-size:15px;margin:0 0 24px;">${hint}</p>
     ${themePanel()}
     <div style="${MONO}font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin:6px 0 2px;">Storyboard</div>
     <div style="border-top:1px solid var(--line);">${rows}</div>
-    <div data-act="ol-add" style="display:flex;align-items:center;gap:10px;padding:16px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;cursor:pointer;"><span style="color:var(--accent);font-size:15px;">＋</span> Add a scene</div>
+    ${chained ? "" : `<div data-act="ol-add" style="display:flex;align-items:center;gap:10px;padding:16px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;cursor:pointer;"><span style="color:var(--accent);font-size:15px;">＋</span> Add a scene</div>`}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:26px;flex-wrap:wrap;">
       <span style="${MONO}font-size:12px;color:var(--faint);">${n} scenes · ~${Math.max(1, Math.round(n * 0.55))} min</span>
       <div style="display:flex;gap:10px;"><button data-act="back-prompt" style="padding:11px 16px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:14px;cursor:pointer;">Back</button><button class="lt-btnp" data-act="approve" style="padding:11px 22px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14.5px;cursor:pointer;">Approve &amp; generate</button></div>

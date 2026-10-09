@@ -9,6 +9,11 @@ from planner.product_recipe import Recipe
 from prompts.loader import load
 
 
+# Transport attempts for ONE planning call (timeout, 429, 5xx, blank answer). The validator's
+# repair loop deals with wrong answers; this only keeps a single network blip from ending a plan.
+TRANSPORT_ATTEMPTS = 3
+
+
 class LessonPlanError(RuntimeError):
     pass
 
@@ -27,7 +32,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     ]
     last: Exception | None = None
     for _ in range(attempts):
-        raw = client.chat(messages, max_tokens=4096, attempts=1, timeout=60.0)
+        raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0)
         try:
             data = extract_json(raw)
             data["topic"] = topic

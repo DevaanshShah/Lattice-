@@ -28,6 +28,8 @@ from editing import arrange, history, tweak
 from editing._common import restitch_and_save
 from planner import approval
 from planner import outline as planner_outline
+from verification.visual_plan_validation import VisualPlanValidationError
+from verification.visual_plan_validation import validate as validate_visual_plan
 from web.devtrace import traced
 
 
@@ -212,22 +214,51 @@ class Engine:
             storage.offload(final, storage.video_key(pid), log=say)
         return built
 
-    def _build_browser(self, pid: str, project: VideoProject, *, keep: list[int] | None,
-                       log=print, on_scene=None) -> VideoProject:
+    def _browser_selection(self, pid: str, project: VideoProject, keep: list[int] | None):
+        """The saved lesson and visual plan narrowed to the approved scenes, checked BEFORE any render.
+
+        Learning-video scenes usually build on each other: an object one scene leaves on screen
+        opens the next. A cut or reorder is therefore buildable only when the scenes that remain
+        still validate as a chain, and the user is told why when they do not."""
         workspace = self.workspace(pid)
         lesson = LessonPlan.model_validate_json(
             (workspace / "lesson_plan.json").read_text(encoding="utf-8"))
         visual = BrowserVisualPlan.model_validate_json(
             (workspace / "browser_visual_plan.json").read_text(encoding="utf-8"))
-        kept = list(range(len(lesson.scenes))) if keep is None else list(keep)
+        planned = list(range(len(lesson.scenes)))
+        kept = planned if keep is None else list(keep)
         if any(index < 0 or index >= len(lesson.scenes) for index in kept):
-            raise ValueError("browser_v2 outline contains an unknown scene")
+            raise ValueError("A learning video cannot take a new scene after planning. "
+                             "Plan the video again to add one.")
         lesson = lesson.model_copy(update={"scenes": [lesson.scenes[index] for index in kept]})
         visual_by_id = {scene.lesson_scene_id: scene for scene in visual.scenes}
         visual = visual.model_copy(update={
             "scenes": [visual_by_id[scene.id] for scene in lesson.scenes]
         })
         skill = browser_video.product_recipe.pick_recipe(project.topic, lesson.skill_id)
+        try:
+            validate_visual_plan(lesson, visual, skill)
+        except VisualPlanValidationError as exc:
+            if kept != planned:
+                raise ValueError(
+                    "These scenes build on each other, so this selection cannot be built "
+                    f"({exc}). Keep every scene in its planned order, or plan the video again.") from exc
+            raise ValueError(
+                "This saved plan no longer passes the visual checker; it was planned with an older "
+                f"version ({exc}). Plan the video again.") from exc
+        return lesson, visual, skill
+
+    def check_build(self, pid: str, keep: list[int] | None) -> None:
+        """Raise ValueError when the approved scenes cannot be built, before a job is queued.
+        Only learning-video projects can fail here; the other paths have independent scenes."""
+        project = self.load(pid)
+        if project.renderer == "browser_v2":
+            self._browser_selection(pid, project, keep)
+
+    def _build_browser(self, pid: str, project: VideoProject, *, keep: list[int] | None,
+                       log=print, on_scene=None) -> VideoProject:
+        workspace = self.workspace(pid)
+        lesson, visual, skill = self._browser_selection(pid, project, keep)
         result = browser_video.build(lesson, visual, skill, out_dir=workspace,
                                      log=log, on_scene=on_scene)
         outline = Outline(topic=project.topic, items=[
