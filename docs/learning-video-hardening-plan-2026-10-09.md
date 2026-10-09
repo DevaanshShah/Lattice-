@@ -64,6 +64,19 @@ move like this:
 7. **Lines draw themselves,** and a new piece goes from dim to bright.
 8. **The title starts as a card** and then stays as a small header.
 
+Three more frames from the owner (8 to 10 in the same folder) add these points:
+
+9. **The video is a series of boards.** Each has a hand-lettered heading, and the same pieces
+   come back from board to board. The big map is one board the video returns to.
+10. **Code is an editor window:** a title bar, a file name and coloured code, joined to the
+    diagram by an arrow.
+11. **A state is shown, not said.** A load bar at 100% above a server that has turned red, many
+    balls on one arrow for many requests, a cracked database.
+12. **A quantity is shown by repeating a piece:** nine phones stand for ten thousand users.
+13. **Ideas that are not parts of the system** are a short stack of cards beside the map, each
+    with a small figure, a title and one line.
+14. **A board can end with a one-line takeaway** with a tick in front of it.
+
 The motion in points 5 and 7 is read from differences between still frames and from the owner's
 description, not from the video itself.
 
@@ -288,6 +301,11 @@ video's own diagram proves it, before the planner is asked to write such plans.
 8. **A hand-written fixture, `system_design_map`.** App, load balancer, three servers, cache, and
    a database panel with indexes, a replica and two shards, revealed in eight to ten steps. It
    joins the fixed regression set.
+9. **Supporting pieces,** after items 1 to 8 work: code as an editor window; a load bar with a
+   value; a piece repeated to show a quantity; a piece that changes colour when its state
+   changes; a card with a small figure, a title and one line; a takeaway line with a tick. A
+   second hand-written fixture, an overload board (many users, one red server, load at 100%),
+   shows them together.
 
 Tests to add: an icon piece carries its tone and label; panel members sit inside the panel; a
 piece has the same rectangle in every scene of a shared map; the ball is on the reached piece
