@@ -1,8 +1,7 @@
 # Learning video hardening plan
 
 Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phases 0 and 1
-done on 2026-10-09; Phase 2 (look) built on 2026-10-10 and waiting for the owner to approve the
-contact sheets
+done on 2026-10-09; Phase 2 (look) done on 2026-10-10, look approved by the owner; Phase 3 is next
 
 This plan covers the new learning-video path: the web Teach tab, renderer `browser_v2`, plan
 format version 2. It replaces one-off fixing with phases, and every phase ends with a test gate.
@@ -202,8 +201,8 @@ Gate: unit tests green. No compact-layout fallback on the fixed set. The owner c
 contact sheets per case (Phase 0 baseline, new, and the 2026-09-20 gold video) and approves.
 Then the baseline is updated.
 
-**Result, 2026-10-10.** Built; the owner's approval is the part of the gate still open. 572 unit
-tests pass. All seven regression cases pass with no compact-layout fallback. The original card
+**Result, 2026-10-10.** Gate passed: the owner approved the look and the baseline was updated. 572
+unit tests pass. All seven regression cases pass with no compact-layout fallback. The original card
 renderer (`legacy_cards`), the Manim case, the still-frame case and the chart are frame-identical
 to the baseline. `tool_flow` and `structured_args` changed as intended. `binary_search` changed
 only in how its first fade-in is drawn. Two runs of the new code match on every frame.
