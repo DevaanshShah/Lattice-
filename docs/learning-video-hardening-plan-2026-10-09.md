@@ -1,7 +1,8 @@
 # Learning video hardening plan
 
 Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phases 0 and 1
-done on 2026-10-09; Phase 2 (look) done on 2026-10-10, look approved by the owner; Phase 3 is next
+done on 2026-10-09; Phase 2 (look) done on 2026-10-10. On 2026-10-10 the owner set a target
+style, and the plan from Phase 3 onward was rewritten around it; Phase 3 (map pieces) is next
 
 This plan covers the new learning-video path: the web Teach tab, renderer `browser_v2`, plan
 format version 2. It replaces one-off fixing with phases, and every phase ends with a test gate.
@@ -44,16 +45,41 @@ Evidence: the `MEMORY.md` entries for 2026-09-29 and 2026-10-09, and the researc
 `reports/Explainer video generation architectures.md`. The research supports keeping this
 architecture and strengthening the checks.
 
+## Target style (set by the owner on 2026-10-10)
+
+The owner named one reference: a "System Design for Beginners" explainer video. Seven frames of
+it are kept locally in `out/reference/system-design-style-2026-10-10/`. They are not in git,
+because it is someone else's video. A learning video about a system or a process should look and
+move like this:
+
+1. **One map for the whole lesson.** The diagram is not restarted for each scene. It is built
+   piece by piece along the path of a request, and every piece keeps its place to the end.
+2. **Pieces are icons.** A phone, server racks, a database cylinder, a lightning bolt. A card with
+   values is used only when the values are the point.
+3. **One or two words per piece.** The voice explains; the screen names.
+4. **A simple palette on a black background.** Thin outlines, one colour per idea (pink, purple,
+   teal, yellow), the label in the colour of its piece, light grey arrows.
+5. **A small ball moves along the arrows** to the piece the narrator is talking about.
+6. **Related pieces sit in one panel,** such as a database with its replica, shards and indexes.
+7. **Lines draw themselves,** and a new piece goes from dim to bright.
+8. **The title starts as a card** and then stays as a small header.
+
+The motion in points 5 and 7 is read from differences between still frames and from the owner's
+description, not from the video itself.
+
+Not part of this target, and moved to section 5: graphs, equations that transform, and other
+mathematics visuals.
+
 ## 2. Working rules
 
 1. One phase at a time. A phase is one commit, or a few small ones, on this branch.
 2. A phase is finished only when its gate passes. If the gate fails, revert that phase and write
    down why.
-3. Phases 0 to 2 make no AI calls. They are tested by re-rendering saved plans, which is free.
+3. Phases 0 to 3 make no AI calls. They are tested by re-rendering saved plans, which is free.
 4. No AI spend without the owner's go-ahead. Every live run states its maximum cost first.
 5. Never judge by tests or plan files alone. Every gate includes rendered frames.
 6. Do not hand-edit a generated plan as a fix. Fix the planner, the checker or the renderer.
-7. `main` and the old Manim pipeline stay untouched until Phase 4.
+7. `main` and the old Manim pipeline stay untouched until Phase 5.
 8. A second agent session also writes to this repo. Check file modification times before editing.
 9. After code changes run `graphify update .`. After each phase add a `MEMORY.md` entry, and a
    `DECISIONS.md` entry for any choice a reader could question.
@@ -69,8 +95,11 @@ The new path can replace the old one on `main` when all of these are true:
 4. No sampled frame has overlapping boxes, cut-off text or a hidden arrow label.
 5. Each process step visibly changes something, the current step is highlighted, and flows read
    left to right.
-6. The owner judges the look at least as good as the 2026-09-20 gold video.
-7. Unit tests and the regression harness are green.
+6. A lesson about a system is one map built piece by piece in the target style: icon pieces, one
+   or two words each, one colour per idea on black, and a ball that moves to each step as it is
+   spoken.
+7. The owner judges the result against the reference frames.
+8. Unit tests and the regression harness are green.
 
 ## 4. Phases
 
@@ -79,8 +108,9 @@ The new path can replace the old one on `main` when all of these are true:
 | 0 | Checkpoint and safety net | none | medium | Harness green; owner accepts the starting contact sheets |
 | 1 | Correctness fixes | none | medium | Tests green; saved-plan verdicts as expected; frames change only where intended |
 | 2 | Look | none | large | No compact-layout fallback on the fixed set; owner approves contact sheets |
-| 3 | Lesson step and prompts | yes, capped | large | Plan battery beats the baseline; lesson length within budget |
-| 4 | Acceptance and merge | yes, capped | small | Definition of done; owner sign-off |
+| 3 | Map pieces: the target style in the renderer | none | large | The hand-written system map renders; owner approves it against the reference frames |
+| 4 | One map per lesson: lesson step and prompts | yes, capped | large | Plan battery beats the baseline; lesson length within budget |
+| 5 | Acceptance and merge | yes, capped | small | Definition of done; owner sign-off |
 
 ### Phase 0: checkpoint and safety net
 
@@ -236,36 +266,72 @@ Review material: `out/video_regression/phase2_review/` holds a before-over-after
 videos for each changed case, and the gold video with its sheet. Approve with
 `python -m scripts.video_regression`, then `--accept-last`.
 
-### Phase 3: lesson step and prompts
+### Phase 3: map pieces (the target style in the renderer)
+
+No AI calls. The renderer learns the target style, and a hand-written plan of the reference
+video's own diagram proves it, before the planner is asked to write such plans.
+
+1. **Icon pieces.** An icon object becomes a piece of a flow: an outlined icon in its colour with
+   a one- or two-word label under it. It takes part in the layout, the glow and the dimming like
+   a card. The colour is a `tone` from a fixed palette.
+2. **Palette and background.** The stage is black. Cards, arrows and labels use the same palette
+   with thin outlines and flat fills. Old-format plans are not touched.
+3. **Panels.** A group object draws a rounded panel around its member pieces, with a header
+   strip, and an arrow can end at the panel's edge.
+4. **The ball.** It moves along an arrow during a connect action, as today, and then stays on the
+   piece it reached until its next move.
+5. **Lines draw themselves** when a connection first appears.
+6. **One layout for the whole lesson.** When scenes share a map, every scene uses the layout of
+   the full map, so a piece keeps its place and size across scenes.
+7. **Icons that are missing.** A lightning bolt for the cache and a load-balancer icon, from the
+   Lucide set the other 43 come from.
+8. **A hand-written fixture, `system_design_map`.** App, load balancer, three servers, cache, and
+   a database panel with indexes, a replica and two shards, revealed in eight to ten steps. It
+   joins the fixed regression set.
+
+Tests to add: an icon piece carries its tone and label; panel members sit inside the panel; a
+piece has the same rectangle in every scene of a shared map; the ball is on the reached piece
+after its move; old-format frames stay identical.
+
+Gate: unit tests green. The regression set passes with no compact-layout fallback, and the
+old-format case is frame-identical. The owner compares the `system_design_map` video and contact
+sheet with the reference frames and approves.
+
+### Phase 4: one map per lesson (lesson step and prompts)
 
 This phase changes what the AI is asked, so it needs live runs.
 
 0. **Measure first.** Run the plan battery on the unchanged prompts with `gpt-4o-mini` and
    `gpt-4o`, and store it as the baseline.
-1. **Duration reaches the lesson.** `composition/browser_video.py` passes the requested duration
+1. **The lesson step plans one map.** For a system or process topic it first lists the pieces
+   (icon, one- or two-word label, colour, panel) and the arrows, then the order in which they
+   are revealed, with the narration for each step. The visual step reveals pieces of that map
+   and moves the ball. It cannot add a piece the map does not have.
+2. **Duration reaches the lesson.** `composition/browser_video.py` passes the requested duration
    and scene count to the lesson step. The prompt gets a word budget of duration × 2.3 words per
    second, the pace the old pipeline already uses. The lesson is rejected and retried when it is
    more than 25% away from the budget. Cutting scenes off a finished lesson is removed.
-2. **The lesson step is told what can be drawn.** Its prompt refers to a list of visual forms
+3. **The lesson step is told what can be drawn.** Its prompt refers to a list of visual forms
    that is not there today.
-3. **A plain-language demonstration per beat.** A new optional field in the lesson says what the
+4. **A plain-language demonstration per beat.** A new optional field in the lesson says what the
    viewer should see change. It is passed to the visual step. Old saved lessons still load.
-4. **No label-only scenes.** Every scene needs at least one claim that requires real proof.
-5. **Split planner prompt.** A short core, plus one section per family: algorithm, flow, data,
+5. **No label-only scenes.** Every scene needs at least one claim that requires real proof.
+6. **Split planner prompt.** A short core, plus one section per family: algorithm, flow, data,
    media. The lesson step tags each scene with a family and only that section is sent. An
    unknown family sends everything, as today. The four contradictions are removed.
-6. **Proof failures name the object.** The retry message says which claimed object did not change.
-7. **Default model.** Chosen from the battery numbers.
+7. **Proof failures name the object.** The retry message says which claimed object did not change.
+8. **Default model.** Chosen from the battery numbers.
 
 Gate: against the baseline, plan success and first-try scene passes do not fall, and should rise.
 Lessons are within the word budget. Unit tests and the regression harness stay green. Expected
 spend for the phase is about one to two US dollars, as an estimate from measured costs
 (`gpt-4o-mini` about $0.003 per plan, `gpt-4o` about $0.06 to $0.16). Each run is confirmed first.
 
-### Phase 4: acceptance and merge
+### Phase 5: acceptance and merge
 
 1. Three full videos through the web engine with `scripts/selftest.py --renderer browser_v2`:
-   binary search, the order-lookup harness, and one more topic the owner picks.
+   a system topic in the target style (the reference's own subject is the obvious one), the
+   order-lookup harness, and binary search.
 2. The owner reviews them against section 3. Results are written into this file.
 3. Update the status lines in `docs/learning-video-implementation-plan.md`, `MEMORY.md` and
    `DECISIONS.md`. Add the rule "judge by screen change, never by the evidence block" to the
@@ -279,7 +345,13 @@ Gate: the definition of done, and the owner's sign-off.
 - **Layout engine** for placing boxes and arrows. It adds a dependency, which the original plan
   forbids, and nobody has tested it in video. Try it on a side branch and compare contact sheets.
 - **Editing on the new path:** regenerate one scene, then re-check the scenes that depend on it.
-- **Math components:** graphs and tables from the old Manim scaffold (`generation/lattice_scene.py`).
+- **Mathematics visuals:** graphs with a moving point, equations that change step by step, simple
+  geometry. The old Manim scaffold (`generation/lattice_scene.py`) has graph and table pieces to
+  start from.
+- **A title card that shrinks into the header,** and a hand-lettered font. The font needs a
+  bundled font file with an open licence.
+- **Illustrated pieces:** a phone screen with a feed, a figure on a concept card, a ring or a zoom
+  on one part of the map.
 - **Computed states for algorithm topics:** code runs the algorithm and fills the plan.
 - **Meaning checks:** read text from frames, ask a vision model narrow yes or no questions, and
   hand-label a sample of passing videos to measure how often the checker is wrong.
@@ -293,14 +365,19 @@ Gate: the definition of done, and the owner's sign-off.
   set are there to catch this.
 - Stable positions can leave a gap when a box is removed in the middle of a scene.
 - Array scenes need Docker.
-- The checker cannot prove that a picture teaches the claim. No published system can. Phase 4
+- The checker cannot prove that a picture teaches the claim. No published system can. Phase 5
   relies on a person for this.
+- The target style is known from seven still frames. Its motion is inferred, so the first
+  rendered map may need a round of changes after the owner sees it move.
+- One map for a long lesson can get crowded. Scrolling or zooming the map is not planned yet.
 - Drafts planned before 2026-09-29 may need planning again.
 
 ## 7. Questions for the owner
 
-1. Which third acceptance topic: the contour lesson from the original plan, or another?
+1. Answered 2026-10-10: the target is the reference video's style, so the third acceptance topic
+   is a system topic in that style.
 2. If `gpt-4o-mini` fails the battery, is `gpt-4o` acceptable as the default?
 3. Should `reports/` go into git and `research_notes/` be ignored?
-4. Should the checkpoint commit be pushed, and with or without the co-author line?
+4. Answered 2026-10-09: commits are pushed, with only the owner's name on them.
 5. Can Docker Desktop stay on while gates are run?
+6. May two more Lucide icons be added in Phase 3 (same source and licence as the existing 43)?

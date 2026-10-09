@@ -10,6 +10,30 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-10 — The target is one named reference style, and the renderer learns it before the planner
+
+**Context.** After the card look was approved, the owner asked whether videos were only boxes and
+arrows, then showed seven frames of a "System Design for Beginners" explainer and said it was the
+exact style wanted: one map built piece by piece, icon pieces with one or two words, a simple
+palette on black, and a small ball that moves to each step as it is spoken.
+
+**Decision.** That reference is the target for system and process lessons. The plan's next phase
+teaches the renderer the style and proves it on a hand-written plan of the reference's own diagram,
+with no model calls. Only after the owner approves that render does the lesson step learn to plan
+one map per lesson.
+
+**Why not the alternative.** Changing the prompts first would spend money asking a model for plans
+the renderer cannot yet draw, and a bad result could not be told apart from a bad renderer.
+Mathematics visuals in the 3Blue1Brown manner, discussed the same day, are a different and larger
+build; they moved to the later list. Putting the reference frames in git was rejected because they
+are someone else's video.
+
+**Consequence.** The 2026-09-20 "gold" video is no longer the bar. The card look approved in Phase
+2 stays for lessons where the values are the point, but gets the black background and flat
+palette. The target's motion is known only from still frames and the owner's description.
+
+---
+
 ### 2026-10-10 — Every object of a scene has a fixed place, and the stage is sized to the frame
 
 **Context.** On the semantic stage only the visible objects were laid out, so a box jumped when its
