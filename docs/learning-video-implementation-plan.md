@@ -35,6 +35,20 @@ validators remain in use; semantic proof of arbitrary narrated claims is not sol
 
 ## Phase 3: continuous browser animation
 
+Status: continuous export implemented locally for explicitly timed browser beats.
+Native paused animations are sampled through one capture page per beat and encoded
+with the existing FFmpeg dependency. Connection packets, pointer/object movement,
+appearance, disappearance, highlights and state opacity changes are supported.
+Connections follow moving endpoints and route around intervening semantic objects.
+Fonts/assets are awaited, clipping is checked
+at intermediate frames, cancellation is cooperative and capture has a 300s bound.
+Untimed plans keep their old path. A motion fixture and the saved binary fixture
+verify exports. A three-scene saved harness fixture covers structured invocation,
+returned JSON, rejected missing arguments and a corrected attempt. Its audio is
+synthetic silence: real narration and fresh-model planning acceptance remain Phase 5.
+This is not word-aligned narration, arbitrary chart animation, or a new diagram
+layout planner. No claim of improved learning effectiveness is made.
+
 - Use one browser page with native Web Animations/SVG, paused and deterministically
   sampled at frame times. Wait for fonts and images before measuring geometry.
 - Preserve existing render supervision, saved artifacts and bounded layout retry.
@@ -43,6 +57,13 @@ validators remain in use; semantic proof of arbitrary narrated claims is not sol
 - Gate: inspect start/middle/end frames, actual motion, speech timing and export cost.
 
 ## Phase 4: mathematical and algorithm demonstrations
+
+Phase 1–3 review repairs:
+- Newly generated v2 scenes require timing cues; older saved untimed scenes remain loadable.
+- Semantic clips concatenate without audio crossfades, preserving complete narration.
+- Browser capture rejects actions shorter than two frame intervals and captures the
+  completed state in the final frame. This is a capture minimum, not a readability guarantee.
+- Fresh LLM planning with real narration still needs an end-to-end acceptance run.
 
 - Extend the bounded Manim compiler using installed 0.18.1 capabilities: MathTex,
   matching transforms, trackers/updaters and computed curves where appropriate.

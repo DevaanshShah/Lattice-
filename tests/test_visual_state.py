@@ -14,6 +14,7 @@ from planner import browser_visual_plan, lesson_plan
 from planner.browser_visual_plan import _normalise_v2_carryover
 from planner.product_recipe import load_recipes
 from verification.visual_plan_validation import VisualPlanValidationError, validate
+from verification.visual_plan_validation import _anchor_visible, _normalise_label
 
 
 def _binary_search():
@@ -77,6 +78,14 @@ def _binary_search():
 
 
 @pytest.mark.unit
+def test_structured_anchor_matches_visible_human_spacing_but_not_wrong_value():
+    labels = [_normalise_label("Order ID: 42"), _normalise_label("Action: lookup_order")]
+    assert _anchor_visible("order_id: 42", labels)
+    assert _anchor_visible("action: lookup_order", labels)
+    assert not _anchor_visible("order_id: 43", labels)
+
+
+@pytest.mark.unit
 def test_binary_search_plan_executes_a_sequence_and_discard():
     lesson, plan = _binary_search()
     validate(lesson, plan, load_recipes()["workflow_explainer"])
@@ -99,7 +108,7 @@ def test_semantic_browser_frame_draws_cells_and_discarded_range():
     assert len(re.findall(r'<div class="semantic-cell(?: |")', html)) == 7
     assert len(re.findall(r'<div class="semantic-cell[^"]*is-discarded', html)) == 3
     assert 'class="semantic-check is-match"' in html
-    assert "Check</div>" in html
+    assert "Check</span>" in html
     assert "Array" in html
 
 
@@ -181,8 +190,9 @@ def test_semantic_relationships_render_only_visible_endpoints(tmp_path):
                 source = page.locator('[data-object-id="request"]').bounding_box()
                 target = page.locator('[data-object-id="tool"]').bounding_box()
                 label = page.locator(".edge-label").bounding_box()
-                assert source["y"] + source["height"] <= label["y"]
-                assert label["y"] + label["height"] <= target["y"]
+                assert source["x"] + source["width"] <= target["x"]  # left to right
+                centre = label["x"] + label["width"] / 2
+                assert source["x"] + source["width"] / 2 < centre < target["x"] + target["width"] / 2
         browser.close()
     state.visible = {"request", "tool"}
     frame = render_scene(scene, tmp_path / "relationship.png", title="Tool call", state=state)
@@ -209,9 +219,9 @@ def test_saved_v2_plan_renders_action_frames_and_video(monkeypatch, tmp_path, ti
     monkeypatch.setattr(browser_video, "synthesize",
                         lambda text, out_dir, engine: Clip(text, audio, 6.0))
     result = browser_video.build(lesson, plan, load_recipes()["workflow_explainer"],
-                                 out_dir=tmp_path / "render", beat_transition=0)
+                                 out_dir=tmp_path / "render", fps=10)
     assert result.mp4.exists()
-    assert len(result.frames) == (10 if timed else 8)
+    assert len(result.frames) == (120 if timed else 8)
     timing = [event for event in json.loads((tmp_path / "render" / "run_report.json").read_text())["events"]
               if event["stage"] == "timing"]
     assert len(timing) == 2
@@ -336,11 +346,16 @@ def test_v2_planners_send_semantic_contract_and_keep_versions_aligned():
     assert generated_lesson.schema_version == 2
     assert "state_change" in lesson_client.messages[0]["content"]
 
+    for beat in plan.scenes[0].beats:
+        for index, action in enumerate(beat.actions):
+            action.start_fraction = index / len(beat.actions)
+            action.end_fraction = (index + 1) / len(beat.actions)
     visual_client = Client(plan.scenes[0].model_dump_json())
     generated_plan = browser_visual_plan.generate(generated_lesson, skill, client=visual_client,
                                                   schema_version=2)
     assert generated_plan.schema_version == 2
     assert "array" in visual_client.messages[0]["content"]
+    assert "visible anchor is payload.source or payload.expression" in visual_client.messages[0]["content"]
     assert generated_plan.scenes[0].beats[1].actions[0].params["discarded_indices"] == [0, 1, 2]
 
     replay_client = Client("unused")
@@ -349,6 +364,37 @@ def test_v2_planners_send_semantic_contract_and_keep_versions_aligned():
                                            starting_scenes=generated_plan.scenes)
     assert replay_client.messages is None
     assert resumed == generated_plan
+
+
+@pytest.mark.unit
+def test_new_v2_scene_repairs_missing_cues_but_old_saved_scene_can_resume():
+    lesson, plan = _binary_search()
+    old_scene = plan.scenes[0].model_copy(deep=True)
+    for beat in plan.scenes[0].beats:
+        for index, action in enumerate(beat.actions):
+            action.start_fraction = index / len(beat.actions)
+            action.end_fraction = (index + 1) / len(beat.actions)
+
+    class Client:
+        calls = 0
+
+        def chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return old_scene.model_dump_json()
+            assert "require start_fraction and end_fraction" in messages[-1]["content"]
+            return plan.scenes[0].model_dump_json()
+
+    client = Client()
+    skill = load_recipes()["workflow_explainer"]
+    result = browser_visual_plan.generate(lesson, skill, client=client, schema_version=2)
+    assert client.calls == 2
+    assert all(action.start_fraction is not None
+               for beat in result.scenes[0].beats for action in beat.actions)
+    resumed = browser_visual_plan.generate(lesson, skill, client=client, schema_version=2,
+                                          starting_scenes=[old_scene])
+    assert client.calls == 2
+    assert resumed.scenes[0] == old_scene
 
 
 @pytest.mark.unit
@@ -420,3 +466,160 @@ def test_v2_manim_scene_renders_with_the_existing_sandbox(monkeypatch, tmp_path,
     streams = json.loads(probe.stdout)["streams"]
     assert {stream["codec_type"] for stream in streams} == {"video", "audio"}
     assert all(3.5 <= float(stream["duration"]) <= 4.5 for stream in streams)
+
+
+def _tool_call_scene(actions, evidence_actions):
+    lesson = LessonPlan.model_validate({
+        "schema_version": 2, "topic": "Tool call", "skill_id": "workflow_explainer",
+        "learning_objective": "See arguments validated before a tool call.",
+        "scenes": [{"id": "call", "title": "Validate", "learning_goal": "Validate then send.",
+                    "beats": [{"id": "b1", "spoken_text": "We validate order 42.",
+                               "claim_ids": ["validate"],
+                               "visual_anchors": ["order_id: 42", "action: lookup_order"],
+                               "claim_requirements": {"validate": ["sequence"]}}]}],
+    })
+    plan = BrowserVisualPlan.model_validate({
+        "schema_version": 2, "topic": "Tool call", "skill_id": "workflow_explainer",
+        "scenes": [{
+            "lesson_scene_id": "call", "pattern": "workflow",
+            "objects": [
+                {"id": "args", "kind": "message", "role": "input", "label": "Tool arguments",
+                 "payload": {"order_id": 42}},
+                {"id": "call", "kind": "document", "role": "tool", "label": "Tool call",
+                 "payload": {"action": "lookup_order"}},
+            ],
+            "relationships": [{"source_id": "args", "target_id": "call", "kind": "flows_to"}],
+            "beats": [{"narration_beat_id": "b1", "actions": actions,
+                       "evidence": [{"claim_ids": ["validate"], "object_ids": ["args", "call"],
+                                     "action_ids": evidence_actions, "kind": "sequence"}]}],
+            "opening_visible_ids": [], "closing_visible_ids": ["args", "call"],
+        }],
+    })
+    return lesson, plan
+
+
+def test_message_payload_fields_are_visible_and_state_changes_prove_a_sequence():
+    lesson, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "check", "kind": "set_state", "target_ids": ["args"], "params": {"validated": True}},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "check", "send"])
+    validate(lesson, plan, load_recipes()["workflow_explainer"])
+    html = page_html(plan.scenes[0], title="Tool call",
+                     state=closing_state(plan.scenes[0]))
+    assert "order_id: 42" in html and "validated: ✓" in html and "action: lookup_order" in html
+
+
+def test_revealing_and_highlighting_cards_cannot_prove_a_sequence():
+    lesson, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "glow", "kind": "highlight", "target_ids": ["args"]},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "glow", "send"])
+    with pytest.raises(VisualPlanValidationError, match="lacks sequence visual proof"):
+        validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_set_state_that_changes_nothing_drawn_is_rejected():
+    lesson, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "check", "kind": "set_state", "target_ids": ["args"],
+         "params": {"meta": {"hidden": 1}}},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "check", "send"])
+    with pytest.raises(VisualPlanValidationError, match="check: no visible change"):
+        validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_first_scene_drops_forward_carryover_ids():
+    data = {"lesson_scene_id": "s", "pattern": "workflow",
+            "objects": [{"id": "a", "kind": "message", "role": "input", "label": "A"},
+                        {"id": "b", "kind": "tool", "role": "tool", "label": "B"}],
+            "relationships": [],
+            "beats": [{"narration_beat_id": "b1", "actions": [
+                {"id": "show_b", "kind": "appear", "target_ids": ["b"],
+                 "start_fraction": 0.0, "end_fraction": 0.5}],
+                "evidence": [{"claim_ids": ["c"], "object_ids": ["b"], "kind": "label"}]}],
+            "opening_visible_ids": ["a"], "closing_visible_ids": ["a", "b"],
+            "carryover_ids": ["a", "b"]}
+    scene = BrowserScene.model_validate(_normalise_v2_carryover(data, None))
+    assert scene.carryover_ids == []
+
+
+def test_drawn_document_fields_prove_a_value_but_a_bare_card_does_not():
+    lesson = LessonPlan.model_validate({
+        "schema_version": 2, "topic": "Tool result", "skill_id": "workflow_explainer",
+        "learning_objective": "See returned data.",
+        "scenes": [{"id": "r", "title": "Result", "learning_goal": "Read the result.",
+                    "beats": [{"id": "b1", "spoken_text": "It is shipped.",
+                               "claim_ids": ["shipped"], "visual_anchors": ["status: shipped"],
+                               "claim_requirements": {"shipped": ["value"]}}]}],
+    })
+
+    def plan(payload, params):
+        actions = [{"id": "show", "kind": "appear", "target_ids": ["result"]}]
+        if params:
+            actions.append({"id": "fill", "kind": "set_state", "target_ids": ["result"],
+                            "params": params})
+        return BrowserVisualPlan.model_validate({
+            "schema_version": 2, "topic": "Tool result", "skill_id": "workflow_explainer",
+            "scenes": [{"lesson_scene_id": "r", "pattern": "workflow",
+                        "objects": [{"id": "result", "kind": "document", "role": "result",
+                                     "label": "status: shipped", "payload": payload}],
+                        "relationships": [],
+                        "beats": [{"narration_beat_id": "b1", "actions": actions,
+                                   "evidence": [{"claim_ids": ["shipped"], "object_ids": ["result"],
+                                                 "action_ids": [a["id"] for a in actions],
+                                                 "kind": "value"}]}],
+                        "opening_visible_ids": [], "closing_visible_ids": ["result"]}],
+        })
+
+    skill = load_recipes()["workflow_explainer"]
+    validate(lesson, plan({"status": None}, {"status": "shipped"}), skill)
+    with pytest.raises(VisualPlanValidationError, match="lacks value visual proof"):
+        validate(lesson, plan({}, {}), skill)
+
+
+def test_set_state_to_the_value_already_shown_is_rejected():
+    lesson, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "check", "kind": "set_state", "target_ids": ["args"], "params": {"order_id": 42}},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "check", "send"])
+    with pytest.raises(VisualPlanValidationError, match="check: no visible change"):
+        validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_anchor_matches_the_same_fact_under_a_contained_field_name():
+    assert _anchor_visible("corrected_order_id: 42", [_normalise_label("order_id: 42")])
+    assert _anchor_visible("order_id: 42", [_normalise_label("Order ID: 42")])
+    assert not _anchor_visible("corrected_order_id: 42", [_normalise_label("order_id: 41")])
+    assert not _anchor_visible("tracking_id: AB42", [_normalise_label("order_id: AB42")])
+
+
+def test_fact_shown_then_hidden_within_its_beat_still_counts():
+    lesson, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "check", "kind": "set_state", "target_ids": ["args"], "params": {"validated": True}},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+        {"id": "clear", "kind": "hide", "target_ids": ["args"]},
+    ], ["show", "check", "send"])
+    plan.scenes[0].closing_visible_ids = ["call"]
+    validate(lesson, plan, load_recipes()["workflow_explainer"])
+
+
+def test_planner_clears_finished_steps_to_reach_the_declared_closing_screen():
+    _, plan = _tool_call_scene([
+        {"id": "show", "kind": "appear", "target_ids": ["args"]},
+        {"id": "send", "kind": "appear", "target_ids": ["call"]},
+    ], ["show", "send"])
+    scene = plan.scenes[0]
+    scene.closing_visible_ids = ["call"]
+    browser_visual_plan.derive_closing(scene, None)
+    assert scene.beats[-1].actions[-1].kind == "hide"
+    assert scene.beats[-1].actions[-1].target_ids == ["args"]
+    assert closing_state(scene).visible == {"call"}
+
+    scene.closing_visible_ids = ["call", "never_shown"]
+    browser_visual_plan.derive_closing(scene, None)
+    assert scene.closing_visible_ids == ["call"]

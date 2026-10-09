@@ -4,12 +4,19 @@ from __future__ import annotations
 from html import escape
 import json
 from pathlib import Path
+from copy import deepcopy
+from math import ceil
+import subprocess
+import time
 
-from composition.slides import render_html
-from core.schemas.browser_visual_plan import BrowserScene
+from playwright.sync_api import sync_playwright
+
+from composition.slides import render_html, chrome_path, _ffmpeg, SlideRenderError
+from core.schemas.browser_visual_plan import BrowserScene, VisualBeat
 from core.visual_assets import asset_data_uri
-from core.visual_state import VisualState
-from verification.browser_layout import audit_html
+from core import cancel
+from core.visual_state import VisualState, apply_action, displayed_fields
+from verification.browser_layout import audit_html, BrowserLayoutError
 
 
 _CSS = """
@@ -46,20 +53,66 @@ _SEMANTIC_CSS = """
 .semantic-cell-wrap{display:flex;flex-direction:column;align-items:center;width:min(11vw,110px);min-width:60px}
 .semantic-counter{font:650 28px/1.2 Segoe UI,system-ui,sans-serif;color:var(--amber)}
 .semantic-formula{font:550 38px/1.25 Cambria,Georgia,serif}.semantic-code{max-width:90%;font:24px/1.45 Consolas,monospace;text-align:left;white-space:pre-wrap}
-.semantic-note{font:600 25px/1.3 Segoe UI,system-ui,sans-serif}.semantic-chart{display:flex;align-items:end;justify-content:center;gap:52px;height:300px;padding-bottom:64px;box-sizing:border-box}
+.semantic-note{font:600 25px/1.3 Segoe UI,system-ui,sans-serif}.semantic-field{margin-top:8px;font:500 22px/1.25 Cascadia Code,Consolas,monospace;color:var(--amber)}.semantic-chart{display:flex;align-items:end;justify-content:center;gap:52px;height:300px;padding-bottom:64px;box-sizing:border-box}
 .semantic-bar{width:min(19vw,185px);min-height:8px;background:var(--cyan);border-radius:8px 8px 0 0;position:relative}.semantic-bar span{position:absolute;left:-8px;right:-8px;bottom:-54px;font:650 22px/1.15 Segoe UI,system-ui,sans-serif}
 .compact .semantic-cell-wrap,.compact .semantic-cell{width:min(9vw,88px);min-width:48px}.compact .semantic-cell{height:86px;font-size:27px}.compact .semantic-cells{gap:7px}.compact .semantic-stage{gap:20px}
+.semantic-flow{display:flex;align-items:center;justify-content:center;gap:170px;width:100%}
+.semantic-column{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:44px}
+.semantic-flow .semantic-note{min-width:230px;border:1px solid var(--line);border-radius:16px;background:#151720;padding:16px 24px;box-shadow:0 12px 38px #0006}
+.semantic-object{transition:opacity .35s}.semantic-object.is-past{opacity:.38}
+.semantic-flow .semantic-code{max-width:440px;overflow-wrap:anywhere;font-size:21px}
+.compact .semantic-flow{gap:120px}.compact .semantic-column{gap:24px}.compact .semantic-flow .semantic-note{min-width:0;padding:10px 16px;font-size:21px}.compact .semantic-field{font-size:18px}
 .semantic-media img{max-width:700px;max-height:350px;object-fit:contain}.semantic-icon img{width:120px;height:120px;filter:brightness(0) invert(1)}.semantic-media figcaption{font:600 23px/1.2 Segoe UI,system-ui,sans-serif;margin-top:16px}
 """
 
 
-def _semantic_html(scene: BrowserScene, state: VisualState) -> str:
+def _flow_layers(scene: BrowserScene) -> dict[str, int]:
+    """Column per object from the relationship arrows, so a flow reads left to right."""
+    if not scene.relationships:
+        return {}
+    order = [obj.id for obj in scene.objects]
+    edges: dict[str, list[str]] = {obj_id: [] for obj_id in order}
+    for relation in scene.relationships:
+        edges[relation.source_id].append(relation.target_id)
+    dag: list[tuple[str, str]] = []
+    state: dict[str, str] = {}
+
+    def visit(node: str) -> None:
+        state[node] = "open"
+        for target in edges[node]:
+            if state.get(target) == "open":
+                continue  # a back edge (loop); ignore it for placement
+            dag.append((node, target))
+            if target not in state:
+                visit(target)
+        state[node] = "done"
+
+    for node in order:
+        if node not in state:
+            visit(node)
+    layer = {node: 0 for node in order}
+    for _ in order:
+        for source, target in dag:
+            layer[target] = max(layer[target], layer[source] + 1)
+    linked = {node for pair in dag for node in pair}
+    last = max((layer[node] for node in linked), default=-1)
+    roles = {obj.id: obj.role for obj in scene.objects}
+    # Unlinked inputs start the flow with the other inputs; anything else follows it.
+    return {node: layer[node] if node in linked
+            else 0 if roles[node] in {"input", "source", "context", "before"} else last + 1
+            for node in order}
+
+
+def _semantic_html(scene: BrowserScene, state: VisualState,
+                   active: set[str] | None = None) -> str:
     objects = {obj.id: obj for obj in scene.objects}
     pointers = [obj for obj in scene.objects if obj.kind == "pointer" and obj.id in state.visible]
     output: list[str] = []
+    placed: list[str] = []
     for obj in scene.objects:
         if obj.id not in state.visible or obj.kind == "pointer":
             continue
+        placed.append(obj.id)
         payload = state.payloads[obj.id]
         label = escape(obj.label)
         if obj.kind == "array":
@@ -71,12 +124,16 @@ def _semantic_html(scene: BrowserScene, state: VisualState) -> str:
                         and state.payloads[pointer.id]["index"] == index]
                 pointed = " is-pointed" if here else ""
                 dimmed = " is-discarded" if index in discarded else ""
-                pointer_label = " / ".join(escape(pointer.label) for pointer in here)
+                pointer_label = " / ".join(
+                    f'<span data-visual-key="{escape(pointer.id)}">{escape(pointer.label)}</span>'
+                    for pointer in here)
                 result = payload.get("checked_results", {}).get(str(index))
-                marker = (f'<span class="semantic-check is-{result}">'
+                marker = (f'<span class="semantic-check is-{result}" '
+                          f'data-visual-key="{escape(obj.id)}:check:{index}:{result}">'
                           f'{"✓" if result == "match" else "✗"}</span>' if result else "")
                 cells.append(f'<div class="semantic-cell-wrap"><div class="semantic-pointer-label">'
-                             f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}">'
+                             f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}" '
+                             f'data-visual-key="{escape(obj.id)}:cell:{index}">'
                              f'{escape(str(item))}{marker}<span class="semantic-index">{index}</span></div></div>')
             output.append(f'<section class="semantic-object semantic-array" data-object-id="{escape(obj.id)}">'
                           f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
@@ -108,9 +165,26 @@ def _semantic_html(scene: BrowserScene, state: VisualState) -> str:
                           f'data-object-id="{escape(obj.id)}"><img src="{uri}" alt="{label}">'
                           f'<figcaption>{label}</figcaption></figure>')
         else:
+            fields = "".join(
+                f'<div class="semantic-field" data-visual-key="{escape(obj.id)}:field:'
+                f'{escape(key)}:{escape(value)}">{escape(key)}: {escape(value)}</div>'
+                for key, value in displayed_fields(obj.kind, payload))
             output.append(f'<div class="semantic-object semantic-note" data-object-id="{escape(obj.id)}">'
-                          f'{label}</div>')
-    return "".join(output)
+                          f'{label}{fields}</div>')
+    if active:
+        # Earlier steps stay readable but step back, so the eye follows the current one.
+        output = [html if obj_id in active else html.replace(
+                      'class="semantic-object', 'class="semantic-object is-past', 1)
+                  for obj_id, html in zip(placed, output)]
+    layers = _flow_layers(scene)
+    if not layers or any(objects[obj_id].kind in {"array", "chart"} for obj_id in placed):
+        return "".join(output)
+    columns: dict[int, list[str]] = {}
+    for obj_id, html in zip(placed, output):
+        columns.setdefault(layers[obj_id], []).append(html)
+    return '<div class="semantic-flow">' + "".join(
+        f'<div class="semantic-column">{"".join(columns[index])}</div>'
+        for index in sorted(columns)) + "</div>"
 
 
 def _state(scene: BrowserScene, active_beat_id: str | None) -> tuple[set[str], set[str]]:
@@ -191,10 +265,62 @@ def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = N
 const stage=document.querySelector('.diagram'),svg=document.querySelector('.connections');
 const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');marker.id='arrow';marker.setAttribute('viewBox','0 0 10 10');marker.setAttribute('refX','8');marker.setAttribute('refY','5');marker.setAttribute('markerWidth','6');marker.setAttribute('markerHeight','6');marker.setAttribute('orient','auto-start-reverse');const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d','M 0 0 L 10 5 L 0 10 z');shape.setAttribute('fill','#6f7384');marker.append(shape);svg.append(marker);const box=stage.getBoundingClientRect();const point=(a,b)=>{const x=a.left+a.width/2,y=a.top+a.height/2,dx=b.left+b.width/2-x,dy=b.top+b.height/2-y,t=1/Math.max(Math.abs(dx)/(a.width/2),Math.abs(dy)/(a.height/2),1);return [x-box.left+dx*t,y-box.top+dy*t]};for(const r of JSON.parse(document.getElementById('relations').textContent)){const a=document.querySelector(`[data-object-id="${CSS.escape(r.source_id)}"]`),b=document.querySelector(`[data-object-id="${CSS.escape(r.target_id)}"]`);if(!a||!b||a.classList.contains('is-hidden')||b.classList.contains('is-hidden'))continue;const [x1,y1]=point(a.getBoundingClientRect(),b.getBoundingClientRect()),[x2,y2]=point(b.getBoundingClientRect(),a.getBoundingClientRect());const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',x1);line.setAttribute('y1',y1);line.setAttribute('x2',x2);line.setAttribute('y2',y2);line.setAttribute('marker-end','url(#arrow)');line.setAttribute('class',`edge ${r.kind}`);svg.append(line);if(r.label){const label=document.createElementNS('http://www.w3.org/2000/svg','text'),horizontal=Math.abs(y2-y1)<36;label.setAttribute('x',(x1+x2)/2);label.setAttribute('y',(y1+y2)/2-(horizontal?62:10));label.setAttribute('text-anchor','middle');label.setAttribute('class','edge-label');label.textContent=r.label;svg.append(label)}}
 """
+    script = "window.drawConnections = () => {" + script.replace(
+        "const marker=", "svg.querySelectorAll('line,text,marker').forEach(e=>e.remove());const marker=", 1) + "};window.drawConnections();"
     if state is not None:
+        routing = r"""
+window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
+  const box=stage.getBoundingClientRect();
+  const intersects=r=>{
+    let low=0,high=1;
+    for(const [start,delta,min,max] of [[x1,x2-x1,r.left-box.left-8,r.right-box.left+8],
+                                       [y1,y2-y1,r.top-box.top-8,r.bottom-box.top+8]]){
+      if(Math.abs(delta)<.001){if(start<min||start>max)return false;}
+      else {const t1=(min-start)/delta,t2=(max-start)/delta;
+        low=Math.max(low,Math.min(t1,t2));high=Math.min(high,Math.max(t1,t2));}
+    }
+    return low<=high;
+  };
+  const blocked=[...stage.querySelectorAll('[data-object-id]')].filter(e=>
+    e!==a&&e!==b&&Number(getComputedStyle(e).opacity)>0)
+    .map(e=>e.getBoundingClientRect()).filter(intersects);
+  let points=[[x1,y1],[x2,y2]],labelX=(x1+x2)/2,labelY=(y1+y2)/2;
+  if(blocked.length){
+    if(Math.abs(y2-y1)>=Math.abs(x2-x1)){
+      let lane=Math.max(x1,x2,...blocked.map(r=>r.right-box.left))+28;
+      if(lane>box.width-24)lane=Math.min(x1,x2,...blocked.map(r=>r.left-box.left))-28;
+      points=[[x1,y1],[lane,y1],[lane,y2],[x2,y2]];labelX=lane;
+    }else{
+      let lane=Math.max(y1,y2,...blocked.map(r=>r.bottom-box.top))+28;
+      if(lane>box.height-24)lane=Math.min(y1,y2,...blocked.map(r=>r.top-box.top))-28;
+      points=[[x1,y1],[x1,lane],[x2,lane],[x2,y2]];labelY=lane;
+    }
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    for(const attr of ['class','marker-end'])path.setAttribute(attr,line.getAttribute(attr));
+    path.setAttribute('d',points.map((p,i)=>(i?'L':'M')+' '+p.join(' ')).join(' '));
+    path.dataset.sourceId=line.dataset.sourceId;path.dataset.targetId=line.dataset.targetId;
+    line.replaceWith(path);line=path;
+  }
+  line.dataset.route=JSON.stringify(points);
+  return {labelX,labelY};
+};
+"""
         script = script.replace("horizontal=Math.abs(y2-y1)<36",
                                 "horizontal=Math.abs(x2-x1)>Math.abs(y2-y1)")
         script = script.replace("(horizontal?62:10)", "(horizontal?62:-5)")
+        script = script.replace("label.setAttribute('x',(x1+x2)/2);",
+                                "label.setAttribute('x',(x1+x2)/2+(horizontal?0:18));")
+        script = script.replace("label.setAttribute('text-anchor','middle');",
+                                "label.setAttribute('text-anchor',horizontal?'middle':'start');")
+        script = script.replace("line.setAttribute('x1',x1);",
+                                "line.dataset.sourceId=r.source_id;line.dataset.targetId=r.target_id;line.setAttribute('x1',x1);")
+        script = script.replace("svg.querySelectorAll('line,text,marker')",
+                                "svg.querySelectorAll('line,text,marker,path.edge')")
+        script = script.replace("svg.append(line);if(r.label)",
+                                "svg.append(line);const route=window.routeConnection(stage,svg,line,a,b,x1,y1,x2,y2);if(r.label)")
+        script = script.replace("(x1+x2)/2+(horizontal?0:18)", "route.labelX+(horizontal?0:18)")
+        script = script.replace("(y1+y2)/2-(horizontal?62:-5)", "route.labelY-(horizontal?62:-5)")
+        script = routing + script
         return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}'
                 f'{_SEMANTIC_CSS}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
                 f'<h1 class="title">{escape(title)}</h1><section class="diagram">'
@@ -224,3 +350,174 @@ def render_scene(scene: BrowserScene, out_png: str | Path, *, title: str,
     audit_html(document, label=f"browser scene {scene.lesson_scene_id!r}")
     return render_html(document, out_png,
                        label=f"browser scene {scene.lesson_scene_id!r}")
+
+
+def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
+                   opening: VisualState, duration: float, layout_mode: str = "auto") -> str:
+    windows = beat.timeline(duration)
+    state = deepcopy(opening)
+    snapshots = [_semantic_html(scene, state)]
+    active: set[str] = set()
+    for action in beat.actions:
+        apply_action(state, action)
+        if action.kind not in {"hide", "deactivate"}:
+            active.update(action.target_ids)
+        snapshots.append(_semantic_html(scene, state, active))
+    data = json.dumps({"snapshots": snapshots, "windows": windows,
+                       "actions": [action.model_dump() for action in beat.actions],
+                       "relations": [relation.model_dump() for relation in scene.relationships]},
+                      ensure_ascii=False).replace("</", "<\\/")
+    document = page_html(scene, title=title, state=opening, layout_mode=layout_mode)
+    script = r"""
+const plan=JSON.parse(document.getElementById('animation-plan').textContent);
+const stage=document.querySelector('.semantic-stage');
+let current=-2, animations=[];
+const nodes=()=>[...stage.querySelectorAll('[data-object-id],[data-visual-key]')];
+const key=e=>e.dataset.visualKey||e.dataset.objectId;
+function display(index){
+  for(const animation of animations)animation.cancel();
+  animations=[];
+  document.querySelectorAll('.animation-ghost,.flow-packet').forEach(e=>e.remove());
+  stage.innerHTML=plan.snapshots[Math.max(0,index)];
+  const before=new Map(nodes().map(e=>[key(e),{rect:e.getBoundingClientRect(),
+    opacity:getComputedStyle(e).opacity,element:e.cloneNode(true),
+    parent:e.parentElement.closest('[data-object-id],[data-visual-key]')?.dataset.objectId}]));
+  if(index<0){window.drawConnections();return;}
+  stage.innerHTML=plan.snapshots[index+1];
+  window.drawConnections();
+  const seconds=plan.windows[index][1]-plan.windows[index][0];
+  const animate=(e,frames)=>{const a=e.animate(frames,{duration:seconds*1000,
+    fill:'both',easing:'linear'});a.pause();animations.push(a);};
+  const after=new Set();
+  for(const element of nodes()){
+    const id=key(element);after.add(id);
+    const old=before.get(id),rect=element.getBoundingClientRect();
+    const opacity=getComputedStyle(element).opacity;
+    if(!old){animate(element,[{opacity:0},{opacity}]);continue;}
+    const dx=old.rect.x-rect.x,dy=old.rect.y-rect.y;
+    if(dx||dy||old.opacity!==opacity){animate(element,[
+      {transform:`translate(${dx}px,${dy}px)`,opacity:old.opacity},
+      {transform:'translate(0px,0px)',opacity}]);}
+  }
+  for(const [id,old] of before){
+    if(after.has(id)||(old.parent&&before.has(old.parent)&&!after.has(old.parent)))continue;
+    const ghost=old.element;ghost.classList.add('animation-ghost');
+    Object.assign(ghost.style,{position:'fixed',left:old.rect.x+'px',top:old.rect.y+'px',
+      width:old.rect.width+'px',height:old.rect.height+'px',margin:'0',zIndex:'3'});
+    document.body.append(ghost);animate(ghost,[{opacity:old.opacity},{opacity:0}]);
+  }
+  const action=plan.actions[index];
+  if(['highlight','focus','activate'].includes(action.kind)){
+    for(const element of stage.querySelectorAll('[data-object-id]')){
+      if(action.target_ids.includes(element.dataset.objectId))animate(element,[
+        {filter:'brightness(1)'},{filter:'brightness(1.8)',offset:.5},{filter:'brightness(1)'}]);
+    }
+  }
+  if(['connect','branch'].includes(action.kind)){
+    const svg=document.querySelector('.connections');
+    for(const relation of plan.relations){
+      if(!action.target_ids.includes(relation.source_id)||!action.target_ids.includes(relation.target_id))continue;
+      const source=stage.querySelector(`[data-object-id="${CSS.escape(relation.source_id)}"]`);
+      const target=stage.querySelector(`[data-object-id="${CSS.escape(relation.target_id)}"]`);
+      if(!source||!target)continue;
+      const edge=[...svg.querySelectorAll('line,path.edge')].find(e=>
+        e.dataset.sourceId===relation.source_id&&e.dataset.targetId===relation.target_id);
+      if(!edge)continue;
+      const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('r','7');dot.setAttribute('fill','#edb34a');dot.setAttribute('class','flow-packet');
+      const points=JSON.parse(edge.dataset.route),distances=[0];
+      for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
+        Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]));
+      const total=distances[distances.length-1];
+      svg.append(dot);animate(dot,points.map((p,i)=>({
+        transform:`translate(${p[0]}px,${p[1]}px)`,offset:total?distances[i]/total:i/(points.length-1)})));
+    }
+  }
+}
+window.seekAnimation=seconds=>{
+  if(!Number.isFinite(seconds)||seconds<0)throw Error('invalid animation time');
+  let index=-1;
+  for(let i=0;i<plan.windows.length;i++)if(seconds>=plan.windows[i][0])index=i;
+  if(index!==current){display(index);current=index;}
+  if(index>=0){const elapsed=Math.max(0,Math.min(seconds-plan.windows[index][0],
+    plan.windows[index][1]-plan.windows[index][0]));
+    for(const animation of animations)animation.currentTime=elapsed*1000;
+    document.querySelectorAll('.flow-packet').forEach(e=>e.style.opacity=
+      seconds>=plan.windows[index][1]?'0':'1');
+  }
+  window.drawConnections();
+};
+window.animationReady=async()=>{
+  await document.fonts.ready;
+  const sources=new Set(plan.snapshots.flatMap(html=>[...new DOMParser()
+    .parseFromString(html,'text/html').images].map(i=>i.src)));
+  await Promise.all([...sources].map(async src=>{const image=new Image();image.src=src;await image.decode();}));
+  current=-2;window.seekAnimation(0);
+};
+"""
+    return document.replace("</body>",
+        f'<script id="animation-plan" type="application/json">{data}</script>'
+        f'<script>{script}</script></body>')
+
+
+def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | Path, *,
+                         title: str, opening: VisualState, duration: float,
+                         audio: str | Path, fps: int = 30,
+                         layout_mode: str = "auto") -> list[Path]:
+    if type(fps) is not int or not 1 <= fps <= 60:
+        raise ValueError("animation fps must be an integer from 1 to 60")
+    for action, (start, end) in zip(beat.actions, beat.timeline(duration)):
+        if end - start < 2 / fps - 1e-9:
+            raise ValueError(
+                f"action {action.id!r} is too short to capture at {fps} fps; "
+                "allow at least two frame intervals or increase fps")
+    deadline = time.monotonic() + 300
+    cancel.check()
+    document = animation_html(scene, beat, title=title, opening=opening,
+                              duration=duration, layout_mode=layout_mode)
+    out_mp4 = Path(out_mp4)
+    out_mp4.parent.mkdir(parents=True, exist_ok=True)
+    out_mp4.with_suffix(f".{layout_mode}.html").write_text(document, encoding="utf-8")
+    state = deepcopy(opening)
+    audit_html(page_html(scene, title=title, state=state, layout_mode=layout_mode))
+    for action in beat.actions:
+        cancel.check()
+        apply_action(state, action)
+        audit_html(page_html(scene, title=title, state=state, layout_mode=layout_mode))
+    directory = out_mp4.parent / f"{out_mp4.stem}_frames"
+    directory.mkdir(parents=True, exist_ok=True)
+    frames = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 720})
+            page.set_content(document, wait_until="load")
+            page.evaluate("() => window.animationReady()")
+            frame_count = ceil(duration * fps)
+            for index in range(frame_count):
+                cancel.check()
+                if time.monotonic() > deadline:
+                    raise TimeoutError("animated browser capture exceeded 300 seconds")
+                seconds = duration if index == frame_count - 1 else index / fps
+                page.evaluate("seconds => window.seekAnimation(seconds)", seconds)
+                clipped = page.evaluate("""() => [...document.querySelectorAll(
+                    '[data-object-id],[data-visual-key],.edge-label')].filter(e=>
+                    !e.closest('.animation-ghost') && Number(getComputedStyle(e).opacity)>0)
+                    .filter(e=>{const r=e.getBoundingClientRect();return r.left < -1 || r.top < -1 ||
+                        r.right > innerWidth+1 || r.bottom > innerHeight+1;}).map(e=>
+                        e.dataset.objectId||e.dataset.visualKey||e.textContent)""")
+                if clipped:
+                    raise BrowserLayoutError("animated frame", [f"object {item!r} is clipped" for item in clipped],
+                                             {"time": seconds, "objects": clipped})
+                frame = directory / f"frame_{index:06d}.png"
+                page.screenshot(path=str(frame), animations="allow")
+                frames.append(frame)
+        finally:
+            browser.close()
+    result = subprocess.run([_ffmpeg(), "-y", "-framerate", str(fps), "-i",
+        str(directory / "frame_%06d.png"), "-i", str(audio), "-t", str(duration),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", str(out_mp4)], capture_output=True, timeout=300)
+    if result.returncode or not out_mp4.exists():
+        raise SlideRenderError(f"FFmpeg animated beat encode failed: {result.stderr.decode('utf-8','replace')[-500:]}")
+    return frames

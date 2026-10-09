@@ -6,7 +6,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from core.llm import LLMClient, get_client
-from core.schemas.browser_visual_plan import BrowserScene, BrowserVisualPlan, VisualObject
+from core.schemas.browser_visual_plan import (BrowserScene, BrowserVisualPlan, VisualAction,
+                                              VisualObject)
 from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, closing_state
 from core.visual_assets import asset_inventory
@@ -36,6 +37,8 @@ def _normalise_v2_carryover(data: dict, previous: BrowserScene | None) -> dict:
                     beat["actions"] = [{"id": f"hold_{beat['narration_beat_id']}",
                                         "kind": "hold", "target_ids": targets}]
     if previous is None:
+        # Nothing precedes the first scene; models often list ids to carry *forward* here.
+        data["carryover_ids"] = []
         return _normalise_v2_visibility(data)
     previous_objects = {obj.id: obj for obj in previous.objects
                         if obj.id in previous.closing_visible_ids}
@@ -117,6 +120,39 @@ def _normalise_v2_visibility(data: dict) -> dict:
             else:
                 last_actions.append(action)
     return data
+
+
+def derive_closing(scene: BrowserScene, previous_state: VisualState | None) -> None:
+    """Make the executed actions end on the closing screen the model declared.
+
+    Objects the model listed as remaining are the scene's intended end state. Anything
+    else still showing is a finished step, so it is hidden after the last action instead
+    of piling up. If the declared list names objects that never appear, the executed
+    state wins.
+    """
+    executed = closing_state(scene, previous_state).visible
+    declared = [obj_id for obj_id in scene.closing_visible_ids if obj_id in executed]
+    finished = [obj.id for obj in scene.objects if obj.id in executed and obj.id not in declared]
+    if not declared or set(declared) != set(scene.closing_visible_ids):
+        scene.closing_visible_ids = declared + finished
+        return
+    if not finished:
+        return
+    actions = scene.beats[-1].actions
+    last = actions[-1]
+    window = {}
+    if last.end_fraction is not None:
+        start = min(last.end_fraction, 0.92)
+        if start <= last.start_fraction:
+            scene.closing_visible_ids = declared + finished
+            return
+        last.end_fraction = start
+        window = {"start_fraction": start, "end_fraction": 1.0}
+    used = {action.id for beat in scene.beats for action in beat.actions}
+    action_id = "clear_finished_steps"
+    while action_id in used:
+        action_id += "_"
+    actions.append(VisualAction(id=action_id, kind="hide", target_ids=finished, **window))
 
 
 def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = None,
@@ -205,6 +241,14 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
                 if schema_version == 2:
                     data = _normalise_v2_carryover(data, previous)
                 scene = BrowserScene.model_validate(data)
+                if schema_version == 2 and any(
+                    action.start_fraction is None
+                    for beat in scene.beats for action in beat.actions
+                ):
+                    raise VisualPlanValidationError(
+                        "New v2 scenes require start_fraction and end_fraction on every action")
+                if schema_version == 2:
+                    derive_closing(scene, previous_state)
                 validate_scene(lesson_scene, scene, skill,
                                previous_closing=previous_closing,
                                previous_objects=previous_objects,
@@ -235,7 +279,10 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
                               "do not add a generic label box to claim a process happened. "
                               "Keep prior object definitions and executed state, and use a new id "
                               "for a new pointer or counter. Every claim needs its specified "
-                              "evidence from actual actions or values. Use only supported object "
+                              "evidence from actual actions or values; for a message, request, or "
+                              "result card, prove a process by set_state on a drawn payload field "
+                              "(such as validated, status, or an argument value), not by highlight. "
+                              "Use only supported object "
                               "kinds for the selected render_mode. Objects affected by move, "
                               "compare, increment, set_state, or hold stay hidden unless they "
                               "were opening-visible or explicitly appeared first. Return only "

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 import re
 
 from core.schemas.browser_visual_plan import BrowserScene, BrowserVisualPlan, VisualObject
 from core.schemas.lesson_plan import LessonPlan, LessonScene
-from core.visual_state import VisualState, after_beat, closing_state, opening_state
+from core.visual_state import (ActionEffect, VisualState, action_effect, apply_action,
+                               closing_state, displayed_fields, opening_state)
 from core.visual_assets import resolve_asset
 from planner.product_recipe import Recipe
 
@@ -21,52 +23,60 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
         state = opening_state(scene, previous_state)
         result = {}
         for beat in scene.beats:
-            state = after_beat(state, scene, beat.narration_beat_id)
+            # An anchor counts if it is on screen at any moment while its beat is spoken.
+            state = deepcopy(state)
+            state.focused.clear()
+            moments = []
+            for action in beat.actions:
+                apply_action(state, action)
+                moments.append(deepcopy(state))
             labels = []
-            for obj_id in state.visible:
-                obj = objects[obj_id]
-                payload = state.payloads[obj_id]
-                if obj.kind not in {"formula", "code"}:
-                    labels.append(obj.label)
-                if obj.kind == "array":
-                    items = payload["items"]
-                    labels.append(f"{obj.label}: {', '.join(str(item) for item in items)}")
-                    discarded = set(payload.get("discarded_indices", []))
-                    remaining = [item for index, item in enumerate(items)
-                                 if index not in discarded]
-                    labels.append(f"{obj.label}: {', '.join(str(item) for item in remaining)}")
-                    if discarded:
-                        labels.append("discard [" + ",".join(
-                            str(items[index]) for index in sorted(discarded)) + "]")
-                        labels.append(f"new subarray: {', '.join(str(item) for item in remaining)}")
-                        if discarded == set(range(len(discarded))):
-                            labels.append("discard left")
-                        if discarded == set(range(len(items) - len(discarded), len(items))):
-                            labels.append("discard right")
-                    for index, outcome in payload.get("checked_results", {}).items():
-                        labels.append(f"{items[int(index)]} {'✓' if outcome == 'match' else '✗'}")
-                elif obj.kind == "pointer":
-                    target = state.payloads[payload["target_id"]]
-                    labels.append(f"{obj.label}: {target['items'][payload['index']]}")
-                    labels.append(f"Index: {payload['index']}")
-                    if target.get("checked_results", {}).get(str(payload["index"])) == "match":
-                        labels.append(f"{obj.label}: {target['items'][payload['index']]} ✓")
-                        if any(action.kind == "move" and obj.id in action.target_ids
-                               for action in beat.actions):
-                            labels.append(f"New {obj.label}: {target['items'][payload['index']]} ✓")
-                elif obj.kind in {"counter", "metric", "value"} and "value" in payload:
-                    labels.extend((f"{obj.label}: {payload['value']}",
-                                   f"{payload['value']} {obj.label}"))
-                elif obj.kind == "formula":
-                    labels.append(str(payload["expression"]))
-                elif obj.kind == "code":
-                    labels.append(str(payload["source"]))
-                elif obj.kind == "chart":
-                    labels.extend(f"{item['label']}: {item['value']}"
-                                  for item in payload["series"])
-            labels.extend(relation.label for relation in scene.relationships
-                          if relation.label and relation.source_id in state.visible
-                          and relation.target_id in state.visible)
+            for view in moments:
+                for obj_id in view.visible:
+                    obj = objects[obj_id]
+                    payload = view.payloads[obj_id]
+                    if obj.kind not in {"formula", "code"}:
+                        labels.append(obj.label)
+                    labels.extend(f"{key}: {value}" for key, value in displayed_fields(obj.kind, payload))
+                    if obj.kind == "array":
+                        items = payload["items"]
+                        labels.append(f"{obj.label}: {', '.join(str(item) for item in items)}")
+                        discarded = set(payload.get("discarded_indices", []))
+                        remaining = [item for index, item in enumerate(items)
+                                     if index not in discarded]
+                        labels.append(f"{obj.label}: {', '.join(str(item) for item in remaining)}")
+                        if discarded:
+                            labels.append("discard [" + ",".join(
+                                str(items[index]) for index in sorted(discarded)) + "]")
+                            labels.append(f"new subarray: {', '.join(str(item) for item in remaining)}")
+                            if discarded == set(range(len(discarded))):
+                                labels.append("discard left")
+                            if discarded == set(range(len(items) - len(discarded), len(items))):
+                                labels.append("discard right")
+                        for index, outcome in payload.get("checked_results", {}).items():
+                            labels.append(f"{items[int(index)]} {'✓' if outcome == 'match' else '✗'}")
+                    elif obj.kind == "pointer":
+                        target = view.payloads[payload["target_id"]]
+                        labels.append(f"{obj.label}: {target['items'][payload['index']]}")
+                        labels.append(f"Index: {payload['index']}")
+                        if target.get("checked_results", {}).get(str(payload["index"])) == "match":
+                            labels.append(f"{obj.label}: {target['items'][payload['index']]} ✓")
+                            if any(action.kind == "move" and obj.id in action.target_ids
+                                   for action in beat.actions):
+                                labels.append(f"New {obj.label}: {target['items'][payload['index']]} ✓")
+                    elif obj.kind in {"counter", "metric", "value"} and "value" in payload:
+                        labels.extend((f"{obj.label}: {payload['value']}",
+                                       f"{payload['value']} {obj.label}"))
+                    elif obj.kind == "formula":
+                        labels.append(str(payload["expression"]))
+                    elif obj.kind == "code":
+                        labels.append(str(payload["source"]))
+                    elif obj.kind == "chart":
+                        labels.extend(f"{item['label']}: {item['value']}"
+                                      for item in payload["series"])
+                labels.extend(relation.label for relation in scene.relationships
+                              if relation.label and relation.source_id in view.visible
+                              and relation.target_id in view.visible)
             result[beat.narration_beat_id] = labels
         return result
     visible = set(scene.opening_visible_ids)
@@ -85,7 +95,7 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
 
 
 def _normalise_label(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip().casefold()
+    return re.sub(r"[_\s]+", " ", value).strip().casefold()
 
 
 def _anchor_visible(anchor: str, labels: list[str]) -> bool:
@@ -94,6 +104,14 @@ def _anchor_visible(anchor: str, labels: list[str]) -> bool:
         target = _normalise_label(part)
         if target in label:
             return True
+        # A fact matches when the value is drawn under a field name contained in the anchor's
+        # name, or vice versa: "corrected order id: 42" is shown by "order id: 42".
+        wanted, drawn = (re.fullmatch(r"([^:]+):\s*(.+)", text) for text in (target, label))
+        if wanted and drawn and wanted.group(2).strip() == drawn.group(2).strip():
+            wanted_words, drawn_words = (set(re.findall(r"\w+", pair.group(1)))
+                                         for pair in (wanted, drawn))
+            if drawn_words and (drawn_words <= wanted_words or wanted_words <= drawn_words):
+                return True
         number = re.fullmatch(r"([^:]+):\s*(-?\d+(?:\.\d+)?)", target)
         if not number:
             return False
@@ -146,13 +164,27 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
         raise VisualPlanValidationError("visual beats must follow the narration order")
     visible_labels = _visible_labels_by_beat(visual_scene, require_v2=require_v2,
                                             previous_state=previous_state)
-    visible_by_beat: dict[str, set[str]] = {}
+    state_by_beat: dict[str, VisualState] = {}
+    seen_by_beat: dict[str, set[str]] = {}
+    effects_by_beat: dict[str, dict[str, ActionEffect]] = {}
     if require_v2:
+        # Replay every action and record what it visibly did; proof is judged from these
+        # screen effects, never from the action names the plan cites.
+        kinds = {obj.id: obj.kind for obj in visual_scene.objects}
         state = opening_state(visual_scene, previous_state)
         for beat in visual_scene.beats:
-            state = after_beat(state, visual_scene, beat.narration_beat_id)
-            visible_by_beat[beat.narration_beat_id] = set(state.visible)
+            state = deepcopy(state)
+            state.focused.clear()
+            effects = effects_by_beat.setdefault(beat.narration_beat_id, {})
+            seen = seen_by_beat.setdefault(beat.narration_beat_id, set())
+            for action in beat.actions:
+                before = deepcopy(state)
+                apply_action(state, action)
+                effects[action.id] = action_effect(kinds, before, state)
+                seen |= state.visible
+            state_by_beat[beat.narration_beat_id] = state
     prior_actions = {}
+    prior_effects: dict[str, ActionEffect] = {}
     for beat_id, lesson_beat in expected_beats.items():
         covered = {claim for evidence in actual_beats[beat_id].evidence for claim in evidence.claim_ids}
         missing = sorted(set(lesson_beat.claim_ids) - covered)
@@ -169,13 +201,16 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
         if require_v2:
             hidden_evidence = sorted({obj_id for evidence in actual_beats[beat_id].evidence
                                       for obj_id in evidence.object_ids
-                                      if obj_id not in visible_by_beat[beat_id]})
+                                      if obj_id not in seen_by_beat[beat_id]})
             if hidden_evidence:
                 raise VisualPlanValidationError(
                     f"beat {beat_id} cites hidden evidence objects {hidden_evidence}; "
                     "use appear before the visual demonstration")
-            _validate_v2_beat(lesson_beat, actual_beats[beat_id], visual_scene, prior_actions)
+            _validate_v2_beat(lesson_beat, actual_beats[beat_id], visual_scene, prior_actions,
+                              prior_effects, effects_by_beat[beat_id], state_by_beat[beat_id],
+                              seen_by_beat[beat_id])
             prior_actions.update({action.id: action for action in actual_beats[beat_id].actions})
+            prior_effects.update(effects_by_beat[beat_id])
     missing_prior = sorted(set(visual_scene.carryover_ids) - previous_closing)
     if missing_prior:
         raise VisualPlanValidationError(
@@ -232,13 +267,16 @@ def validate_scene(lesson_scene: LessonScene, visual_scene: BrowserScene, skill:
                 f"scene {lesson_scene.id} closing_visible_ids disagree with executed actions")
 
 
-def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene,
-                      prior_actions: dict) -> None:
+def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actions: dict,
+                      prior_effects: dict[str, ActionEffect],
+                      current_effects: dict[str, ActionEffect], beat_state: VisualState,
+                      seen: set[str]) -> None:
     objects = {obj.id: obj for obj in scene.objects}
     current_actions = {action.id: action for action in visual_beat.actions}
     if None in current_actions or len(current_actions) != len(visual_beat.actions):
         raise VisualPlanValidationError(f"beat {lesson_beat.id} needs unique action ids")
     actions = {**prior_actions, **current_actions}
+    effects = {**prior_effects, **current_effects}
     for action in visual_beat.actions:
         if action.kind == "move":
             if any(objects[target].kind != "pointer" for target in action.target_ids):
@@ -289,31 +327,46 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene,
             evidence_by_claim[claim].append(evidence)
     for claim, requirements in lesson_beat.claim_requirements.items():
         for requirement in requirements:
-            if not any(_proves(requirement, evidence, actions, objects, scene)
+            if not any(_proves(requirement, evidence, effects, objects, scene, beat_state, seen)
                        for evidence in evidence_by_claim[claim]):
+                cited = dict.fromkeys(action_id for evidence in evidence_by_claim[claim]
+                                      for action_id in evidence.action_ids)
+                seen = "; ".join(f"{action_id}: {effects[action_id].describe()}"
+                                 for action_id in cited) or "no actions cited"
                 raise VisualPlanValidationError(
-                    f"beat {lesson_beat.id} claim {claim!r} lacks {requirement} visual proof")
+                    f"beat {lesson_beat.id} claim {claim!r} lacks {requirement} visual proof. "
+                    f"On screen: {seen}. {_PROOF_NEEDS.get(requirement, '')}".rstrip())
 
 
-def _proves(requirement, evidence, actions, objects, scene: BrowserScene) -> bool:
+_PROOF_NEEDS = {
+    "state_change": "Needed: an object already on screen visibly changes or is removed.",
+    "sequence": ("Needed: two or more visible steps in order, at least one changing an object "
+                 "already on screen; appearing, highlighting, or re-setting a value already "
+                 "shown is not a step that changes it."),
+    "value": "Needed: a visible object that draws the value.",
+}
+
+
+def _proves(requirement, evidence, effects: dict[str, ActionEffect], objects,
+            scene: BrowserScene, beat_state: VisualState, seen: set[str]) -> bool:
     if evidence.kind != requirement:
         return False
-    referenced = [actions[action_id] for action_id in evidence.action_ids]
+    steps = [effects[action_id] for action_id in evidence.action_ids]
     if requirement == "label":
         return True
     if requirement == "value":
-        return any(objects[obj_id].kind in {"array", "pointer", "counter", "metric", "value", "formula", "chart"}
-                   for obj_id in evidence.object_ids)
+        return any(obj_id in seen and (
+            objects[obj_id].kind in {"array", "pointer", "counter", "metric", "value", "formula", "chart"}
+            or displayed_fields(objects[obj_id].kind, beat_state.payloads[obj_id]))
+            for obj_id in evidence.object_ids)
     if requirement == "relationship":
         return any({relation.source_id, relation.target_id} <= set(evidence.object_ids)
                    for relation in scene.relationships)
     if requirement == "state_change":
-        return any(action.kind in {"move", "set_state", "increment", "transform", "hide", "compare"}
-                   for action in referenced)
+        return any(step.changed or step.removed for step in steps)
     if requirement == "sequence":
-        return len(referenced) >= 2 and any(
-            action.kind in {"move", "set_state", "increment", "transform", "compare"}
-            for action in referenced)
+        visible_steps = [step for step in steps if step.describe() != "no visible change"]
+        return len(visible_steps) >= 2 and any(step.changed for step in visible_steps)
     if requirement == "comparison":
         ids = set(evidence.object_ids)
         if any(objects[obj_id].kind == "chart" and

@@ -11,7 +11,7 @@ from core.schemas.browser_visual_plan import BrowserVisualPlan
 from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, apply_action, closing_state, opening_state
 from generation.manim_visual_scene import compile_scene
-from generation.browser_scene import render_scene
+from generation.browser_scene import render_scene, render_animated_beat
 from narration.tts import synthesize
 from planner.product_recipe import Recipe
 from planner import browser_visual_plan, lesson_plan, product_recipe
@@ -108,11 +108,36 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                 report.event(stage, "passed", scene=scene_id, beat=beat_id,
                              detail=f"{audio.duration:.3f}s")
                 if state is not None:
-                    action_clips: list[Path] = []
                     visual_beat = visual_scene.beats[beat_index]
                     timeline = visual_beat.timeline(audio.duration)
                     report.event("timing", "passed", scene=scene_id, beat=beat_id,
                                  evidence={"audio_duration": audio.duration, "windows": timeline})
+                    if visual_beat.actions[0].start_fraction is not None:
+                        stage = "animation"
+                        report.event(stage, "start", scene=scene_id, beat=beat_id)
+                        beat_clip = out / "beats" / f"scene_{scene_index:02d}_{beat_index:02d}.mp4"
+                        try:
+                            captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
+                                title=lesson_scene.title, opening=state, duration=audio.duration,
+                                audio=audio.path, fps=fps)
+                            attempt = 1
+                        except BrowserLayoutError as exc:
+                            report.event(stage, "retry", scene=scene_id, beat=beat_id,
+                                         category="layout", issues=exc.issues,
+                                         action="retry_compact_layout", attempt=1,
+                                         evidence={"geometry": exc.geometry})
+                            captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
+                                title=lesson_scene.title, opening=state, duration=audio.duration,
+                                audio=audio.path, fps=fps, layout_mode="compact")
+                            attempt = 2
+                        for action in visual_beat.actions:
+                            apply_action(state, action)
+                        frames.extend(captured)
+                        parts.append(beat_clip)
+                        report.event(stage, "passed", scene=scene_id, beat=beat_id, attempt=attempt,
+                                     evidence={"frames": len(captured), "fps": fps})
+                        continue
+                    action_clips: list[Path] = []
                     events = [(action, (timeline[index + 1][0] if index + 1 < len(timeline)
                                         else audio.duration) - timeline[index][0])
                               for index, action in enumerate(visual_beat.actions)]
@@ -184,7 +209,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
             beat_id = None
             report.event(stage, "start", scene=scene_id)
             scene_path = out / f"scene_{scene_index:02d}.mp4"
-            if beat_transition > 0 and len(parts) > 1:
+            if plan.schema_version != 2 and beat_transition > 0 and len(parts) > 1:
                 _xfade_chain(parts, scene_path, dur=beat_transition)
             else:
                 _concat_clips(parts, scene_path)
@@ -195,7 +220,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
         stage, scene_id, beat_id = "stitch", None, None
         report.event(stage, "start")
         final = out / "browser-video.mp4"
-        if transition > 0 and len(scene_mp4s) > 1:
+        if plan.schema_version != 2 and transition > 0 and len(scene_mp4s) > 1:
             _xfade_chain(scene_mp4s, final, dur=transition)
         else:
             _concat_clips(scene_mp4s, final)

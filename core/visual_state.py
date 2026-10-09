@@ -8,6 +8,53 @@ from typing import Any
 from core.schemas.browser_visual_plan import BrowserScene, VisualAction
 
 
+FIELD_KINDS = {"message", "node", "document", "card", "gate", "tool", "group"}
+# Payload keys the renderer draws for each semantic kind; FIELD_KINDS draw their scalar fields.
+_DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results"),
+               "pointer": ("target_id", "index"), "counter": ("value",), "metric": ("value",),
+               "value": ("value",), "formula": ("expression",), "code": ("source",),
+               "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id",)}
+
+
+def displayed_fields(kind: str, payload: dict[str, Any]) -> list[tuple[str, str]]:
+    """Scalar payload fields drawn as `key: value` rows on message-like objects."""
+    if kind not in FIELD_KINDS:
+        return []
+    return [(str(key), "✓" if value is True else "✗" if value is False else str(value))
+            for key, value in payload.items()
+            if isinstance(value, (str, int, float, bool)) and str(value) != ""]
+
+
+def drawn_view(kind: str, payload: dict[str, Any]) -> str:
+    """The part of an object's state a viewer can see; equal views look identical."""
+    if kind in FIELD_KINDS:
+        return repr(displayed_fields(kind, payload))
+    return repr([payload.get(key) for key in _DRAWN_KEYS.get(kind, ())])
+
+
+@dataclass
+class ActionEffect:
+    revealed: set[str]
+    changed: set[str]
+    removed: set[str]
+
+    def describe(self) -> str:
+        parts = [f"{verb} {sorted(ids)}" for verb, ids in (
+            ("revealed", self.revealed), ("changed", self.changed), ("removed", self.removed)) if ids]
+        return ", ".join(parts) or "no visible change"
+
+
+def action_effect(kinds: dict[str, str], before: "VisualState",
+                  after: "VisualState") -> ActionEffect:
+    """What one action visibly did: new objects, redrawn objects, or removed objects."""
+    return ActionEffect(
+        revealed=after.visible - before.visible,
+        changed={obj_id for obj_id in before.visible & after.visible
+                 if drawn_view(kinds[obj_id], before.payloads[obj_id])
+                 != drawn_view(kinds[obj_id], after.payloads[obj_id])},
+        removed=before.visible - after.visible)
+
+
 @dataclass
 class VisualState:
     visible: set[str]
