@@ -2,6 +2,7 @@
 
     python -m scripts.selftest ["<topic>"] [--max-scenes N] [--quality preview|final]
                                [--target-seconds S] [--keep-workspace]
+                               [--renderer legacy|browser_v2]
 
 This is the "run it like a user, without a human in the loop, and check everything" harness.
 It does NOT re-implement the pipeline: it drives the SAME `web.engine.Engine` the browser drives
@@ -15,6 +16,10 @@ checks on the RENDERED OUTPUT (not on how clean the code looks — see the "judg
               WARN:     per-scene clip duration sane · stitched ≈ sum(scenes) · narration present ·
                         no chat/meta-commentary leaked into narration · narration within word budget ·
                         theme applied
+
+`--renderer browser_v2` drives the learning-video path the web Teach tab uses. Docker is then
+only needed for Manim-drawn array scenes, so its absence is a warning, durations are probed on
+the host, the theme check is dropped, and the video length is compared with --target-seconds.
 
 Exit code 0 iff every CRITICAL check passes. A markdown report + the full workspace are left under
 out/selftest/<topic>/ so a failure is inspectable without re-running.
@@ -74,8 +79,9 @@ def _slug(s: str, n: int = 48) -> str:
 
 
 # --- preflight (fail fast, BEFORE spending on an LLM run) -------------------------------------
-def _docker_ok(rep: Report) -> bool:
-    """Docker daemon reachable AND the pinned render image present. Skipped when exec_mode=local."""
+def _docker_ok(rep: Report, *, critical: bool = True) -> bool:
+    """Docker daemon reachable AND the pinned render image present. Skipped when exec_mode=local.
+    `critical=False` records a missing daemon as a warning and lets the run continue."""
     if settings.exec_mode == "local":
         rep.add("exec mode = local (no docker preflight)", True, critical=False)
         return True
@@ -83,24 +89,27 @@ def _docker_ok(rep: Report) -> bool:
         info = subprocess.run(["docker", "info"], capture_output=True, encoding="utf-8",
                               errors="replace", timeout=30)
         if info.returncode != 0:
-            return rep.add("docker daemon reachable", False, critical=True,
-                           detail="`docker info` failed — is Docker Desktop running?")
-        rep.add("docker daemon reachable", True, critical=True)
+            return rep.add("docker daemon reachable", False, critical=critical,
+                           detail="`docker info` failed — is Docker Desktop running?") or not critical
+        rep.add("docker daemon reachable", True, critical=critical)
     except (OSError, subprocess.SubprocessError) as e:
-        return rep.add("docker daemon reachable", False, critical=True, detail=f"{type(e).__name__}: {e}")
+        return rep.add("docker daemon reachable", False, critical=critical,
+                       detail=f"{type(e).__name__}: {e}") or not critical
     img = subprocess.run(["docker", "image", "inspect", settings.render_image],
                          capture_output=True, encoding="utf-8", errors="replace", timeout=30)
     return rep.add(f"render image {settings.render_image} present", img.returncode == 0,
-                   critical=True, detail="" if img.returncode == 0 else "run `python -m scripts.setup_env`")
+                   critical=critical,
+                   detail="" if img.returncode == 0 else "run `python -m scripts.setup_env`") or not critical
 
 
-def preflight(rep: Report) -> bool:
+def preflight(rep: Report, *, renderer: str = "legacy") -> bool:
     print("-> preflight")
     ok = True
     key = bool(settings.llm_api_key.strip())
     ok &= rep.add("LLM API key configured", key, critical=True,
                   detail="" if key else "set LATTICE_LLM_API_KEY in .env")
-    ok &= _docker_ok(rep)
+    # browser_v2 renders in Chrome; only its Manim-drawn array scenes need the render container
+    ok &= _docker_ok(rep, critical=renderer == "legacy")
     try:
         from narration import tts  # noqa: F401
         rep.add(f"TTS engine importable ({settings.tts_engine})", True, critical=False)
@@ -111,7 +120,15 @@ def preflight(rep: Report) -> bool:
 
 
 # --- output grading (judge the RENDERED artifacts, not the code) -----------------------------
-def _duration(work_dir: Path, mp4: Path) -> float:
+def _duration(work_dir: Path, mp4: Path, *, host: bool = False) -> float:
+    if host:    # browser_v2 clips are made on the host, so they can be probed without the container
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                "-of", "csv=p=0", str(mp4)], capture_output=True,
+                               encoding="utf-8", errors="replace", timeout=60)
+        try:
+            return float((probe.stdout or "0").strip())
+        except ValueError:
+            return 0.0
     try:
         rel = mp4.resolve().relative_to(work_dir.resolve()).as_posix()
     except ValueError:
@@ -133,8 +150,10 @@ def _has_meta_leak(text: str) -> str | None:
     return None
 
 
-def grade(rep: Report, project, workspace: Path, final: Path | None) -> None:
+def grade(rep: Report, project, workspace: Path, final: Path | None, *,
+          renderer: str = "legacy") -> None:
     print("-> grading output")
+    host = renderer == "browser_v2"
     # CRITICAL — did the pipeline actually produce a playable film?
     rep.add("project.json persisted", (workspace / "project.json").exists(), critical=True)
     fsize = final.stat().st_size if (final and final.exists()) else 0
@@ -145,14 +164,14 @@ def grade(rep: Report, project, workspace: Path, final: Path | None) -> None:
     rep.add(f"every scene rendered ({len(rendered)}/{n})", len(rendered) == n and n > 0, critical=True,
             detail="" if len(rendered) == n else "at least one scene failed all retries")
 
-    final_dur = _duration(workspace, final) if (final and final.exists()) else 0.0
+    final_dur = _duration(workspace, final, host=host) if (final and final.exists()) else 0.0
     rep.add("final video has real duration (>0s)", final_dur > 0, critical=True,
             detail=f"{final_dur:.1f}s")
 
     # WARN — quality signals a human reviewer would eyeball
     scene_durs = []
     for s in rendered:
-        d = _duration(Path(s.mp4).parent, Path(s.mp4))
+        d = _duration(Path(s.mp4).parent, Path(s.mp4), host=host)
         scene_durs.append(d)
     bad_dur = [i for i, d in enumerate(scene_durs) if d < 2.0]
     rep.add("each scene clip ≥ 2s", not bad_dur, critical=False,
@@ -186,6 +205,12 @@ def grade(rep: Report, project, workspace: Path, final: Path | None) -> None:
         rep.add(f"narration within word budget (≤{ceiling}w/scene)", not over, critical=False,
                 detail="" if not over else "; ".join(over))
 
+    if host:    # browser_v2 has no generated theme; what it owes the user is the requested length
+        if project.target_seconds and final_dur > 0:
+            off = abs(final_dur - project.target_seconds) / project.target_seconds
+            rep.add("video length within 20% of the requested duration", off <= 0.20, critical=False,
+                    detail=f"{final_dur:.1f}s for a {project.target_seconds}s request ({off*100:.0f}% off)")
+        return
     rep.add("theme/style applied", project.style is not None, critical=False,
             detail="" if project.style else "build proceeded without a StyleSpec")
 
@@ -212,7 +237,7 @@ def write_report(rep: Report, out_dir: Path, *, final: Path | None, usage: dict,
 
 # --- driver ----------------------------------------------------------------------------------
 def run(topic: str, *, max_scenes: int, quality: str, target_seconds: int | None,
-        keep_workspace: bool) -> int:
+        keep_workspace: bool, renderer: str = "legacy") -> int:
     from web.engine import Engine  # imported here so preflight failures don't need the web stack
 
     rep = Report(topic=topic)
@@ -224,10 +249,11 @@ def run(topic: str, *, max_scenes: int, quality: str, target_seconds: int | None
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"=== Lattice self-test ===\n   topic:   {topic!r}\n   model:   {settings.llm_model}\n"
+          f"   renderer: {renderer}\n"
           f"   quality: {quality}   max-scenes: {max_scenes}"
           f"   target: {target_seconds or '(planner default)'}s\n")
 
-    if not preflight(rep):
+    if not preflight(rep, renderer=renderer):
         write_report(rep, out_dir, final=None, usage=usage_snapshot(), n_scenes=0)
         _summarize(rep, out_dir, final=None)
         return 2
@@ -242,7 +268,9 @@ def run(topic: str, *, max_scenes: int, quality: str, target_seconds: int | None
     try:
         engine = Engine(root=workspace_root)
         print("\n-> plan (outline + theme) — the user's Step 2 gate, auto-approved")
-        pid, _draft = engine.plan(topic, max_scenes=max_scenes, target_seconds=target_seconds, log=log)
+        plan_kwargs = {"renderer": renderer} if renderer != "legacy" else {}
+        pid, _draft = engine.plan(topic, max_scenes=max_scenes, target_seconds=target_seconds,
+                                  log=log, **plan_kwargs)
         # auto-approve exactly what a user clicking "looks good" does: keep all planned scenes in order,
         # but honor --max-scenes as the cap the outline gate would apply.
         keep = list(range(min(max_scenes, len(_draft.scenes)))) if max_scenes else None
@@ -255,7 +283,7 @@ def run(topic: str, *, max_scenes: int, quality: str, target_seconds: int | None
         rep.logs.append(traceback.format_exc())
 
     if project is not None:
-        grade(rep, project, engine.workspace(pid), final)
+        grade(rep, project, engine.workspace(pid), final, renderer=renderer)
 
     usage = usage_snapshot()
     write_report(rep, out_dir, final=final, usage=usage,
@@ -291,9 +319,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--target-seconds", type=int, default=None, help="duration budget (paces narration)")
     ap.add_argument("--keep-workspace", action="store_true",
                     help="reuse the prior workspace instead of wiping it (cache/inspect)")
+    ap.add_argument("--renderer", choices=["legacy", "browser_v2"], default="legacy",
+                    help="browser_v2 = the learning-video path the web Teach tab uses")
     args = ap.parse_args(argv)
     return run(args.topic, max_scenes=args.max_scenes, quality=args.quality,
-               target_seconds=args.target_seconds, keep_workspace=args.keep_workspace)
+               target_seconds=args.target_seconds, keep_workspace=args.keep_workspace,
+               renderer=args.renderer)
 
 
 if __name__ == "__main__":

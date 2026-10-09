@@ -1,0 +1,69 @@
+{
+  "schema_version": 2,
+  "topic": "Search methods",
+  "skill_id": "algorithm_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s",
+      "pattern": "comparison",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "checks",
+          "kind": "chart",
+          "role": "metric",
+          "label": "Checks",
+          "payload": {
+            "series": [
+              {
+                "label": "Brute",
+                "value": 6
+              },
+              {
+                "label": "Binary",
+                "value": 2
+              }
+            ]
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "b",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "checks"
+              ],
+              "id": "show",
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "difference"
+              ],
+              "object_ids": [
+                "checks"
+              ],
+              "kind": "comparison",
+              "action_ids": [
+                "show"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "checks"
+      ],
+      "carryover_ids": []
+    }
+  ]
+}

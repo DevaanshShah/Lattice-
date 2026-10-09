@@ -1,0 +1,463 @@
+{
+  "schema_version": 2,
+  "topic": "Explain an agent harness to a beginner using one order-status example. Make exactly three short sequential scenes, one narration beat per scene, about 90 spoken words total. First show structured tool arguments for order 42 being validated and sent to lookup_order. Next show returned tool data with status shipped and tracking AB42, then the grounded answer. Finally show a missing order_id being rejected before tool execution and one corrected call. Continue the same example and tool identity across scenes. Make the important arguments, returned values, error and correction visible as actual content and actions, not merely an Agent Harness label box. Use browser scenes suitable for this non-mathematical example.",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "scene1",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "order_message",
+          "kind": "message",
+          "role": "input",
+          "label": "Order Request",
+          "payload": {
+            "order_id": 42
+          }
+        },
+        {
+          "id": "validate_tool",
+          "kind": "tool",
+          "role": "operation",
+          "label": "Validate & Lookup",
+          "payload": {
+            "action": "lookup_order"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "order_message",
+          "target_id": "validate_tool",
+          "kind": "flows_to",
+          "label": "send to validate"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "order_message"
+              ],
+              "id": "appear_order",
+              "params": {},
+              "start_fraction": 0.0,
+              "end_fraction": 0.2
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "order_message"
+              ],
+              "id": "set_state_lookup_order",
+              "params": {
+                "validated": true
+              },
+              "start_fraction": 0.3,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "validate_tool"
+              ],
+              "id": "appear_validate_tool",
+              "params": {},
+              "start_fraction": 0.6,
+              "end_fraction": 0.8
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "order_message",
+                "validate_tool"
+              ],
+              "id": "connect_order_to_tool",
+              "params": {},
+              "start_fraction": 0.9,
+              "end_fraction": 1.0
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "validate_order_42"
+              ],
+              "object_ids": [
+                "order_message",
+                "validate_tool"
+              ],
+              "kind": "sequence",
+              "action_ids": [
+                "appear_order",
+                "set_state_lookup_order",
+                "appear_validate_tool",
+                "connect_order_to_tool"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "order_message"
+      ],
+      "closing_visible_ids": [
+        "order_message",
+        "validate_tool"
+      ],
+      "carryover_ids": []
+    },
+    {
+      "lesson_scene_id": "scene2",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "order_message",
+          "kind": "message",
+          "role": "input",
+          "label": "Order Request",
+          "payload": {
+            "order_id": 42
+          }
+        },
+        {
+          "id": "validate_tool",
+          "kind": "tool",
+          "role": "operation",
+          "label": "Validate & Lookup",
+          "payload": {
+            "action": "lookup_order"
+          }
+        },
+        {
+          "id": "response_document",
+          "kind": "document",
+          "role": "output",
+          "label": "Order Status",
+          "payload": {
+            "status": null,
+            "tracking_id": null
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "order_message",
+          "target_id": "validate_tool",
+          "kind": "flows_to",
+          "label": "processed by"
+        },
+        {
+          "source_id": "validate_tool",
+          "target_id": "response_document",
+          "kind": "flows_to",
+          "label": "returns to"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "response_document"
+              ],
+              "id": "r1",
+              "params": {},
+              "start_fraction": 0.0,
+              "end_fraction": 0.3
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "response_document"
+              ],
+              "id": "s1",
+              "params": {
+                "status": "shipped",
+                "tracking_id": "AB42"
+              },
+              "start_fraction": 0.3,
+              "end_fraction": 0.6
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "status_shipped"
+              ],
+              "object_ids": [
+                "response_document"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "r1",
+                "s1"
+              ]
+            },
+            {
+              "claim_ids": [
+                "tracking_AB42"
+              ],
+              "object_ids": [
+                "response_document"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "r1",
+                "s1"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "order_message",
+        "validate_tool"
+      ],
+      "closing_visible_ids": [
+        "order_message",
+        "validate_tool",
+        "response_document"
+      ],
+      "carryover_ids": [
+        "order_message",
+        "validate_tool"
+      ]
+    },
+    {
+      "lesson_scene_id": "scene3",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "order_message",
+          "kind": "message",
+          "role": "input",
+          "label": "Order Request",
+          "payload": {
+            "order_id": 42
+          }
+        },
+        {
+          "id": "validate_tool",
+          "kind": "tool",
+          "role": "operation",
+          "label": "Validate & Lookup",
+          "payload": {
+            "action": "lookup_order"
+          }
+        },
+        {
+          "id": "error_message",
+          "kind": "message",
+          "role": "output",
+          "label": "Error",
+          "payload": {
+            "error_message": "Missing order ID"
+          }
+        },
+        {
+          "id": "corrected_order_message",
+          "kind": "message",
+          "role": "input",
+          "label": "Order Request",
+          "payload": {
+            "order_id": null
+          }
+        },
+        {
+          "id": "response_document",
+          "kind": "document",
+          "role": "output",
+          "label": "Order Status",
+          "payload": {
+            "status": null,
+            "tracking_id": null
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "order_message",
+          "target_id": "validate_tool",
+          "kind": "flows_to",
+          "label": null
+        },
+        {
+          "source_id": "validate_tool",
+          "target_id": "error_message",
+          "kind": "flows_to",
+          "label": null
+        },
+        {
+          "source_id": "corrected_order_message",
+          "target_id": "validate_tool",
+          "kind": "flows_to",
+          "label": null
+        },
+        {
+          "source_id": "validate_tool",
+          "target_id": "response_document",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "order_message"
+              ],
+              "id": "show_missing_order",
+              "params": {},
+              "start_fraction": 0.0,
+              "end_fraction": 0.2
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "order_message"
+              ],
+              "id": "execute_lookup_missing",
+              "params": {
+                "order_id": "missing"
+              },
+              "start_fraction": 0.2,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "error_message"
+              ],
+              "id": "show_error_message",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.8
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "missing_order_id_rejected"
+              ],
+              "object_ids": [
+                "order_message",
+                "error_message"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "execute_lookup_missing",
+                "show_error_message"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "beat4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "corrected_order_message"
+              ],
+              "id": "correct_order",
+              "params": {},
+              "start_fraction": 0.0,
+              "end_fraction": 0.2
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "corrected_order_message"
+              ],
+              "id": "set_corrected_order",
+              "params": {
+                "order_id": 42
+              },
+              "start_fraction": 0.2,
+              "end_fraction": 0.4
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "corrected_order_message",
+                "validate_tool"
+              ],
+              "id": "execute_corrected_lookup",
+              "params": {},
+              "start_fraction": 0.4,
+              "end_fraction": 0.6
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "response_document"
+              ],
+              "id": "show_status_response",
+              "params": {},
+              "start_fraction": 0.6,
+              "end_fraction": 0.9
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "order_message",
+                "validate_tool",
+                "error_message",
+                "corrected_order_message"
+              ],
+              "id": "clear_finished_steps",
+              "params": {},
+              "start_fraction": 0.9,
+              "end_fraction": 1.0
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "corrected_call_order_42"
+              ],
+              "object_ids": [
+                "corrected_order_message",
+                "validate_tool",
+                "response_document"
+              ],
+              "kind": "sequence",
+              "action_ids": [
+                "correct_order",
+                "set_corrected_order",
+                "execute_corrected_lookup",
+                "show_status_response"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "order_message",
+        "validate_tool",
+        "response_document"
+      ],
+      "closing_visible_ids": [
+        "response_document"
+      ],
+      "carryover_ids": [
+        "order_message",
+        "validate_tool",
+        "response_document"
+      ]
+    }
+  ]
+}

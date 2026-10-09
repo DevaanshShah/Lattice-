@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "topic": "Binary search",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Understand how the search range shrinks.",
+  "audience": null,
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "search",
+      "title": "Check the array",
+      "learning_goal": "Show the checks.",
+      "example": null,
+      "beats": [
+        {
+          "id": "scan",
+          "spoken_text": "Check 2, then 5, then 8.",
+          "claim_ids": [
+            "ordered_checks"
+          ],
+          "visual_anchors": [
+            "Check: 8",
+            "2 ✗",
+            "8 ✓"
+          ],
+          "claim_requirements": {
+            "ordered_checks": [
+              "sequence"
+            ]
+          }
+        },
+        {
+          "id": "discard",
+          "spoken_text": "Discard the left half.",
+          "claim_ids": [
+            "discard_left"
+          ],
+          "visual_anchors": [
+            "Array: 12, 16, 23, 38"
+          ],
+          "claim_requirements": {
+            "discard_left": [
+              "state_change"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}

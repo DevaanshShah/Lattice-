@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "topic": "Explain how an agent harness handles a customer password-reset request: intake, policy checks, approved tool use, and a safe final response",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Understand the step-by-step process an agent follows to securely handle a customer password-reset request, from intake to final response.",
+  "audience": null,
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "scene_1",
+      "title": "Request Intake",
+      "learning_goal": "Learn how the agent receives and initially processes a password-reset request.",
+      "example": "A customer submits a request saying 'I forgot my password, can you reset it?'",
+      "beats": [
+        {
+          "id": "beat_1_1",
+          "spoken_text": "The agent receives the customer's password-reset request through a secure channel like email or a support portal.",
+          "claim_ids": [
+            "claim_intake_channel"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        },
+        {
+          "id": "beat_1_2",
+          "spoken_text": "The agent logs the request in the system, noting the customer's identity and the time of the request.",
+          "claim_ids": [
+            "claim_log_request"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        }
+      ],
+      "bridge_to_next": "Once the request is logged, the agent moves to verify the customer's identity."
+    },
+    {
+      "id": "scene_2",
+      "title": "Identity Verification",
+      "learning_goal": "Understand the policy checks the agent performs to verify the customer's identity before proceeding.",
+      "example": "The agent asks for the customer's registered email or security questions.",
+      "beats": [
+        {
+          "id": "beat_2_1",
+          "spoken_text": "The agent checks the customer's identity by asking for pre-registered information like an email address or answers to security questions.",
+          "claim_ids": [
+            "claim_identity_check"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        },
+        {
+          "id": "beat_2_2",
+          "spoken_text": "If the provided information matches the records, the agent proceeds. If not, the request is flagged as suspicious.",
+          "claim_ids": [
+            "claim_match_records",
+            "claim_flag_suspicious"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        }
+      ],
+      "bridge_to_next": "With identity confirmed, the agent can now use the password-reset tool."
+    },
+    {
+      "id": "scene_3",
+      "title": "Password Reset Tool",
+      "learning_goal": "Learn how the agent uses the approved tool to reset the password securely.",
+      "example": "The agent accesses the admin panel to generate a temporary password.",
+      "beats": [
+        {
+          "id": "beat_3_1",
+          "spoken_text": "The agent accesses the company's approved password-reset tool, which generates a temporary password or a reset link.",
+          "claim_ids": [
+            "claim_access_tool"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        },
+        {
+          "id": "beat_3_2",
+          "spoken_text": "The tool ensures the new password meets security standards, like minimum length and complexity.",
+          "claim_ids": [
+            "claim_security_standards"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        }
+      ],
+      "bridge_to_next": "After generating the new credentials, the agent delivers them to the customer."
+    },
+    {
+      "id": "scene_4",
+      "title": "Secure Delivery",
+      "learning_goal": "Understand how the agent safely communicates the new credentials to the customer.",
+      "example": "The agent sends the temporary password via a secure method like encrypted email.",
+      "beats": [
+        {
+          "id": "beat_4_1",
+          "spoken_text": "The agent sends the temporary password or reset link to the customer through a secure method, such as encrypted email or a secure portal.",
+          "claim_ids": [
+            "claim_secure_delivery"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        },
+        {
+          "id": "beat_4_2",
+          "spoken_text": "The agent instructs the customer to change the temporary password immediately after logging in.",
+          "claim_ids": [
+            "claim_password_change_instruction"
+          ],
+          "visual_anchors": [],
+          "claim_requirements": {}
+        }
+      ],
+      "bridge_to_next": "This concludes the secure handling of a password-reset request."
+    }
+  ]
+}

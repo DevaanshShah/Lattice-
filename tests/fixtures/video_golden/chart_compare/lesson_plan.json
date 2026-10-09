@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "topic": "Search methods",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Compare checks",
+  "audience": null,
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "s",
+      "title": "Compare",
+      "learning_goal": "Compare checks",
+      "example": null,
+      "beats": [
+        {
+          "id": "b",
+          "spoken_text": "Brute takes six checks; binary takes two.",
+          "claim_ids": [
+            "difference"
+          ],
+          "visual_anchors": [
+            "Brute: 6",
+            "Binary: 2"
+          ],
+          "claim_requirements": {
+            "difference": [
+              "comparison"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}

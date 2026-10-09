@@ -1,0 +1,104 @@
+{
+  "schema_version": 2,
+  "topic": "Explain an agent harness to a beginner using one order-status example. Make exactly three short sequential scenes, one narration beat per scene, about 90 spoken words total. First show structured tool arguments for order 42 being validated and sent to lookup_order. Next show returned tool data with status shipped and tracking AB42, then the grounded answer. Finally show a missing order_id being rejected before tool execution and one corrected call. Continue the same example and tool identity across scenes. Make the important arguments, returned values, error and correction visible as actual content and actions, not merely an Agent Harness label box. Use browser scenes suitable for this non-mathematical example.",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Understand how an agent harness operates using a specific order status example.",
+  "audience": "Beginners wanting to learn about agent harnesses and their functionality.",
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "scene1",
+      "title": "Validate and Lookup Order",
+      "learning_goal": "Learn how the order validation starts the lookup process.",
+      "example": "Validating and sending order 42 to lookup_order.",
+      "beats": [
+        {
+          "id": "beat1",
+          "spoken_text": "We start by validating order 42 to check its status.",
+          "claim_ids": [
+            "validate_order_42"
+          ],
+          "visual_anchors": [
+            "order_id: 42",
+            "action: lookup_order"
+          ],
+          "claim_requirements": {
+            "validate_order_42": [
+              "sequence"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": "Now that we've validated the order, we can check its status."
+    },
+    {
+      "id": "scene2",
+      "title": "Receive Order Status",
+      "learning_goal": "Understand how the system returns the order status.",
+      "example": "Receiving the status of order 42 as 'shipped' with tracking AB42.",
+      "beats": [
+        {
+          "id": "beat2",
+          "spoken_text": "The system responds, indicating order 42 is shipped with tracking AB42.",
+          "claim_ids": [
+            "status_shipped",
+            "tracking_AB42"
+          ],
+          "visual_anchors": [
+            "status: shipped",
+            "tracking_id: AB42"
+          ],
+          "claim_requirements": {
+            "status_shipped": [
+              "value"
+            ],
+            "tracking_AB42": [
+              "value"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": "Next, let's see what happens when we miss an order ID during the process."
+    },
+    {
+      "id": "scene3",
+      "title": "Handle Missing Order ID",
+      "learning_goal": "See how a missing order ID request is rejected and corrected.",
+      "example": "Showing a missing order_id being rejected and a corrected call for order 42.",
+      "beats": [
+        {
+          "id": "beat3",
+          "spoken_text": "Attempting to execute lookup_order without an order ID will fail.",
+          "claim_ids": [
+            "missing_order_id_rejected"
+          ],
+          "visual_anchors": [
+            "error_message: Missing order ID"
+          ],
+          "claim_requirements": {
+            "missing_order_id_rejected": [
+              "state_change"
+            ]
+          }
+        },
+        {
+          "id": "beat4",
+          "spoken_text": "Once corrected with order 42, the lookup can proceed successfully.",
+          "claim_ids": [
+            "corrected_call_order_42"
+          ],
+          "visual_anchors": [
+            "corrected_order_id: 42",
+            "action: lookup_order"
+          ],
+          "claim_requirements": {
+            "corrected_call_order_42": [
+              "sequence"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": "This highlights the importance of valid input for successful execution."
+    }
+  ]
+}

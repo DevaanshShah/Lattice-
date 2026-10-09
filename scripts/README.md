@@ -7,5 +7,8 @@ Operational / one-shot scripts that wrap the engine — the operator layer, neve
 - `render_sample` — render the checked-in hand-written sample scene (shapes + `MathTex`) to MP4 at preview and final quality + export one keyframe PNG (Phase 0 DoD).
 - `run_eval` — execute the eval battery and print the regression score table (M3).
 - `smoke` — end-to-end smoke: topic → outline approval → multi-scene video (M5+).
+- `selftest` — one real video through the web engine, graded on the rendered output. `--renderer browser_v2` drives the learning-video path.
+- `video_regression` — offline, no model calls: re-render the fixed plans in `tests/fixtures/video_golden/`, compare every frame with the approved run, write a contact sheet per case.
+- `plan_battery` — live, planning only: plan the fixed learning-video topics and compare plan rate and first-try scene rate with a baseline.
 
 **Maps to:** all phases (operator tooling).

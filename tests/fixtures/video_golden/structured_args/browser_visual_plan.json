@@ -1,0 +1,297 @@
+{
+  "schema_version": 2,
+  "topic": "An order lookup harness",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s0",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "lookup",
+          "kind": "tool",
+          "role": "tool",
+          "label": "Order lookup",
+          "payload": {}
+        },
+        {
+          "id": "args",
+          "kind": "code",
+          "role": "input",
+          "label": "Arguments",
+          "payload": {
+            "source": "{\"tool\":\"lookup_order\",\"order_id\":42}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "args",
+          "target_id": "lookup",
+          "kind": "flows_to",
+          "label": "Tool call"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "b0",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "args"
+              ],
+              "id": "a0_0",
+              "params": {},
+              "start_fraction": 0.05,
+              "end_fraction": 0.25
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "args",
+                "lookup"
+              ],
+              "id": "a0_1",
+              "params": {},
+              "start_fraction": 0.35,
+              "end_fraction": 0.8
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c0"
+              ],
+              "object_ids": [
+                "args",
+                "lookup"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "a0_1"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "lookup"
+      ],
+      "closing_visible_ids": [
+        "lookup",
+        "args"
+      ],
+      "carryover_ids": []
+    },
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "lookup",
+          "kind": "tool",
+          "role": "tool",
+          "label": "Order lookup",
+          "payload": {}
+        },
+        {
+          "id": "result",
+          "kind": "code",
+          "role": "output",
+          "label": "Returned data",
+          "payload": {
+            "source": "{\"status\":\"shipped\",\"tracking\":\"AB42\"}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "lookup",
+          "target_id": "result",
+          "kind": "flows_to",
+          "label": "Result"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "result"
+              ],
+              "id": "a1_0",
+              "params": {},
+              "start_fraction": 0.05,
+              "end_fraction": 0.25
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "lookup",
+                "result"
+              ],
+              "id": "a1_1",
+              "params": {},
+              "start_fraction": 0.35,
+              "end_fraction": 0.8
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c1"
+              ],
+              "object_ids": [
+                "lookup",
+                "result"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "a1_1"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "lookup"
+      ],
+      "closing_visible_ids": [
+        "lookup",
+        "result"
+      ],
+      "carryover_ids": [
+        "lookup"
+      ]
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "lookup",
+          "kind": "tool",
+          "role": "tool",
+          "label": "Order lookup",
+          "payload": {}
+        },
+        {
+          "id": "invalid",
+          "kind": "code",
+          "role": "input",
+          "label": "Invalid arguments",
+          "payload": {
+            "source": "{\"order_id\":null}"
+          }
+        },
+        {
+          "id": "error",
+          "kind": "code",
+          "role": "audit",
+          "label": "Validation error",
+          "payload": {
+            "source": "{\"error\":\"order_id is required\"}"
+          }
+        },
+        {
+          "id": "corrected",
+          "kind": "code",
+          "role": "input",
+          "label": "Corrected arguments",
+          "payload": {
+            "source": "{\"order_id\":42}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "corrected",
+          "target_id": "lookup",
+          "kind": "flows_to",
+          "label": "Tool call"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "invalid"
+              ],
+              "id": "a2_0",
+              "params": {},
+              "start_fraction": 0.02,
+              "end_fraction": 0.15
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "error"
+              ],
+              "id": "a2_1",
+              "params": {},
+              "start_fraction": 0.2,
+              "end_fraction": 0.35
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "corrected"
+              ],
+              "id": "a2_2",
+              "params": {},
+              "start_fraction": 0.4,
+              "end_fraction": 0.55
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "corrected",
+                "lookup"
+              ],
+              "id": "a2_3",
+              "params": {},
+              "start_fraction": 0.6,
+              "end_fraction": 0.9
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "c2"
+              ],
+              "object_ids": [
+                "corrected",
+                "lookup"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "a2_3"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "lookup"
+      ],
+      "closing_visible_ids": [
+        "lookup",
+        "invalid",
+        "error",
+        "corrected"
+      ],
+      "carryover_ids": [
+        "lookup"
+      ]
+    }
+  ]
+}

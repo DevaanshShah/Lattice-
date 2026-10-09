@@ -1,0 +1,611 @@
+{
+  "schema_version": 1,
+  "topic": "Explain how an agent harness handles a customer password-reset request: intake, policy checks, approved tool use, and a safe final response",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "scene_1",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "request",
+          "kind": "document",
+          "role": "input",
+          "label": "Password-reset request",
+          "payload": {}
+        },
+        {
+          "id": "agent",
+          "kind": "node",
+          "role": "operation",
+          "label": "Agent",
+          "payload": {}
+        },
+        {
+          "id": "log_entry",
+          "kind": "document",
+          "role": "output",
+          "label": "Logged request",
+          "payload": {}
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "request",
+          "target_id": "agent",
+          "kind": "flows_to",
+          "label": "receives via secure channel"
+        },
+        {
+          "source_id": "agent",
+          "target_id": "log_entry",
+          "kind": "flows_to",
+          "label": "records identity & time"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat_1_1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "request",
+                "agent"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "request",
+                "agent"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_intake_channel"
+              ],
+              "object_ids": [
+                "request",
+                "agent"
+              ],
+              "kind": "relationship",
+              "action_ids": []
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "beat_1_2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "log_entry"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "agent",
+                "log_entry"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_log_request"
+              ],
+              "object_ids": [
+                "log_entry"
+              ],
+              "kind": "label",
+              "action_ids": []
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "agent",
+        "log_entry"
+      ],
+      "carryover_ids": []
+    },
+    {
+      "lesson_scene_id": "scene_2",
+      "pattern": "decision",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "agent",
+          "kind": "node",
+          "role": "operation",
+          "label": "Agent",
+          "payload": {}
+        },
+        {
+          "id": "log_entry",
+          "kind": "document",
+          "role": "output",
+          "label": "Logged request",
+          "payload": {}
+        },
+        {
+          "id": "id_verification",
+          "kind": "gate",
+          "role": "decision",
+          "label": "Verify identity",
+          "payload": {}
+        },
+        {
+          "id": "customer_info",
+          "kind": "document",
+          "role": "input",
+          "label": "Customer info",
+          "payload": {}
+        },
+        {
+          "id": "approved_request",
+          "kind": "document",
+          "role": "output",
+          "label": "Approved request",
+          "payload": {}
+        },
+        {
+          "id": "flagged_request",
+          "kind": "document",
+          "role": "output",
+          "label": "Flagged request",
+          "payload": {}
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "agent",
+          "target_id": "id_verification",
+          "kind": "connects_to",
+          "label": "performs"
+        },
+        {
+          "source_id": "log_entry",
+          "target_id": "id_verification",
+          "kind": "flows_to",
+          "label": ""
+        },
+        {
+          "source_id": "customer_info",
+          "target_id": "id_verification",
+          "kind": "flows_to",
+          "label": ""
+        },
+        {
+          "source_id": "id_verification",
+          "target_id": "approved_request",
+          "kind": "branches_to",
+          "label": "matches"
+        },
+        {
+          "source_id": "id_verification",
+          "target_id": "flagged_request",
+          "kind": "branches_to",
+          "label": "mismatches"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat_2_1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "customer_info",
+                "id_verification"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "id_verification"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "customer_info"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_identity_check"
+              ],
+              "object_ids": [
+                "customer_info",
+                "id_verification"
+              ],
+              "kind": "relationship",
+              "action_ids": []
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "beat_2_2",
+          "actions": [
+            {
+              "kind": "branch",
+              "target_ids": [
+                "approved_request",
+                "flagged_request"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_match_records"
+              ],
+              "object_ids": [
+                "approved_request"
+              ],
+              "kind": "label",
+              "action_ids": []
+            },
+            {
+              "claim_ids": [
+                "claim_flag_suspicious"
+              ],
+              "object_ids": [
+                "flagged_request"
+              ],
+              "kind": "label",
+              "action_ids": []
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "agent",
+        "log_entry"
+      ],
+      "closing_visible_ids": [
+        "agent",
+        "approved_request",
+        "flagged_request"
+      ],
+      "carryover_ids": [
+        "agent",
+        "log_entry"
+      ]
+    },
+    {
+      "lesson_scene_id": "scene_3",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "agent",
+          "kind": "node",
+          "role": "operation",
+          "label": "Agent",
+          "payload": {}
+        },
+        {
+          "id": "approved_request",
+          "kind": "document",
+          "role": "output",
+          "label": "Approved request",
+          "payload": {}
+        },
+        {
+          "id": "password_tool",
+          "kind": "tool",
+          "role": "operation",
+          "label": "Password reset tool",
+          "payload": {}
+        },
+        {
+          "id": "temp_password",
+          "kind": "document",
+          "role": "output",
+          "label": "Temporary password",
+          "payload": {}
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "approved_request",
+          "target_id": "agent",
+          "kind": "flows_to",
+          "label": "Handles"
+        },
+        {
+          "source_id": "agent",
+          "target_id": "password_tool",
+          "kind": "connects_to",
+          "label": "Accesses"
+        },
+        {
+          "source_id": "password_tool",
+          "target_id": "temp_password",
+          "kind": "flows_to",
+          "label": "Generates"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat_3_1",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "password_tool"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "agent",
+                "password_tool"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_access_tool"
+              ],
+              "object_ids": [
+                "agent",
+                "password_tool"
+              ],
+              "kind": "relationship",
+              "action_ids": []
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "beat_3_2",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "temp_password"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "expand",
+              "target_ids": [
+                "temp_password"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_security_standards"
+              ],
+              "object_ids": [
+                "temp_password"
+              ],
+              "kind": "label",
+              "action_ids": []
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "agent",
+        "approved_request"
+      ],
+      "closing_visible_ids": [
+        "agent",
+        "temp_password"
+      ],
+      "carryover_ids": [
+        "agent",
+        "approved_request"
+      ]
+    },
+    {
+      "lesson_scene_id": "scene_4",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "agent",
+          "kind": "node",
+          "role": "operation",
+          "label": "Agent",
+          "payload": {}
+        },
+        {
+          "id": "temp_password",
+          "kind": "document",
+          "role": "output",
+          "label": "Temporary password",
+          "payload": {}
+        },
+        {
+          "id": "secure_delivery",
+          "kind": "tool",
+          "role": "tool",
+          "label": "Secure delivery method",
+          "payload": {}
+        },
+        {
+          "id": "customer",
+          "kind": "node",
+          "role": "destination",
+          "label": "Customer",
+          "payload": {}
+        },
+        {
+          "id": "instructions",
+          "kind": "document",
+          "role": "output",
+          "label": "Change password instructions",
+          "payload": {}
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "agent",
+          "target_id": "secure_delivery",
+          "kind": "connects_to",
+          "label": "uses"
+        },
+        {
+          "source_id": "secure_delivery",
+          "target_id": "customer",
+          "kind": "flows_to",
+          "label": "sends to"
+        },
+        {
+          "source_id": "agent",
+          "target_id": "instructions",
+          "kind": "flows_to",
+          "label": "includes"
+        },
+        {
+          "source_id": "instructions",
+          "target_id": "customer",
+          "kind": "flows_to",
+          "label": "sends to"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "beat_4_1",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "secure_delivery"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            },
+            {
+              "kind": "connect",
+              "target_ids": [
+                "secure_delivery",
+                "customer"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_secure_delivery"
+              ],
+              "object_ids": [
+                "secure_delivery"
+              ],
+              "kind": "label",
+              "action_ids": []
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "beat_4_2",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "instructions"
+              ],
+              "id": null,
+              "params": {},
+              "start_fraction": null,
+              "end_fraction": null
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "claim_password_change_instruction"
+              ],
+              "object_ids": [
+                "instructions"
+              ],
+              "kind": "label",
+              "action_ids": []
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [
+        "agent",
+        "temp_password"
+      ],
+      "closing_visible_ids": [
+        "agent",
+        "customer",
+        "instructions"
+      ],
+      "carryover_ids": [
+        "agent",
+        "temp_password"
+      ]
+    }
+  ]
+}

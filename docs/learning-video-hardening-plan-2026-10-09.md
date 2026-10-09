@@ -1,6 +1,7 @@
 # Learning video hardening plan
 
-Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: proposed, not started
+Date: 2026-10-09 · Branch: `codex/learning-video-continuity-20260922` · Status: Phase 0 built on
+2026-10-09 and waiting for the owner to look at the contact sheets; Phase 1 is next
 
 This plan covers the new learning-video path: the web Teach tab, renderer `browser_v2`, plan
 format version 2. It replaces one-off fixing with phases, and every phase ends with a test gate.
@@ -111,6 +112,28 @@ No behaviour changes in this phase.
 
 Gate: the regression script is green on every case (or skipped for a stated reason), the baseline
 is stored, and the owner has looked at the contact sheets.
+
+**Result, 2026-10-09.** Built as planned, with three additions.
+
+- The fixed set has seven cases, not five. `binary_search_stills` covers the still-frame route
+  that older untimed plans use, and `binary_search_manim` covers the Manim route.
+- `--accept-last` approves the previous run as the baseline without rendering it again.
+- A Manim case is skipped, with the reason, when Docker or the render image is missing.
+
+Run it with `python -m scripts.video_regression`. It takes about five minutes. All seven cases
+pass with no compact-layout fallback, and a second run matched the first on every frame (SSIM
+1.0000), so a reported change means the code changed the picture. The approved videos and contact
+sheets are in `out/video_regression/baseline/`; they are local files and are not in git. Unit
+tests: 552 pass.
+
+The starting contact sheets already show two known problems: "Target: 8" fades out in the last
+beat of `binary_search` (problem 8), and code text overlaps a box for a moment when it appears in
+`structured_args` (the reason for Phase 2 item 3).
+
+While this ran, the Docker render image `lattice-render:0.2` was found deleted and was rebuilt
+with `python -m scripts.setup_env`.
+
+Still open for this gate: the owner looks at the contact sheets.
 
 ### Phase 1: correctness fixes
 

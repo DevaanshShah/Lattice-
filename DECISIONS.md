@@ -10,6 +10,30 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-09 — The video regression compares against local videos rendered with silent narration
+
+**Context.** Nothing checked how a learning video looks; the 2026-09-23 renderer change passed
+every test and made videos worse. A check has to be free to run, repeatable, and able to tell
+"the code changed the picture" from noise.
+
+**Decision.** `scripts/video_regression.py` re-renders plans kept in git
+(`tests/fixtures/video_golden/`) with silent audio whose length comes from each beat's word count,
+and compares every frame with FFmpeg's SSIM filter against approved videos stored under
+`out/video_regression/baseline/`, which is not in git. A changed frame is reported for a person to
+judge on a contact sheet; it is not a failure by itself.
+
+**Why not the alternative.** Real narration: the voice engine decides beat length, so frames move
+when the voice changes and a diff means nothing. Baseline videos in git: tens of megabytes of
+binaries that depend on this machine's fonts and Chrome. A vision model as judge: the research
+found such judges rate visibly broken layouts as fine. Pillow or another image library: a new
+dependency for something FFmpeg already does.
+
+**Consequence.** A fresh clone has no baseline until the regression is run once and accepted, so
+the first run on a new machine cannot detect a change. Two runs of the same code match at SSIM
+1.0000 on this machine, so the threshold of 0.995 flags real differences only.
+
+---
+
 ### 2026-10-09 — Keep the structured-plan architecture; work in gated phases behind a harness
 
 **Context.** After two sessions of fixing the new learning-video path one failure at a time, the

@@ -1,0 +1,198 @@
+{
+  "schema_version": 2,
+  "topic": "Binary search",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "search",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "array",
+          "kind": "array",
+          "role": "input",
+          "label": "Array",
+          "payload": {
+            "items": [
+              2,
+              5,
+              8,
+              12,
+              16,
+              23,
+              38
+            ]
+          }
+        },
+        {
+          "id": "pointer",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "Check",
+          "payload": {
+            "target_id": "array",
+            "index": 0
+          }
+        },
+        {
+          "id": "target",
+          "kind": "value",
+          "role": "context",
+          "label": "Target",
+          "payload": {
+            "value": 8
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "scan",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "array",
+                "pointer",
+                "target"
+              ],
+              "id": "show",
+              "params": {},
+              "start_fraction": 0.1,
+              "end_fraction": 0.2143
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "pointer"
+              ],
+              "id": "check_2",
+              "params": {
+                "index": 0
+              },
+              "start_fraction": 0.2143,
+              "end_fraction": 0.3286
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "pointer",
+                "target"
+              ],
+              "id": "compare_2",
+              "params": {},
+              "start_fraction": 0.3286,
+              "end_fraction": 0.4429
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "pointer"
+              ],
+              "id": "check_5",
+              "params": {
+                "index": 1
+              },
+              "start_fraction": 0.4429,
+              "end_fraction": 0.5571
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "pointer",
+                "target"
+              ],
+              "id": "compare_5",
+              "params": {},
+              "start_fraction": 0.5571,
+              "end_fraction": 0.6714
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "pointer"
+              ],
+              "id": "check_8",
+              "params": {
+                "index": 2
+              },
+              "start_fraction": 0.6714,
+              "end_fraction": 0.7857
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "pointer",
+                "target"
+              ],
+              "id": "compare_8",
+              "params": {},
+              "start_fraction": 0.7857,
+              "end_fraction": 0.9
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "ordered_checks"
+              ],
+              "object_ids": [
+                "array",
+                "pointer"
+              ],
+              "kind": "sequence",
+              "action_ids": [
+                "check_2",
+                "check_5",
+                "check_8"
+              ]
+            }
+          ]
+        },
+        {
+          "narration_beat_id": "discard",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "array"
+              ],
+              "id": "discard_cells",
+              "params": {
+                "discarded_indices": [
+                  0,
+                  1,
+                  2
+                ]
+              },
+              "start_fraction": 0.1,
+              "end_fraction": 0.9
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "discard_left"
+              ],
+              "object_ids": [
+                "array"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "discard_cells"
+              ]
+            }
+          ]
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "array",
+        "pointer",
+        "target"
+      ],
+      "carryover_ids": []
+    }
+  ]
+}

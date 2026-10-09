@@ -1,0 +1,82 @@
+{
+  "schema_version": 2,
+  "topic": "An order lookup harness",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Trace invocation, returned data and validation",
+  "audience": "Beginner",
+  "prerequisites": [],
+  "scenes": [
+    {
+      "id": "s0",
+      "title": "Send structured arguments",
+      "learning_goal": "Send structured arguments",
+      "example": "Order 42",
+      "beats": [
+        {
+          "id": "b0",
+          "spoken_text": "The request asks about order 42. Send validated arguments to the lookup tool.",
+          "claim_ids": [
+            "c0"
+          ],
+          "visual_anchors": [
+            "Order lookup"
+          ],
+          "claim_requirements": {
+            "c0": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    },
+    {
+      "id": "s1",
+      "title": "Use the returned data",
+      "learning_goal": "Use the returned data",
+      "example": "Order 42",
+      "beats": [
+        {
+          "id": "b1",
+          "spoken_text": "The lookup returns shipped status and tracking AB42. This is tool data, not a guessed answer.",
+          "claim_ids": [
+            "c1"
+          ],
+          "visual_anchors": [
+            "Order lookup"
+          ],
+          "claim_requirements": {
+            "c1": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    },
+    {
+      "id": "s2",
+      "title": "Reject missing arguments before execution",
+      "learning_goal": "Reject missing arguments before execution",
+      "example": "Order 42",
+      "beats": [
+        {
+          "id": "b2",
+          "spoken_text": "A missing order ID is rejected. After supplying 42, one corrected attempt reaches the tool.",
+          "claim_ids": [
+            "c2"
+          ],
+          "visual_anchors": [
+            "Order lookup"
+          ],
+          "claim_requirements": {
+            "c2": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null
+    }
+  ]
+}
