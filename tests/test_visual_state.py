@@ -343,7 +343,8 @@ def test_v2_planners_send_semantic_contract_and_keep_versions_aligned():
             return self.response
 
     lesson_client = Client(lesson.model_dump_json())
-    generated_lesson = lesson_plan.generate("Binary search", skill, client=lesson_client,
+    generated_lesson = lesson_plan.generate("Binary search", load_recipes()["algorithm_explainer"],
+                                            client=lesson_client,
                                             schema_version=2)
     assert generated_lesson.schema_version == 2
     assert "state_change" in lesson_client.messages[0]["content"]
@@ -369,33 +370,28 @@ def test_v2_planners_send_semantic_contract_and_keep_versions_aligned():
 
 
 @pytest.mark.unit
-def test_new_v2_scene_repairs_missing_cues_but_old_saved_scene_can_resume():
+def test_code_times_an_untimed_new_scene_and_an_old_saved_scene_can_resume():
     lesson, plan = _binary_search()
     old_scene = plan.scenes[0].model_copy(deep=True)
-    for beat in plan.scenes[0].beats:
-        for index, action in enumerate(beat.actions):
-            action.start_fraction = index / len(beat.actions)
-            action.end_fraction = (index + 1) / len(beat.actions)
 
     class Client:
         calls = 0
 
         def chat(self, messages, **kwargs):
             self.calls += 1
-            if self.calls == 1:
-                return old_scene.model_dump_json()
-            assert "require start_fraction and end_fraction" in messages[-1]["content"]
-            return plan.scenes[0].model_dump_json()
+            return old_scene.model_dump_json()         # the model left every action untimed
 
     client = Client()
     skill = load_recipes()["workflow_explainer"]
     result = browser_visual_plan.generate(lesson, skill, client=client, schema_version=2)
-    assert client.calls == 2
-    assert all(action.start_fraction is not None
-               for beat in result.scenes[0].beats for action in beat.actions)
+    assert client.calls == 1                           # timing is arithmetic, not a paid retry
+    for beat in result.scenes[0].beats:
+        windows = [(action.start_fraction, action.end_fraction) for action in beat.actions]
+        assert windows[0][0] == .06 and windows[-1][1] == .94
+        assert all(first[1] == second[0] for first, second in zip(windows, windows[1:]))
     resumed = browser_visual_plan.generate(lesson, skill, client=client, schema_version=2,
                                           starting_scenes=[old_scene])
-    assert client.calls == 2
+    assert client.calls == 1
     assert resumed.scenes[0] == old_scene
 
 

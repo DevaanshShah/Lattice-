@@ -32,8 +32,13 @@ TOPICS = [
     "shipped and tracking AB42 and the answer uses that data, then a missing order_id is rejected "
     "before execution and one corrected call succeeds.",
     "How a sales funnel narrows from 1,000 website visitors to 50 paying customers, stage by stage.",
+    # a system topic: the target style is one map built piece by piece, then a problem and its fix
+    "How a food delivery order travels from the customer's phone through a gateway, an order "
+    "service, a cache and a database, and what happens when the single database gets overloaded.",
 ]
 REPAIR_PREFIX = "This visual scene is invalid: "
+LESSON_REPAIR_PREFIX = "That was invalid ("
+TARGET_SECONDS = 60     # the web app's middle duration pick
 
 
 class BudgetExceeded(RuntimeError):
@@ -56,6 +61,8 @@ class CappedClient:
         last = messages[-1]["content"] if messages else ""
         if len(messages) > 2 and last.startswith(REPAIR_PREFIX):
             self.rejections.append(last[len(REPAIR_PREFIX):].split(". Repair only this scene")[0][:300])
+        elif len(messages) > 2 and last.startswith(LESSON_REPAIR_PREFIX):
+            self.rejections.append("lesson: " + last[len(LESSON_REPAIR_PREFIX):][:300])
         self.calls += 1
         return self.inner.chat(messages, **kwargs)
 
@@ -76,7 +83,8 @@ def plan_topic(topic: str, client: CappedClient, out_dir: Path) -> TopicResult:
     start_calls, start_rejections = client.calls, len(client.rejections)
     lesson = None
     try:
-        lesson = lesson_plan.generate(topic, skill, client=client, schema_version=2)
+        lesson = lesson_plan.generate(topic, skill, client=client, schema_version=2,
+                                      target_seconds=TARGET_SECONDS)
         result.lesson_ok = True
         result.lesson_tries = client.calls - start_calls
         result.lesson_words = sum(len(beat.spoken_text.split())

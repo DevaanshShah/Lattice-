@@ -315,13 +315,15 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
                 raise VisualPlanValidationError("compare action requires a pointer and fixed value")
         if action.kind == "trace":
             # the ball follows arrows that exist, through pieces that are on screen
-            arrows = {(relation.source_id, relation.target_id) for relation in scene.relationships}
+            arrows = {frozenset((relation.source_id, relation.target_id))
+                      for relation in scene.relationships}
             hops = list(zip(action.target_ids, action.target_ids[1:]))
-            missing = [f"{a}->{b}" for a, b in hops if (a, b) not in arrows]
+            # either direction: a reply travels back along the arrow its request came by
+            missing = [f"{a}->{b}" for a, b in hops if frozenset((a, b)) not in arrows]
             if not hops or missing:
                 raise VisualPlanValidationError(
                     f"trace action {action.id!r} needs a path of two or more pieces joined by "
-                    f"relationships in that order; no arrow for {missing or action.target_ids}")
+                    f"relationships; no arrow for {missing or action.target_ids}")
             unseen = sorted(set(action.target_ids) - seen)
             if unseen:
                 raise VisualPlanValidationError(
@@ -330,6 +332,15 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
             if type(count) is not int or not 1 <= count <= 5 or (tone is not None and tone not in TONES):
                 raise VisualPlanValidationError(
                     f"trace action {action.id!r}: count is 1 to 5 and tone one of {list(TONES)}")
+        if action.kind == "set_state" and "tone" in action.params:
+            # Colour carries meaning on a map: red is trouble, a piece's own colour is healthy.
+            # Any other change of colour would be a change the viewer cannot read.
+            for target in action.target_ids:
+                own = objects[target].payload.get("tone")
+                if action.params["tone"] not in {"red", own}:
+                    raise VisualPlanValidationError(
+                        f"action {action.id!r} recolours {target!r} to {action.params['tone']!r}; a "
+                        f"piece may only turn 'red' (in trouble) or back to its own tone {own!r}")
         if action.kind == "set_state" and not action.params:
             raise VisualPlanValidationError("set_state action requires changed state")
         if action.kind == "set_state":
@@ -351,6 +362,18 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
                             or index >= len(objects[target].payload["items"])
                             for index in indices)):
                         raise VisualPlanValidationError("discarded array indices are out of bounds")
+    # Arrows this beat actually shows: one it travels or connects, or one that draws itself
+    # because the beat brings an end of it on screen. An arrow that merely exists proves nothing.
+    shown_arrows: set[frozenset] = set()
+    for action in visual_beat.actions:
+        if action.kind in {"connect", "branch", "trace"}:
+            shown_arrows.update(frozenset(pair) for pair in zip(action.target_ids, action.target_ids[1:]))
+            if action.kind != "trace":
+                shown_arrows.add(frozenset(action.target_ids))
+    revealed = set().union(*(effect.revealed for effect in current_effects.values()))         if current_effects else set()
+    shown_arrows.update(frozenset((relation.source_id, relation.target_id))
+                        for relation in scene.relationships
+                        if {relation.source_id, relation.target_id} & revealed)
     evidence_by_claim = {claim: [] for claim in lesson_beat.claim_ids}
     for evidence in visual_beat.evidence:
         allowed_actions = actions if evidence.kind == "sequence" else current_actions
@@ -365,7 +388,7 @@ def _validate_v2_beat(lesson_beat, visual_beat, scene: BrowserScene, prior_actio
             if any(_proves(requirement, evidence,
                            _steps(_claimed([evidence], objects), evidence.action_ids,
                                   prior_effects, current_effects, earlier=earlier),
-                           objects, scene, beat_state, seen)
+                           objects, scene, beat_state, seen, shown_arrows)
                    for evidence in evidence_by_claim[claim]):
                 continue
             claimed = _claimed(evidence_by_claim[claim], objects)
@@ -385,6 +408,8 @@ _PROOF_NEEDS = {
                  "least one changing an object already on screen; appearing, highlighting, or "
                  "re-setting a value already shown is not a step that changes it."),
     "value": "Needed: a visible object that draws the value.",
+    "relationship": ("Needed: the beat shows the arrow between two objects the claim names, by "
+                     "connecting or tracing them or by bringing one of them on screen."),
 }
 # Hides the planner adds to tidy the screen. They are not the model's demonstration, so an object
 # they remove must not count as "it changed".
@@ -416,7 +441,8 @@ def _steps(claimed: set[str], cited: list[str], prior_effects: dict[str, ActionE
 
 
 def _proves(requirement, evidence, steps: list[tuple[str, ActionEffect]], objects,
-            scene: BrowserScene, beat_state: VisualState, seen: set[str]) -> bool:
+            scene: BrowserScene, beat_state: VisualState, seen: set[str],
+            shown_arrows: set[frozenset]) -> bool:
     if evidence.kind != requirement:
         return False
     if requirement == "label":
@@ -428,6 +454,7 @@ def _proves(requirement, evidence, steps: list[tuple[str, ActionEffect]], object
             for obj_id in evidence.object_ids)
     if requirement == "relationship":
         return any({relation.source_id, relation.target_id} <= set(evidence.object_ids)
+                   and frozenset((relation.source_id, relation.target_id)) in shown_arrows
                    for relation in scene.relationships)
     if requirement == "state_change":
         return any(step.changed or step.removed for _, step in steps)

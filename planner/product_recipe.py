@@ -25,6 +25,9 @@ class Recipe:
     visual_pattern: str
     allowed_patterns: tuple[str, ...]
     required_roles: tuple[str, ...]
+    # How a learning video on this recipe is drawn: "map" is one diagram of pieces for the whole
+    # lesson, planned in a single call; "free" lets the visual step choose forms scene by scene.
+    board: str = "free"
 
 
 def load_recipes() -> dict[str, Recipe]:
@@ -33,7 +36,7 @@ def load_recipes() -> dict[str, Recipe]:
                        outline_guidance=r["outline_guidance"], scene_guidance=r["scene_guidance"],
                        visual_pattern=r["visual_pattern"],
                        allowed_patterns=tuple(r["allowed_patterns"]),
-                       required_roles=tuple(r["required_roles"]))
+                       required_roles=tuple(r["required_roles"]), board=r.get("board", "free"))
             for rid, r in data.items()}
 
 

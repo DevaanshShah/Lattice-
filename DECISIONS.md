@@ -10,6 +10,49 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-10 — A system lesson is narration plus one move per beat, and code draws it
+
+**Context.** A system lesson cost six model calls (one for the script, one per scene) plus
+retries: about $0.07 on `gpt-4o`, and cheap models failed. Most rejections came from the clerical
+part of a scene (ids, timing, proof records) and from the script step promising a proof the
+visual step could not honestly draw. The owner asked for the cost to come down without going
+back to boxes.
+
+**Decision.** For a lesson taught on a map the model writes the map once and, for each sentence,
+one move from a menu of seven. Code derives the claim, the proof kind and the anchors from the
+move, and compiles every scene. The compiled scenes pass through the unchanged validator, and a
+failure goes back to the single lesson call. The recipe, not the model, decides whether a topic
+is taught on a map.
+
+**Why not the alternative.** Keeping the model-written visual step and batching all scenes into
+one call would have halved the calls but kept the retries and the disagreement between the two
+steps. Shrinking prompts alone saves a fraction of a cent, because output tokens and call count
+dominate. Letting the model choose the board failed in practice: `gpt-4.1-mini` wrote a
+free-form lesson for a system topic.
+
+**Consequence.** One call per system video (about $0.0013 on `deepseek-v4.1-flash`). A map
+lesson can only show what the menu offers, so variety now comes from adding moves, each with a
+test. The script and the picture share one source, so nothing checks that a sentence matches its
+move; that check is open.
+
+### 2026-10-10 — Planning calls turn reasoning off
+
+**Context.** `deepseek-v4.1-flash` returned an empty answer on its first two tries in every run.
+One probe showed 4,096 reasoning tokens, no content, finish reason `length`. With
+`reasoning: {"enabled": false}` the same call returned a complete lesson in 943 tokens at a
+quarter of the cost; `{"effort": "low"}` changed nothing.
+
+**Decision.** Both planning calls send `PLAN_EXTRA` (reasoning off). The client drops that field
+for a provider that is not OpenRouter, and no longer retries a blank answer that was cut off by
+the token limit.
+
+**Why not the alternative.** Raising the token limit would pay for the thinking on every call.
+A plan is structured writing checked by code, and the checks, not the model's deliberation,
+are what make it correct.
+
+**Consequence.** A model that cannot turn reasoning off may ignore or reject the field; that is
+untested.
+
 ### 2026-10-10 — The ball is a step of its own, not a side effect of drawing an arrow
 
 **Context.** The first map board sent the ball along each arrow as the arrow was drawn. The owner

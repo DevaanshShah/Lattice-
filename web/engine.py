@@ -115,7 +115,7 @@ class Engine:
         workspace = self.workspace(pid)
         planned = browser_video.plan(topic, recipe=recipe, out_dir=workspace,
                                      client=self._client_or_default(), max_scenes=max_scenes,
-                                     log=say, schema_version=2)
+                                     log=say, schema_version=2, target_seconds=target_seconds)
         outline = Outline(topic=topic, items=[
             OutlineItem(title=scene.title, intent=scene.learning_goal)
             for scene in planned.lesson.scenes

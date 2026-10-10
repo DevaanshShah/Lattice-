@@ -124,7 +124,9 @@ def test_lesson_and_visual_planners_send_the_locked_contract_to_the_llm():
     lesson = lesson_plan.generate("Agent harness", skill, client=lesson_client)
     assert "Required visual roles: input, operation, output" in lesson_client.messages[-1]["content"]
     assert "visual_anchors" in lesson_client.messages[0]["content"]
-    assert lesson_client.kwargs == {"max_tokens": 4096, "attempts": 3, "timeout": 60.0}
+    assert lesson_client.kwargs == {"max_tokens": 4096, "attempts": 3, "timeout": 60.0,
+                                    "response_format": {"type": "json_object"},
+                                    "extra_body": {"reasoning": {"enabled": False}}}
 
     visual_data = _visual().scenes[0].model_dump_json()
 
@@ -141,7 +143,9 @@ def test_lesson_and_visual_planners_send_the_locked_contract_to_the_llm():
     plan = browser_visual_plan.generate(lesson, skill, client=visual_client)
     assert "Locked lesson scene" in visual_client.messages[-1]["content"]
     assert "Allowed patterns: workflow, transformation, decision, timeline" in visual_client.messages[-1]["content"]
-    assert visual_client.kwargs == {"max_tokens": 4096, "attempts": 3, "timeout": 60.0}
+    assert visual_client.kwargs == {"max_tokens": 4096, "attempts": 3, "timeout": 60.0,
+                                    "response_format": {"type": "json_object"},
+                                    "extra_body": {"reasoning": {"enabled": False}}}
     assert plan.skill_id == skill.id
 
 
@@ -618,7 +622,7 @@ def test_one_dropped_connection_does_not_end_lesson_planning(monkeypatch):
     monkeypatch.setattr(llm_mod.time, "sleep", lambda _s: None)
     client = llm_mod.LLMClient(model="m")
     client._client = fake
-    lesson = lesson_planner.generate("Order lookup", recipes()["workflow_explainer"],
+    lesson = lesson_planner.generate("Order lookup", recipes()["algorithm_explainer"],
                                      client=client, schema_version=2)
     assert len(calls) == 2              # the dropped call was retried once, then answered
     assert len(lesson.scenes) == 3

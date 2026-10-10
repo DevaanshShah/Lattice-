@@ -45,6 +45,10 @@ def _issues(data: dict) -> list[str]:
     for node in nodes:
         if _intersection(title, node["rect"]) > 1:
             issues.append(f"title overlaps node {node['id']!r}")
+    for index, label in enumerate(labels):
+        for other in labels[index + 1:]:     # two arrows' labels on one spot read as neither
+            if _intersection(label["rect"], other["rect"]) > 1:
+                issues.append(f"edge label {label['text']!r} overlaps edge label {other['text']!r}")
     for label in labels:
         rect = label["rect"]
         if _clipped(rect, width, height):

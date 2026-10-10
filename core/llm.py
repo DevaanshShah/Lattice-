@@ -150,6 +150,12 @@ class LLMClient:
         #    system prompt is billed at the cached rate (~90% off) instead of full price every call.
         # Pinning a provider (llm_provider_pin) chooses cost; allow_fallbacks keeps reliability.
         # No-op for direct providers (DeepSeek/AiCredits) that ignore the `provider` field.
+        if "openrouter.ai" not in (self.base_url or "") and "reasoning" in (kwargs.get("extra_body") or {}):
+            # `reasoning` is OpenRouter's switch; a direct provider would reject the unknown field
+            rest = {key: value for key, value in kwargs["extra_body"].items() if key != "reasoning"}
+            kwargs = {key: value for key, value in kwargs.items() if key != "extra_body"}
+            if rest:
+                kwargs["extra_body"] = rest
         if "openrouter.ai" in (self.base_url or ""):
             eb = dict(kwargs.get("extra_body") or {})
             prov = dict(eb.get("provider") or {})
@@ -173,7 +179,9 @@ class LLMClient:
                     continue
                 raise
             content = (resp.choices[0].message.content or "") if resp.choices else ""
-            if not content.strip() and i < attempts - 1:
+            cut_off = bool(resp.choices) and getattr(resp.choices[0], "finish_reason", None) == "length"
+            # an answer that ran out of tokens will run out again: asking twice only pays twice
+            if not content.strip() and not cut_off and i < attempts - 1:
                 time.sleep(1.0 * (i + 1))  # blank content -> treat as transient gateway glitch
                 continue
             return resp

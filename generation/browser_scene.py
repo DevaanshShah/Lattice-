@@ -175,7 +175,16 @@ def _flow_layers(scene: BrowserScene) -> dict[str, int]:
             for node in order}
 
 
-MAX_FLOW_COLUMNS = 4     # a longer flow wraps to a second row instead of shrinking to fit
+MAX_FLOW_COLUMNS = 4     # a longer flow of cards wraps to a second row instead of shrinking to fit
+# A row holds as much as four cards. An icon piece is narrower than a card and a panel with pieces
+# inside is wider, so a row takes six icon pieces, or three panels, before it wraps.
+ROW_WIDTH = MAX_FLOW_COLUMNS * 1.5
+
+
+def _column_width(obj) -> float:
+    if obj.kind == "icon":
+        return 1
+    return 2 if obj.kind == "group" and obj.payload.get("members") else 1.5
 
 
 def _shown_in_scene(scene: BrowserScene) -> set[str]:
@@ -342,11 +351,17 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                     + "".join(drawn[obj_id] for obj_id in rest) + f'</div></div>{captions}')
         return f'<div class="semantic-stack">{"".join(drawn[obj_id] for obj_id in top)}</div>{captions}'
     columns: dict[int, list[str]] = {}
+    widths: dict[int, float] = {}
     for obj_id in top:
         columns.setdefault(layers[obj_id], []).append(drawn[obj_id])
-    ordered = [columns[index] for index in sorted(columns)]
-    rows = [ordered[first:first + MAX_FLOW_COLUMNS]
-            for first in range(0, len(ordered), MAX_FLOW_COLUMNS)]
+        widths[layers[obj_id]] = max(widths.get(layers[obj_id], 0), _column_width(objects[obj_id]))
+    rows, used = [[]], 0.0
+    for index in sorted(columns):
+        if rows[-1] and used + widths[index] > ROW_WIDTH:
+            rows.append([])
+            used = 0.0
+        rows[-1].append(columns[index])
+        used += widths[index]
     # The gap between columns is as wide as the longest arrow label that has to sit in it.
     lines = [_label_lines(relation.label) for relation in scene.relationships if relation.label
              and relation.source_id in slots and relation.target_id in slots]
@@ -507,10 +522,13 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     const ca=a.closest('.semantic-column').getBoundingClientRect();
     const cb=b.closest('.semantic-column').getBoundingClientRect();
     const sx=(right?ra.right:ra.left)-box.left,ex=(right?rb.left:rb.right)-box.left;
-    const turn=((right?ca.right:ca.left)+(right?cb.left:cb.right))/2-box.left;
+    // Turn just outside the source's column, then run level into the target. The upright
+    // stroke stays clear of a level arrow's label, which is centred in the same gap, and this
+    // arrow's own label sits on its last run, where no other arrow is.
+    const turn=(right?ca.right:ca.left)-box.left+(right?12:-12)*(window.flowFit||1);
     const sy=ra.top+ra.height/2-box.top,ey=rb.top+rb.height/2-box.top;
     points=[[sx,sy],[turn,sy],[turn,ey],[ex,ey]];
-    labelX=turn;labelY=Math.min(sy,ey);bent=true;
+    labelX=(turn+ex)/2;labelY=ey;bent=true;
     // A piece with several arrows out would stack them in the one gap, a turn through another
     // arrow's label. Leave from its top or bottom instead when nothing in its column is in the way.
     const several=JSON.parse(document.getElementById('relations').textContent)
@@ -659,8 +677,10 @@ const edgeKey=e=>e.dataset.sourceId+'>'+e.dataset.targetId;
 function restBall(pair){
   // the ball waits at the end of the arrow it last travelled, on the piece being talked about
   const edge=pair&&edges().find(e=>edgeKey(e)===pair[0]+'>'+pair[1]);
-  if(!edge)return;
-  const points=JSON.parse(edge.dataset.route),end=points[points.length-1];
+  const back=!edge&&pair&&edges().find(e=>edgeKey(e)===pair[1]+'>'+pair[0]);
+  if(!edge&&!back)return;
+  // a reply rests where it arrived: at the start of the arrow it travelled backwards
+  const points=JSON.parse((edge||back).dataset.route),end=edge?points[points.length-1]:points[0];
   const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
   dot.setAttribute('r','7');dot.setAttribute('fill',pair[2]||'#f4f4f5');dot.setAttribute('class','flow-ball');
   dot.setAttribute('transform',`translate(${end[0]} ${end[1]})`);
@@ -721,8 +741,10 @@ function display(index){
     let hops=0;
     for(let i=1;i<action.target_ids.length;i++){
       const edge=edges().find(e=>edgeKey(e)===action.target_ids[i-1]+'>'+action.target_ids[i]);
-      if(!edge)continue;
-      points.push(...JSON.parse(edge.dataset.route));hops++;
+      const back=!edge&&edges().find(e=>edgeKey(e)===action.target_ids[i]+'>'+action.target_ids[i-1]);
+      if(!edge&&!back)continue;
+      const route=JSON.parse((edge||back).dataset.route);
+      points.push(...(edge?route:route.reverse()));hops++;
     }
     const distances=[0];
     for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
@@ -759,6 +781,8 @@ window.seekAnimation=seconds=>{
       const length=edge.getTotalLength();
       edge.style.strokeDasharray=length;edge.style.strokeDashoffset=length*(1-done);
       edge.removeAttribute('marker-end');     // the arrowhead arrives with the end of the line
+      const label=edge.nextElementSibling;    // its label fades in as the line is drawn
+      if(label&&label.classList.contains('edge-label'))label.style.opacity=done;
     }
   }
 };

@@ -355,6 +355,29 @@ sheet with the reference frames and approves.
 
 This phase changes what the AI is asked, so it needs live runs.
 
+**Status on 2026-10-10: the first part is built, tested and measured.** It went further than
+the items below: for a lesson on a map the visual step makes no model call at all. The design,
+the measurements and what the outside audit found are in
+`docs/learning-video-system-flow.md`; the prompts are in `docs/learning-video-prompts.md`.
+
+Done: item 0 for `gpt-4o-mini` (0 of 4 planned on the unchanged prompts); item 1 (as a map plus
+one move per beat, compiled by code); item 2 (the requested length reaches the lesson, at the
+measured pace of 2.8 words per second); item 3 and item 6 for map lessons (the recipe picks the
+board and only that board's prompt is sent); item 5 for every scene after the first; item 8 as
+a measurement (`deepseek/deepseek-v4.1-flash` planned 6 of 6 at about $0.0013 a lesson).
+
+What remains, in order:
+
+1. Set the default model. `.env` is the owner's file and still names `gpt-4o-mini`.
+2. Widen the menu where videos feel alike: compare two options, a queue filling, one piece
+   becoming three. One move at a time, each with a test and a hand-written fixture.
+3. Give the other lesson types the same treatment (a move menu compiled by code): algorithm
+   on an array, code and picture, chart. They still use the model-written visual step, which
+   failed on every model tried.
+4. A way to check that a sentence matches its move.
+5. An escape hatch: a beat marked custom goes to a model call for that beat only.
+6. Items 4 and 7 below for lessons that still use the model-written visual step.
+
 0. **Measure first.** Run the plan battery on the unchanged prompts with `gpt-4o-mini` and
    `gpt-4o`, and store it as the baseline.
 1. **The lesson step plans one map.** For a system or process topic it first lists the pieces

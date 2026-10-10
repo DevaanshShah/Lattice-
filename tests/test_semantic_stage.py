@@ -130,3 +130,52 @@ def test_a_box_does_not_move_when_another_box_appears():
         browser.close()
     assert boxes[0] == boxes[1]
     assert hidden is not None
+
+
+@pytest.mark.integration
+def test_an_arrow_label_arrives_with_its_arrow():
+    from playwright.sync_api import sync_playwright
+
+    from generation.browser_scene import CAPTURE_ARGS
+
+    scene = _chain(2, visible_at_open=1)                    # the second box appears, so its arrow is new
+    document = animation_html(scene, scene.beats[0], title="t", opening=opening_state(scene), duration=2)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,
+                                             args=CAPTURE_ARGS)
+        page = browser.new_page(viewport={"width": 1280, "height": 720})
+        page.set_content(document)
+        page.evaluate("() => window.animationReady()")
+        seen = []
+        for time in (.4, 1.5):
+            page.evaluate("t => window.seekAnimation(t)", time)
+            seen.append(float(page.locator(".edge-label").evaluate("e=>getComputedStyle(e).opacity")))
+        browser.close()
+    assert 0 < seen[0] < .5 and seen[1] == 1
+
+
+@pytest.mark.unit
+def test_two_arrow_labels_on_one_spot_are_a_layout_defect():
+    data = {"viewport": [1280, 720], "title": [400, 20, 880, 80], "nodes": [],
+            "labels": [{"text": "invoke", "rect": [700, 180, 780, 205]},
+                       {"text": "reject", "rect": [720, 182, 795, 207]}]}
+    assert _issues(data) == ["edge label 'invoke' overlaps edge label 'reject'"]
+
+
+@pytest.mark.integration
+def test_a_level_arrow_and_a_stepped_arrow_from_one_piece_keep_their_labels_apart():
+    ids = ["agent", "harness", "answer", "lookup", "error"]
+    scene = BrowserScene.model_validate({
+        "lesson_scene_id": "s", "pattern": "architecture",
+        "objects": [{"id": i, "kind": "icon", "role": "operation", "label": i.title(),
+                     "payload": {"asset_id": "server"}} for i in ids],
+        "relationships": [
+            {"source_id": "agent", "target_id": "harness", "kind": "flows_to", "label": "call"},
+            {"source_id": "agent", "target_id": "answer", "kind": "flows_to", "label": "reply"},
+            {"source_id": "harness", "target_id": "lookup", "kind": "flows_to", "label": "invoke"},
+            {"source_id": "harness", "target_id": "error", "kind": "flows_to", "label": "reject"}],
+        "beats": [{"narration_beat_id": "b", "actions": [{"kind": "hold", "target_ids": ["agent"]}],
+                   "evidence": [{"claim_ids": ["c"], "object_ids": ["agent"], "kind": "label"}]}],
+        "opening_visible_ids": ids, "closing_visible_ids": ids})
+    data = audit_html(page_html(scene, title="Two ways out", state=closing_state(scene)))   # raises on overlap
+    assert sorted(label["text"] for label in data["labels"]) == ["call", "invoke", "reject", "reply"]

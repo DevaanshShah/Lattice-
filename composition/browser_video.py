@@ -243,7 +243,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
 
 def plan(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Path,
          client=None, max_scenes: int | None = None, report: RunReport | None = None,
-         log=None, schema_version: int = 1) -> BrowserPlanResult:
+         log=None, schema_version: int = 1,
+         target_seconds: float | None = None) -> BrowserPlanResult:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     owns_report = report is None
@@ -256,7 +257,11 @@ def plan(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Pa
         stage = "lesson_plan"
         report.event(stage, "start")
         lesson_kwargs = {"schema_version": schema_version} if schema_version == 2 else {}
-        lesson = lesson_plan.generate(topic, skill, client=client, **lesson_kwargs)
+        lesson = lesson_plan.generate(
+            topic, skill, client=client, **lesson_kwargs,
+            **({"target_seconds": target_seconds, "max_scenes": max_scenes,
+                "on_reject": lambda reason: report.event(stage, "retry", detail=reason[:400])}
+               if schema_version == 2 else {}))
         report.event(stage, "passed", detail=f"{len(lesson.scenes)} scene(s)")
         if approve_fn is not None:
             lesson = approve_fn(lesson)

@@ -1,54 +1,156 @@
 {
   "algorithm_explainer": {
     "visual_pattern": "workflow_flow",
-    "allowed_patterns": ["workflow", "decision", "comparison", "transformation"],
-    "required_roles": ["input", "operation", "result"],
-    "keywords": ["algorithm", "binary search", "brute-force", "linear search", "sorting", "search procedure"],
+    "allowed_patterns": [
+      "workflow",
+      "decision",
+      "comparison",
+      "transformation"
+    ],
+    "required_roles": [
+      "input",
+      "operation",
+      "result"
+    ],
+    "keywords": [
+      "algorithm",
+      "binary search",
+      "brute-force",
+      "linear search",
+      "sorting",
+      "search procedure"
+    ],
     "outline_guidance": "Teach the algorithm with one concrete input. Establish the input and target, trace the important checks or state changes in order, then show the result and a meaningful comparison. Do not claim a step count unless the shown trace supports it.",
     "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box."
   },
   "architecture_explainer": {
     "visual_pattern": "architecture_map",
-    "allowed_patterns": ["architecture", "workflow", "transformation", "feedback_loop"],
-    "required_roles": ["source", "operation", "destination"],
-    "keywords": ["architecture", "connects", "integrat", "system", "pipeline", "platform",
-                 "data flow", "infrastructure", "sources"],
+    "allowed_patterns": [
+      "architecture",
+      "workflow",
+      "transformation",
+      "feedback_loop"
+    ],
+    "required_roles": [
+      "source",
+      "operation",
+      "destination"
+    ],
+    "keywords": [
+      "architecture",
+      "connects",
+      "integrat",
+      "system",
+      "pipeline",
+      "platform",
+      "data flow",
+      "infrastructure",
+      "sources"
+    ],
     "outline_guidance": "This is an ARCHITECTURE EXPLAINER: structure the scenes as (1) the separate/fragmented systems or data sources involved, (2) how they connect into one flow, (3) the unified system or outcome that results, (4) optionally, one concrete example of it working. Favor concrete named systems/entities over abstract concepts.",
-    "scene_guidance": "Show named components, the information moving between them, and the state or decision each component changes. Use boundaries only where the system has a real boundary."
+    "scene_guidance": "Show named components, the information moving between them, and the state or decision each component changes. Use boundaries only where the system has a real boundary.",
+    "board": "map"
   },
   "workflow_explainer": {
     "visual_pattern": "workflow_flow",
-    "allowed_patterns": ["workflow", "transformation", "decision", "timeline", "contour"],
-    "required_roles": ["input", "operation", "output"],
-    "keywords": ["workflow", "process", "step by step", "how it works", "procedure", "sequence"],
+    "allowed_patterns": [
+      "workflow",
+      "transformation",
+      "decision",
+      "timeline",
+      "contour"
+    ],
+    "required_roles": [
+      "input",
+      "operation",
+      "output"
+    ],
+    "keywords": [
+      "workflow",
+      "process",
+      "step by step",
+      "how it works",
+      "procedure",
+      "sequence"
+    ],
     "outline_guidance": "This is a WORKFLOW EXPLAINER: structure the scenes as an ordered sequence of steps from trigger/start to outcome, one clear step per scene, in the order they actually happen.",
-    "scene_guidance": "Show each important step as an action on the actual subject: data cells and pointers for an algorithm, messages and results for a tool flow, or changing values for a calculation. Preserve the subject across steps and show the consequence before moving on."
+    "scene_guidance": "Show each important step as an action on the actual subject: data cells and pointers for an algorithm, messages and results for a tool flow, or changing values for a calculation. Preserve the subject across steps and show the consequence before moving on.",
+    "board": "map"
   },
   "funnel_explainer": {
     "visual_pattern": "funnel",
-    "allowed_patterns": ["workflow", "transformation", "comparison", "metric"],
-    "required_roles": ["input", "output", "metric"],
-    "keywords": ["funnel", "conversion", "leads", "mql", "sql", "pipeline stage", "drop-off",
-                 "drop off", "stages"],
+    "allowed_patterns": [
+      "workflow",
+      "transformation",
+      "comparison",
+      "metric"
+    ],
+    "required_roles": [
+      "input",
+      "output",
+      "metric"
+    ],
+    "keywords": [
+      "funnel",
+      "conversion",
+      "leads",
+      "mql",
+      "sql",
+      "pipeline stage",
+      "drop-off",
+      "drop off",
+      "stages"
+    ],
     "outline_guidance": "This is a FUNNEL EXPLAINER: structure the scenes around a narrowing sequence of stages (e.g. leads -> qualified -> opportunity -> closed), showing where volume drops at each stage and why.",
     "scene_guidance": "This scene is part of a funnel explainer. Prefer a top-to-bottom or left-to-right narrowing stage diagram over an abstract illustration."
   },
   "metric_story": {
     "visual_pattern": "metric_hero",
-    "allowed_patterns": ["metric", "comparison", "workflow"],
-    "required_roles": ["metric"],
-    "keywords": ["metric", "kpi", "revenue", "conversion rate", "percent", "%", "increase",
-                 "decrease", "trend"],
+    "allowed_patterns": [
+      "metric",
+      "comparison",
+      "workflow"
+    ],
+    "required_roles": [
+      "metric"
+    ],
+    "keywords": [
+      "metric",
+      "kpi",
+      "revenue",
+      "conversion rate",
+      "percent",
+      "%",
+      "increase",
+      "decrease",
+      "trend"
+    ],
     "outline_guidance": "This is a METRIC STORY: structure the scenes around ONE key number/metric — what it was, what changed, why it changed, and what it means — rather than a general concept walkthrough.",
     "scene_guidance": "This scene is part of a metric story. Prefer one large, prominent number or statistic as the visual focus, with at most a couple of short supporting labels, over a busy diagram."
   },
   "before_after": {
     "visual_pattern": "before_after",
-    "allowed_patterns": ["comparison", "transformation", "workflow"],
-    "required_roles": ["before", "after"],
-    "keywords": ["before and after", "before/after", "transform", "migrat", "legacy",
-                 "modernize", "old way", "new way"],
+    "allowed_patterns": [
+      "comparison",
+      "transformation",
+      "workflow"
+    ],
+    "required_roles": [
+      "before",
+      "after"
+    ],
+    "keywords": [
+      "before and after",
+      "before/after",
+      "transform",
+      "migrat",
+      "legacy",
+      "modernize",
+      "old way",
+      "new way"
+    ],
     "outline_guidance": "This is a BEFORE/AFTER EXPLAINER: structure the scenes to first show the old/problematic state clearly, then the new/improved state, then (if space) a direct comparison or the transition between them.",
-    "scene_guidance": "This scene is part of a before/after explainer. Prefer a clear two-sided comparison (left = before, right = after, or top/bottom) over a single unified diagram."
+    "scene_guidance": "This scene is part of a before/after explainer. Prefer a clear two-sided comparison (left = before, right = after, or top/bottom) over a single unified diagram.",
+    "board": "map"
   }
 }

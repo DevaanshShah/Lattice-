@@ -25,6 +25,22 @@ def _tool_flow():
     return lesson["topic"], json.dumps(lesson), [json.dumps(scene) for scene in plan["scenes"]]
 
 
+@pytest.fixture(autouse=True)
+def _any_length(monkeypatch):
+    """The replayed lessons are saved ones of their own length; the battery's length target is
+    for live runs."""
+    import dataclasses
+
+    from planner import product_recipe
+    from scripts import plan_battery
+    monkeypatch.setattr(plan_battery, "TARGET_SECONDS", None)
+    # ...and they are free-form lessons, so the recipe that would now teach the topic on a map
+    # is given the free board for the replay
+    pick = product_recipe.pick_recipe
+    monkeypatch.setattr(product_recipe, "pick_recipe",
+                        lambda *a, **k: dataclasses.replace(pick(*a, **k), board="free"))
+
+
 @pytest.mark.unit
 def test_battery_scores_a_topic_that_plans_on_the_first_try(tmp_path):
     topic, lesson, scenes = _tool_flow()

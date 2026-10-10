@@ -12,7 +12,8 @@ from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, closing_state
 from core.visual_assets import asset_inventory
 from core.textutil import extract_json
-from planner.lesson_plan import TRANSPORT_ATTEMPTS
+from planner.lesson_map import plan_map_scenes
+from planner.lesson_plan import JSON_ONLY, PLAN_EXTRA, TRANSPORT_ATTEMPTS
 from planner.product_recipe import Recipe
 from prompts.loader import load
 from verification.visual_plan_validation import VisualPlanValidationError, validate, validate_scene
@@ -123,6 +124,22 @@ def _normalise_v2_visibility(data: dict) -> dict:
     return data
 
 
+def _spread_untimed_beats(data: dict) -> None:
+    """Give the actions of a beat even shares of its narration when the model left any of them
+    untimed. Timing is arithmetic, so it is not worth a rejected attempt: each step plays briskly
+    at the start of its share and holds."""
+    for beat in data.get("beats") or []:
+        actions = beat.get("actions") if isinstance(beat, dict) else None
+        if not isinstance(actions, list) or not all(isinstance(action, dict) for action in actions):
+            continue
+        if all(isinstance(action.get("start_fraction"), (int, float))
+               and isinstance(action.get("end_fraction"), (int, float)) for action in actions):
+            continue
+        for number, action in enumerate(actions):
+            action["start_fraction"] = round(.06 + .88 * number / len(actions), 4)
+            action["end_fraction"] = round(.06 + .88 * (number + 1) / len(actions), 4)
+
+
 def derive_closing(scene: BrowserScene, previous_state: VisualState | None) -> None:
     """Make the executed actions end on the closing screen the model declared.
 
@@ -163,6 +180,12 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
     if schema_version != lesson.schema_version:
         raise ValueError("visual planner schema version must match lesson plan")
     client = client or get_client()
+    if schema_version == 2 and lesson.map is not None:
+        # A map lesson already says what happens in every beat: code writes its scenes.
+        plan = BrowserVisualPlan(schema_version=2, topic=lesson.topic, skill_id=skill.id,
+                                 scenes=plan_map_scenes(lesson, skill))
+        validate(lesson, plan, skill)
+        return plan
     scenes: list[BrowserScene] = list(starting_scenes or [])
     if len(scenes) > len(lesson.scenes):
         raise ValueError("more saved visual scenes than lesson scenes")
@@ -231,7 +254,8 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
         ]
         last: Exception | None = None
         for attempt in range(attempts):
-            raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0)
+            raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0,
+                                  response_format=JSON_ONLY, extra_body=PLAN_EXTRA)
             if diagnostic_dir is not None:
                 folder = Path(diagnostic_dir)
                 folder.mkdir(parents=True, exist_ok=True)
@@ -241,6 +265,8 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
                 data = extract_json(raw)
                 if schema_version == 2:
                     data = _normalise_v2_carryover(data, previous)
+                if schema_version == 2:
+                    _spread_untimed_beats(data)
                 scene = BrowserScene.model_validate(data)
                 if schema_version == 2 and any(
                     action.start_fraction is None
