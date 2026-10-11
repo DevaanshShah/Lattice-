@@ -149,16 +149,20 @@ battery once (cap $0.10).
 Code on the left, data on the right. The renderer already draws the code window with a moving
 highlight, an array, a pointer, tick and cross marks, discarded cells and a counter.
 
-**Added late on 2026-10-11, not yet run live: the table rule.** What held the gate open was
+**Added late on 2026-10-11: the table rule, run live once per topic.** What held the gate open was
 the model keeping a table straight: which cells start filled, with what, and in which order the
 rest are worked out. That bookkeeping is now code's. The table states its rule once
 (`"rule": {"start": [1, 1], "back": [1, 2], "op": "sum"}`), code works the whole table out, and
 a fill names only a cell and the number the lesson expects there; every cell still empty before
 it is filled first. The three forms in which a fill carried its own working are gone, so there
 is one way to fill a table. A fourth hand-written lesson, `taught_coins` (fewest coins of 1, 3
-and 4 that make 6, where taking the biggest coin first is wrong), uses `min` plus one. Whether
-this raises the live pass rate is not known: the key has no credit, so no live run has been
-made on it.
+and 4 that make 6, where taking the biggest coin first is wrong), uses `min` plus one. Run
+live on `deepseek/deepseek-v4.1-flash`, one run per topic: climbing stairs planned in 4 calls,
+Fibonacci in 4, coin change in 2 and binary search in 2, for $0.012 in all, and every table on
+screen is right. Four runs are not a pass rate, and the gate needs 5 of 6. Two of the four
+lessons still say something the screen does not show: binary search counts both attempts on one
+counter (it reads 8 while the sentence says two), and coin change acts out biggest-first with
+compare moves and names a coin it never takes. Those are the next faults to close.
 
 **Where it stood earlier on 2026-10-11.** Three hand-written lessons (`taught_search`,
 `taught_stairs`, `taught_recursion`) compile, validate and render. With a live model the

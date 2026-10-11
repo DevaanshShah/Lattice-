@@ -38,7 +38,9 @@ whole table quoted back. What a rule cannot say cannot be worked out by code: a 
 a different number each time (the cost of each stair), a second array read alongside, or a
 table in two dimensions. Such a table can still be filled with given values, which are not
 checked. The saved lessons with tables were rewritten in the new form and compile to the same
-pictures. No live run has been made on this yet.
+pictures. First live run, one per topic on the cheap model: stairs, Fibonacci, coin change and
+binary search all planned (12 calls, $0.012), with every table right; the stairs lesson was
+sent back once for a table number and fixed it from the quoted table.
 
 ### 2026-10-11 — The lesson states the number it expects, and code checks it
 
