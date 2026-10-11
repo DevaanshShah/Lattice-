@@ -10,6 +10,36 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-11 — A table states its rule once, and code fills every cell
+
+**Context.** A fill move carried its own working: the cells it read, how to combine them, or a
+starting value. Code did the arithmetic, but the model still kept the table's books: which
+cells start filled, with what, and the order of the rest. On the cheap model that is where
+algorithm lessons failed. Climbing stairs was rejected five times in a row for working a cell
+out from one still empty, and then for a wrong starting value.
+
+**Decision.** The table carries the rule, once: its first cells, how far back each later cell
+reads, and `sum`, `min` or `max` plus a constant. Code works the whole table out from it. A
+fill names a cell and the number the lesson expects there, and nothing else; every cell still
+empty before it is filled first, in order. Naming a cell that is already full points at it
+again and writes nothing. A step that would read before cell 0 is skipped, which is what makes
+"fewest coins" one rule. The move forms that carried their own working were removed, not kept
+beside the rule.
+
+**Why not the alternative.** Keeping the old forms next to the rule would leave two ways to do
+one thing, and the prompt would have to teach both; a model shown both mixes them. Repairing
+the order in code while still reading the cells from each move would hide a move that names the
+wrong cells. Leaving it to more retries had already been tried: five tries, each with the exact
+reason, did not get the stairs lesson through.
+
+**Consequence.** A lesson can no longer fill out of order or read an empty cell, because it no
+longer says either. A wrong start value is still possible, and is caught by `expect` with the
+whole table quoted back. What a rule cannot say cannot be worked out by code: a cell that adds
+a different number each time (the cost of each stair), a second array read alongside, or a
+table in two dimensions. Such a table can still be filled with given values, which are not
+checked. The saved lessons with tables were rewritten in the new form and compile to the same
+pictures. No live run has been made on this yet.
+
 ### 2026-10-11 — The lesson states the number it expects, and code checks it
 
 **Context.** Code computed every cell of a table from the cells the model named, so the

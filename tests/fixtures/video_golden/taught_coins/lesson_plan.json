@@ -1,0 +1,712 @@
+{
+  "schema_version": 2,
+  "topic": "Why taking the biggest coin first can give too many coins, and how a table fixes it",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Explain how a table of smaller amounts finds the fewest coins for a bigger one.",
+  "audience": "A beginner who knows loops and lists.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner who knows loops and lists.",
+    "can_do": "Explain how a table of smaller amounts finds the fewest coins for a bigger one.",
+    "question": "Is taking the biggest coin first always the fewest coins?",
+    "problem": "Make 6 from coins worth 1, 3 and 4, using as few coins as possible.",
+    "naive_attempt": "Take the biggest coin that fits, again and again: a 4, then a 1, then another 1. Three coins.",
+    "turning_point": "The fewest coins for an amount is one coin more than the fewest for a smaller amount.",
+    "check_question": "With coins of 1, 3 and 4, what is the fewest coins that make 7?",
+    "check_answer": "Two: a three and a four."
+  },
+  "map": null,
+  "trace": {
+    "code": {
+      "title": "coins.py",
+      "source": "def fewest(coins, amount):\n    best = [0] * (amount + 1)\n    for a in range(1, amount + 1):\n        smaller = [best[a - c]\n                   for c in coins if c <= a]\n        best[a] = min(smaller) + 1\n    return best[amount]"
+    },
+    "data": [
+      {
+        "id": "coins",
+        "kind": "array",
+        "label": "Coins",
+        "items": [
+          1,
+          3,
+          4
+        ],
+        "size": null,
+        "rule": null,
+        "on": null,
+        "value": null,
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      },
+      {
+        "id": "take",
+        "kind": "pointer",
+        "label": "take",
+        "items": [],
+        "size": null,
+        "rule": null,
+        "on": "coins",
+        "value": null,
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      },
+      {
+        "id": "amount",
+        "kind": "value",
+        "label": "Amount",
+        "items": [],
+        "size": null,
+        "rule": null,
+        "on": null,
+        "value": 6,
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      },
+      {
+        "id": "best",
+        "kind": "array",
+        "label": "Fewest",
+        "items": [],
+        "size": 7,
+        "rule": {
+          "start": [
+            0
+          ],
+          "back": [
+            1,
+            3,
+            4
+          ],
+          "op": "min",
+          "plus": 1.0
+        },
+        "on": null,
+        "value": null,
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "Biggest coin first",
+      "learning_goal": "See what the obvious way costs.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "We have coins worth one, three and four, and we want to make six with as few coins as possible.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Coins",
+            "Amount"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "show",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [
+              "coins",
+              "amount"
+            ],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "The obvious way is to take the biggest coin that fits. The four fits, and two is left to make.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "take: 4"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "value"
+            ]
+          },
+          "move": {
+            "do": "look",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": "take",
+            "index": 2,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "Now only the one fits, and it takes two of them. Four, one, one: three coins.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "take: 1"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "value"
+            ]
+          },
+          "move": {
+            "do": "look",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": "take",
+            "index": 0,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "Is taking the biggest coin first always the fewest coins?",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "Is taking the biggest coin first always the fewest coins?"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Is taking the biggest coin first always the fewest coins?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Biggest first: three coins"
+    },
+    {
+      "id": "s2",
+      "title": "Answer the small amounts first",
+      "learning_goal": "See the answer for an amount come from the answers below it.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "Put that attempt aside, and look at the code for a way that cannot be fooled.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "def fewest(coins, amount):",
+            "Coins"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "clear",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              1
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "coins",
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "It writes down the fewest coins for every amount from zero up to six, smallest first.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "best = [0] * (amount + 1)",
+            "Fewest"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "show",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              2
+            ],
+            "items": [
+              "best"
+            ],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s2_b3",
+          "spoken_text": "Making zero needs no coins at all, so the first box holds zero.",
+          "claim_ids": [
+            "s2_b3_c"
+          ],
+          "visual_anchors": [
+            "best = [0] * (amount + 1)",
+            "Fewest[0] = 0"
+          ],
+          "claim_requirements": {
+            "s2_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              2
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [],
+            "cell": 0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 0.0
+          }
+        },
+        {
+          "id": "s2_b4",
+          "spoken_text": "To make one, take a one coin and zero is left: zero coins plus one.",
+          "claim_ids": [
+            "s2_b4_c"
+          ],
+          "visual_anchors": [
+            "best[a] = min(smaller) + 1",
+            "Fewest[1] = 0 + 1 = 1"
+          ],
+          "claim_requirements": {
+            "s2_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [],
+            "cell": 1,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 1.0
+          }
+        },
+        {
+          "id": "s2_b5",
+          "spoken_text": "Two is one coin more than the answer for one, so it needs two coins.",
+          "claim_ids": [
+            "s2_b5_c"
+          ],
+          "visual_anchors": [
+            "best[a] = min(smaller) + 1",
+            "Fewest[2] = 1 + 1 = 2"
+          ],
+          "claim_requirements": {
+            "s2_b5_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [],
+            "cell": 2,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 2.0
+          }
+        },
+        {
+          "id": "s2_b6",
+          "spoken_text": "Three is different. Take a three coin and nothing is left, so the box for zero, plus one, wins.",
+          "claim_ids": [
+            "s2_b6_c"
+          ],
+          "visual_anchors": [
+            "smaller = [best[a - c]",
+            "Fewest[3] = min(2, 0) + 1 = 1"
+          ],
+          "claim_requirements": {
+            "s2_b6_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              4,
+              5,
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [],
+            "cell": 3,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 1.0
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Each box: the best smaller box, plus one coin"
+    },
+    {
+      "id": "s3",
+      "title": "Read the answer for six",
+      "learning_goal": "See the table beat biggest first.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "The same rule fills four and five: one coin for four, two coins for five.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "best[a] = min(smaller) + 1",
+            "Fewest[5] = min(1, 2, 1) + 1 = 2"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [
+              4,
+              5
+            ],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": [
+              1.0,
+              2.0
+            ]
+          }
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "Six looks back one, three and four boxes. The box for three is cheapest there, so six takes two coins.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "smaller = [best[a - c]",
+            "Fewest[6] = min(2, 1, 2) + 1 = 2"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              4,
+              5,
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "best",
+            "cells": [],
+            "cell": 6,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 2.0
+          }
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "Two coins, a three and a three, where taking the biggest first needed three.",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "return best[amount]"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "run",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              7
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "With coins of 1, 3 and 4, what is the fewest coins that make 7?",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "With coins of 1, 3 and 4, what is the fewest coins that make 7?"
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "With coins of 1, 3 and 4, what is the fewest coins that make 7?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s3_b5",
+          "spoken_text": "Two: a three and a four.",
+          "claim_ids": [
+            "s3_b5_c"
+          ],
+          "visual_anchors": [
+            "Two: a three and a four."
+          ],
+          "claim_requirements": {
+            "s3_b5_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "Two: a three and a four.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    }
+  ]
+}

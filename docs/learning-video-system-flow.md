@@ -132,12 +132,15 @@ recipe's `board` names the playbook.
 | `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, discard, fill, count, clear, grow, spot, remove |
 
 Both also take `ask` and `answer`. On a trace any move may light lines of the code, and code
-works out every result: a compare is decided by the values on screen, a filled cell is computed
-from the cells it names (`sum`, `min`, `max`, plus a constant) with its working shown, a counter
+works out every result: a compare is decided by the values on screen, a table is worked out in
+full from the rule it states once (its first cells, how far back each later cell reads, and
+`sum`, `min` or `max` plus a constant), with the working of each cell shown as it is filled, a counter
 tied to a pointer counts that pointer's checks, the calls of a recursion tree are worked out
 from its start, steps and stop (`core/call_tree.py`), and each beat's anchors are read off the
 state its move produced. Where code works a number out, the move also carries the number the
-lesson expects (`expect`), and a lesson whose number differs from the real one is sent back.
+lesson expects (`expect`), and a lesson whose number differs from the real one is sent back. A
+fill names only its cell and that number: every cell still empty before it is filled first, in
+order, so a lesson cannot fill a table out of order or read a cell that is still empty.
 
 ## 4. Visual step (stage 5)
 

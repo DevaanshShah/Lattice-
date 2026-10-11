@@ -1,17 +1,18 @@
 """An algorithm lesson's trace, turned into what the renderer draws, with no model call.
 
 The lesson step writes the code and the data once (an array, pointers into it, a target, a
-counter, or an empty table), and for every beat picks one move: show, run, look, compare,
-discard, fill, count. Code here writes everything else. Two things follow from that. A compare
-is decided by the values on screen, and a filled cell holds what its source cells add up to, so
-the picture cannot show arithmetic the data does not support. And each beat's anchor is read off
-the state the move produced, so the narration is checked against the same picture.
+counter, or an empty table with the rule that fills it), and for every beat picks one move: show,
+run, look, compare, discard, fill, count. Code here writes everything else. Two things follow
+from that. A compare is decided by the values on screen, and a table is worked out from its rule,
+so the picture cannot show arithmetic the data does not support, and a cell is never read before
+it is filled. And each beat's anchor is read off the state the move produced, so the narration is
+checked against the same picture.
 """
 from __future__ import annotations
 
 from core.call_tree import repeats, shown_to_depth
 from core.schemas.browser_visual_plan import BrowserScene
-from core.schemas.lesson_plan import BeatMove, LessonPlan, LessonScene, LessonTrace
+from core.schemas.lesson_plan import LessonPlan, LessonScene, LessonTrace, TableRule, TraceItem
 from core.visual_state import VisualState, closing_state
 from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, closes_on_a_takeaway,
                                    compiled_beat, line_id, line_objects, number, takeaway_id)
@@ -24,6 +25,7 @@ PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_cha
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
 _JOIN = {"sum": " + ", "min": ", ", "max": ", "}
+_COMBINE = {"sum": sum, "min": min, "max": max}
 
 
 def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list[dict]:
@@ -102,15 +104,29 @@ def _size_tables_to_fit(data: dict) -> None:
                 table["size"] = max(table["size"], max(cells) + 1)
 
 
-def _worked_out(label: str, cell: int, move: BeatMove, values: list, result) -> str:
-    """The line that shows where a filled cell's value came from: 'Ways[3] = 2 + 1 = 3'."""
+def table_by_rule(item: TraceItem) -> list[tuple]:
+    """A table with a rule, worked out in full: for each cell, what it holds and the cells it was
+    read from. A step that would reach back before cell 0 is left out, the way a coin larger than
+    the amount is no use; the rule's start values are long enough that one step always reaches."""
+    rule, table = item.rule, []
+    for cell in range(item.size):
+        reads = [] if cell < len(rule.start) else [cell - step for step in rule.back if step <= cell]
+        value = (rule.start[cell] if not reads else
+                 _COMBINE[rule.op]([table[index][0] for index in reads]) + rule.plus)
+        table.append((number(value), reads))
+    return table
+
+
+def _worked_out(label: str, cell: int, rule: TableRule | None, values: list, result) -> str:
+    """The line that shows where a filled cell's value came from: 'Ways[3] = 2 + 1 = 3'. A cell
+    that is given, or copied from the one cell it reads, has no working to show."""
     name = f"{label}[{cell}]"
-    if not values:
+    if not values or (len(values) == 1 and not rule.plus):
         return f"{name} = {result}"
-    joined = _JOIN[move.op].join(str(value) for value in values)
-    body = joined if move.op == "sum" else f"{move.op}({joined})"
-    if move.plus:
-        body += f" + {number(move.plus)}" if move.plus > 0 else f" - {number(-move.plus)}"
+    joined = _JOIN[rule.op].join(str(value) for value in values)
+    body = joined if rule.op == "sum" or len(values) == 1 else f"{rule.op}({joined})"
+    if rule.plus:
+        body += f" + {number(rule.plus)}" if rule.plus > 0 else f" - {number(-rule.plus)}"
     return f"{name} = {body} = {result}"
 
 
@@ -239,39 +255,43 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             anchors.append("discard [" + ",".join(str(cells[index]) for index in gone) + "]")
             shown.append(move.array)
         elif move.do == "fill":
-            # one cell, or a run of cells that each read the cells `back` steps before them
             show([move.array])
-            jobs = ([(cell, [cell - step for step in move.back]) for cell in move.cells]
-                    if move.cells else [(move.cell, list(move.from_cells))])
-            hoped = (move.expect if isinstance(move.expect, list)
-                     else [move.expect] if move.expect is not None else [])
+            table, rule = items[move.array], items[move.array].rule
+            label, held = table.label, payloads[move.array]["items"]
+            named = move.cells or [move.cell]
+            if rule is None:        # a number the lesson gives, written where it says
+                if held[move.cell] is not None:
+                    raise ValueError(f"beat {beat.id}: cell {move.cell} of {move.array!r} already "
+                                     f"holds {held[move.cell]}; a table that is filled in starts "
+                                     'empty, so give the array "size" instead of "items"')
+                jobs = [(move.cell, number(move.value), [])]
+            else:
+                # Code works the whole table out. What the lesson says a cell holds is checked
+                # against it, and every cell still empty up to the last one named is filled in
+                # order, so no cell is ever read before it holds a number.
+                whole = table_by_rule(table)
+                said = move.expect if isinstance(move.expect, list) else [move.expect]
+                for cell, hoped in zip(named, said):
+                    value, reads = whole[cell]
+                    if number(hoped) != value:
+                        worked = _worked_out(label, cell, rule, [whole[index][0] for index in reads], value)
+                        raise ValueError(
+                            f"beat {beat.id}: you expect cell {cell} of {move.array!r} to hold "
+                            f"{number(hoped)}, but its rule gives {worked}. From the start values "
+                            f"{[number(value) for value in rule.start]} the table comes to "
+                            f"{[value for value, _ in whole]}, counting cells from 0. Change the "
+                            "rule's start values, or the numbers the lesson states, so they agree")
+                due = {cell for cell in range(max(named) + 1) if held[cell] is None}
+                jobs = [(cell, *whole[cell]) for cell in sorted(due | set(named))]
             fills = [item.id for item in trace.data if item.counts == move.array]
-            for order, (target, sources) in enumerate(jobs):
+            for target, value, reads in jobs:
                 cells = list(payloads[move.array]["items"])
-                if cells[target] is not None:
-                    raise ValueError(f"beat {beat.id}: cell {target} of {move.array!r} already holds "
-                                     f"{cells[target]}; a table that is filled in starts empty, so "
-                                     'give the array "size" instead of "items"')
-                empty = [index for index in sources if cells[index] is None]
-                if empty:
-                    raise ValueError(f"beat {beat.id}: cell {target} of {move.array!r} is worked "
-                                     f"out from cells {empty}, which are still empty; fill those first")
-                values = [cells[index] for index in sources]
-                if any(not isinstance(value, (int, float)) for value in values):
-                    raise ValueError(f"beat {beat.id}: cells {sources} of {move.array!r} do not "
-                                     "all hold numbers, so they cannot be combined")
-                result = number(move.value if not values else
-                                {"sum": sum, "min": min, "max": max}[move.op](values) + move.plus)
-                worked = _worked_out(items[move.array].label, target, move, values, result)
-                if hoped and number(hoped[order]) != result:
-                    raise ValueError(f"beat {beat.id}: you expect cell {target} of {move.array!r} to "
-                                     f"hold {number(hoped[order])}, but the table gives {worked}. "
-                                     "The starting values or the rule are wrong; make the table "
-                                     "and the narration agree")
-                cells[target] = result
-                changed = change(move.array, {"items": cells, "lit_indices": sources,
+                again = cells[target] is not None       # filled before: pointed at, not written
+                worked = _worked_out(label, target, rule, [cells[index] for index in reads], value)
+                cells[target] = value
+                changed = change(move.array, {"items": cells, "lit_indices": reads,
                                               "new_index": target}) or changed
-                for tally in fills:         # a counter tied to this table counts the cell itself
+                for tally in [] if again else fills:    # a counter tied to this table counts the cell
                     bump(tally)
                 change(WORKING, {"expression": worked})
                 show([WORKING])

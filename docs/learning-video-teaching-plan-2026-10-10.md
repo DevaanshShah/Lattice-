@@ -149,7 +149,18 @@ battery once (cap $0.10).
 Code on the left, data on the right. The renderer already draws the code window with a moving
 highlight, an array, a pointer, tick and cross marks, discarded cells and a counter.
 
-**Where it stands at the end of 2026-10-11.** Three hand-written lessons (`taught_search`,
+**Added late on 2026-10-11, not yet run live: the table rule.** What held the gate open was
+the model keeping a table straight: which cells start filled, with what, and in which order the
+rest are worked out. That bookkeeping is now code's. The table states its rule once
+(`"rule": {"start": [1, 1], "back": [1, 2], "op": "sum"}`), code works the whole table out, and
+a fill names only a cell and the number the lesson expects there; every cell still empty before
+it is filled first. The three forms in which a fill carried its own working are gone, so there
+is one way to fill a table. A fourth hand-written lesson, `taught_coins` (fewest coins of 1, 3
+and 4 that make 6, where taking the biggest coin first is wrong), uses `min` plus one. Whether
+this raises the live pass rate is not known: the key has no credit, so no live run has been
+made on it.
+
+**Where it stood earlier on 2026-10-11.** Three hand-written lessons (`taught_search`,
 `taught_stairs`, `taught_recursion`) compile, validate and render. With a live model the
 lessons are right when they plan, because code checks the numbers the lesson states against
 what the picture comes to; before that check one lesson planned and taught a wrong answer. On

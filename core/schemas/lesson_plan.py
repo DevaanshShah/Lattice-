@@ -113,8 +113,7 @@ _TAKES = {
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
-    "fill": {"array", "cell", "cells", "back", "from_cells", "op", "plus", "value", "expect",
-             "lines"},
+    "fill": {"array", "cell", "cells", "value", "expect", "lines"},
     "count": {"counter", "expect", "lines"},
 }
 _NEEDS = {
@@ -160,16 +159,12 @@ class BeatMove(BaseModel):
     array: str | None = None
     cells: list[int] = Field(default_factory=list)
     cell: int | None = Field(default=None, ge=0)
-    from_cells: list[int] = Field(default_factory=list)
-    back: list[int] = Field(default_factory=list)     # for a run of fills: how far back each cell reads
-    op: Literal["sum", "min", "max"] | None = None    # how the cells a fill reads are combined
-    plus: float = 0
     counter: str | None = None
     tree: str | None = None
     depth: int | None = Field(default=None, ge=0)     # how many levels down a grow reveals
-    # The number the lesson says something comes to: a computed cell (or each cell of a run), or
-    # a counter's total. Code works the real value out and refuses a lesson whose number differs,
-    # so the narration cannot say eight over a table that shows five.
+    # The number the lesson says something comes to: a cell of a table (one number for each cell
+    # named), or a counter's total. Code works the real value out and refuses a lesson whose
+    # number differs, so the narration cannot say eight over a table that shows five.
     expect: float | list[float] | None = None
 
     @model_validator(mode="after")
@@ -201,35 +196,23 @@ class BeatMove(BaseModel):
         if lacks[self.do]:
             raise ValueError(_NEEDS.get(self.do, f"a {self.do} move needs pieces" + (
                 " or a meter" if self.do in {"trouble", "fix"} else "")))
-        if self.do == "fill" and (self.cells or self.from_cells):
+        if self.do == "fill":
+            # The move never carries the working: the table's rule does. It names the cell and
+            # the number the lesson says is in it.
             many = bool(self.cells)
-            if (self.expect is None or isinstance(self.expect, list) != many
-                    or (many and len(self.expect) != len(self.cells))):
-                raise ValueError('a fill move that works a value out says what it comes to in '
-                                 '"expect": one number for one cell, a list with one number per '
-                                 'cell for a run. It is checked against the table')
-        elif self.do == "fill" and self.expect is not None:
-            raise ValueError('"expect" is for a value that is worked out; a fill with a given '
-                             '"value" has nothing to check')
+            if many and self.cell is not None:
+                raise ValueError('a fill move names one "cell" or several "cells", not both')
+            if self.value is not None and (many or self.expect is not None):
+                raise ValueError('a fill move with a "value" writes that one number into one '
+                                 '"cell" of a table that has no rule, and has nothing to check; '
+                                 'on a table with a rule give "expect" and no "value"')
+            if self.value is None and (self.expect is None or isinstance(self.expect, list) != many
+                                       or (many and len(self.expect) != len(self.cells))):
+                raise ValueError('a fill move says what its cell comes to in "expect": one number '
+                                 'for one "cell", a list with one number per cell for several '
+                                 '"cells". It is checked against the table\'s rule')
         if self.do == "count" and isinstance(self.expect, list):
             raise ValueError('a count move expects one total, not a list')
-        if self.do == "fill" and self.cells:
-            # a run: each of these cells in turn, from the cells `back` steps before it
-            if self.cell is not None or self.from_cells or self.value is not None:
-                raise ValueError('a fill move over several "cells" takes "back" and "op" only')
-            if not self.back or self.op is None or any(step < 1 for step in self.back):
-                raise ValueError('a fill move over several "cells" says how far back each one '
-                                 'reads in "back", such as [1, 2], and how they combine in "op"')
-        elif self.do == "fill":
-            if self.back:
-                raise ValueError('"back" belongs to a fill move over several "cells"; for one '
-                                 'cell name the cells it reads in "from_cells"')
-            if bool(self.from_cells) != (self.op is not None):
-                raise ValueError('a fill move that reads other cells names them in "from_cells" '
-                                 'and says how they combine in "op"')
-            if (self.value is None) == (not self.from_cells):
-                raise ValueError('a fill move writes either a "value" it is given or one worked '
-                                 'out from "from_cells", one of the two')
         if self.do == "compare" and self.cells and self.index is not None:
             raise ValueError('a compare move checks one cell ("index") or several in turn '
                              '("cells"), not both')
@@ -294,6 +277,29 @@ class TraceCode(BaseModel):
         return self
 
 
+class TableRule(BaseModel):
+    """How a table is filled, stated once: its first cells are given, and every later cell is
+    worked out from the cells a fixed number of steps before it. Code fills the table from this,
+    so a lesson cannot fill a cell out of order or work one out from a cell that is still empty."""
+    model_config = ConfigDict(extra="forbid")
+    start: list[int | float] = Field(..., min_length=1, max_length=6)   # cells 0, 1, ... as given
+    back: list[int] = Field(..., min_length=1, max_length=4)    # how many cells back a cell reads
+    op: Literal["sum", "min", "max"]                            # how the cells read are combined
+    plus: float = 0                                             # added after combining
+
+    @model_validator(mode="after")
+    def _reads_cells_that_exist(self) -> "TableRule":
+        if any(step < 1 for step in self.back) or len(set(self.back)) != len(self.back):
+            raise ValueError('a rule\'s "back" says how many cells back a cell reads: whole '
+                             'numbers from 1, each once, such as [1, 2]')
+        if len(self.start) < min(self.back):
+            raise ValueError(f'the first cell the rule works out is cell {len(self.start)}, and the '
+                             f'nearest cell it reads is {min(self.back)} back, before the table '
+                             f'begins; give "start" at least {min(self.back)} values, counting '
+                             'cells from 0')
+        return self
+
+
 class TraceItem(BaseModel):
     """One thing on the data side of a trace: an array (or an empty table to fill), a pointer
     into an array, a fixed value such as a target, or a counter."""
@@ -303,6 +309,7 @@ class TraceItem(BaseModel):
     label: str = Field(..., min_length=1, max_length=22)
     items: list[int | float | str] = Field(default_factory=list, max_length=12)   # an array's values
     size: int | None = Field(default=None, ge=2, le=12)     # an array that starts empty, to be filled
+    rule: TableRule | None = None                           # how an empty table's cells are worked out
     on: str | None = None                                   # the array a pointer points into
     value: int | float | str | None = None                  # what a fixed value shows
     # a counter that goes up by itself: on every compare of this pointer, every call of this tree,
@@ -314,9 +321,10 @@ class TraceItem(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
-        mine = {"array": {"items", "size"}, "pointer": {"on"}, "value": {"value"},
+        mine = {"array": {"items", "size", "rule"}, "pointer": {"on"}, "value": {"value"},
                 "counter": {"counts"}, "tree": {"start", "steps"}}
-        stray = sorted(name for name in ("items", "size", "on", "value", "counts", "start", "steps")
+        stray = sorted(name for name in ("items", "size", "rule", "on", "value", "counts", "start",
+                                         "steps")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:
             raise ValueError(f"trace item {self.id!r}: a {self.kind} has no {stray[0]}")
@@ -325,6 +333,12 @@ class TraceItem(BaseModel):
                              "starts empty and is filled")
         if self.kind == "array" and self.items and len(self.items) < 2:
             raise ValueError(f"trace array {self.id!r} needs at least two items")
+        if self.rule is not None and self.items:
+            raise ValueError(f'trace array {self.id!r} has a rule, so it starts empty and is filled '
+                             'in: give it "size", not "items"')
+        if self.rule is not None and len(self.rule.start) > self.size:
+            raise ValueError(f"trace array {self.id!r} has {self.size} cells and "
+                             f"{len(self.rule.start)} start values")
         if self.kind == "pointer" and not self.on:
             raise ValueError(f"trace pointer {self.id!r} names the array it points into in 'on'")
         if self.kind == "value" and self.value is None:
@@ -522,8 +536,7 @@ class LessonPlan(BaseModel):
                 if name and items[name].kind != wanted:
                     raise ValueError(f"{where}: {name!r} is not {'an' if wanted == 'array' else 'a'} {wanted}")
             array = items[items[move.pointer].on] if move.pointer else items.get(move.array)
-            cells = [*move.cells, *move.from_cells,
-                     *(cell for cell in (move.index, move.cell) if cell is not None)]
+            cells = [*move.cells, *(cell for cell in (move.index, move.cell) if cell is not None)]
             beyond = sorted(cell for cell in cells if array is not None and cell >= array.length)
             if beyond:
                 raise ValueError(f"{where}: {array.id!r} has cells 0 to {array.length - 1}; there "
@@ -539,7 +552,14 @@ class LessonPlan(BaseModel):
                                      f"no level {move.depth}")
                 if move.do == "spot" and move.value not in {call["value"] for call in calls}:
                     raise ValueError(f"{where}: {move.tree!r} never calls for {move.value:g}")
-            short = [cell for cell in move.cells if move.back and cell < max(move.back)]
-            if short:
-                raise ValueError(f"{where}: cell {short[0]} has no cell {max(move.back)} before it "
-                                 "to read from")
+            if move.do == "fill" and array.rule is not None and move.value is not None:
+                raise ValueError(
+                    f'{where}: {array.id!r} is filled by its rule, so a fill gives no "value". '
+                    "Name the cell and the number you say it holds, which is checked: "
+                    f'{{"do":"fill","array":"{array.id}","cell":{move.cell},'
+                    f'"expect":{move.value:g}}}')
+            if move.do == "fill" and array.rule is None and move.value is None:
+                raise ValueError(
+                    f"{where}: {array.id!r} has no rule to work a cell out from. State it once on "
+                    'the array, as "rule": {"start":[1,1],"back":[1,2],"op":"sum"}, or give the '
+                    'fill the "value" it writes')

@@ -12,7 +12,7 @@ from core.schemas.lesson_plan import LessonPlan, LessonTrace
 from core.visual_state import closing_state
 from planner import browser_visual_plan, lesson_plan
 from planner.lesson_shared import story_shape
-from planner.lesson_trace import craft_trace, fill_trace_lesson, plan_trace_scenes
+from planner.lesson_trace import craft_trace, fill_trace_lesson, plan_trace_scenes, table_by_rule
 from planner.playbooks import PLAYBOOKS, playbook_of
 from planner.product_recipe import load_recipes
 from verification.visual_plan_validation import validate
@@ -71,7 +71,7 @@ def test_the_recipe_for_algorithms_uses_the_trace_playbook():
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("name", ["taught_search", "taught_stairs"])
+@pytest.mark.parametrize("name", ["taught_search", "taught_stairs", "taught_coins"])
 def test_a_trace_fixture_is_exactly_what_the_compiler_writes(name):
     lesson = _saved(name)
     saved = BrowserVisualPlan.model_validate_json(
@@ -120,7 +120,7 @@ def test_clear_wipes_the_marks_and_sends_the_pointer_away():
 
 
 @pytest.mark.unit
-def test_a_table_is_filled_by_code_from_the_cells_it_names():
+def test_a_table_is_filled_by_code_from_its_rule():
     lesson = _saved("taught_stairs")
     first, second, third = plan_trace_scenes(lesson, SKILL)
     table = {obj.id: obj for obj in first.objects}["ways"]
@@ -138,18 +138,55 @@ def test_a_table_is_filled_by_code_from_the_cells_it_names():
 
 
 @pytest.mark.unit
-def test_other_ways_of_working_out_a_cell_and_a_cell_read_too_early():
+def test_a_rule_can_take_the_smallest_and_add_one_and_never_reads_before_the_table():
+    """Fewest coins of 1, 3 and 4: an amount smaller than a coin cannot use that coin."""
+    lesson = _saved("taught_coins")
+    table = table_by_rule(lesson.trace.data[3])
+    assert [value for value, _ in table] == [0, 1, 2, 1, 1, 2, 2]
+    assert [reads for _, reads in table] == [[], [0], [1], [2, 0], [3, 1, 0], [4, 2, 1], [5, 3, 2]]
+    plan_trace_scenes(lesson, SKILL)
+    fills = [beat.visual_anchors[-1] for scene in lesson.scenes for beat in scene.beats
+             if beat.move.do == "fill"]
+    assert fills == ["Fewest[0] = 0", "Fewest[1] = 0 + 1 = 1", "Fewest[2] = 1 + 1 = 2",
+                     "Fewest[3] = min(2, 0) + 1 = 1", "Fewest[5] = min(1, 2, 1) + 1 = 2",
+                     "Fewest[6] = min(2, 1, 2) + 1 = 2"]
+
+
+@pytest.mark.unit
+def test_filling_a_cell_fills_every_empty_cell_before_it_in_order():
+    """What live lessons got wrong on 2026-10-11: a cell worked out from one still empty. The
+    lesson no longer orders the fills, so it cannot order them wrongly."""
     answer = _as_written("taught_stairs")
-    answer["scenes"][1]["beats"][0]["move"] = {
-        "do": "fill", "array": "ways", "cell": 2, "from_cells": [0, 1], "op": "min", "plus": 1,
-        "expect": 2}
+    answer["scenes"][0]["beats"][2:] = [{
+        "spoken_text": "Fill the table straight to the top: eight ways.",
+        "move": {"do": "fill", "array": "ways", "cell": 5, "expect": 8, "lines": [6]}}]
+    lesson = _lesson(answer)
+    first, second, third = plan_trace_scenes(lesson, SKILL)
+    wrote = [params for _, target, params in _steps(first, 2) if target == ["ways"]]
+    assert [params["new_index"] for params in wrote] == [0, 1, 2, 3, 4, 5]
+    assert wrote[-1] == {"items": [1, 1, 2, 3, 5, 8], "lit_indices": [4, 3], "new_index": 5}
+    assert lesson.scenes[0].beats[2].visual_anchors[-1] == "Ways[5] = 5 + 3 = 8"
+    # the later fills name cells that are already full: they point, and write nothing
+    assert _steps(second, 0) == [
+        ("set_state", ["ways"], {"items": [1, 1, 2, 3, 5, 8], "lit_indices": [1, 0], "new_index": 2}),
+        ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"})]
+    end = closing_state(third, closing_state(second, closing_state(first)))
+    assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
+
+
+@pytest.mark.unit
+def test_a_cell_pointed_at_again_is_not_counted_twice():
+    answer = _as_written("taught_stairs")
+    answer["trace"]["data"].append({"id": "boxes", "kind": "counter", "label": "Boxes filled", "counts": "ways"})
+    answer["scenes"][2]["beats"] += [
+        {"spoken_text": "Look again at stair three: two plus one.",
+         "move": {"do": "fill", "array": "ways", "cell": 3, "expect": 3, "lines": [6]}},
+        {"spoken_text": "Six boxes, each filled once.",
+         "move": {"do": "count", "counter": "boxes", "expect": 6}}]
     lesson = _lesson(answer)
     plan_trace_scenes(lesson, SKILL)
-    assert lesson.scenes[1].beats[0].visual_anchors == ["Ways[2] = min(1, 1) + 1 = 2"]
-    early = _as_written("taught_stairs")
-    early["scenes"][1]["beats"][0]["move"]["from_cells"] = [1, 4]
-    with pytest.raises(ValueError, match=r"worked out from cells \[4\], which are still empty"):
-        plan_trace_scenes(_lesson(early), SKILL)
+    assert lesson.scenes[2].beats[3].visual_anchors[-1] == "Ways[3] = 2 + 1 = 3"
+    assert lesson.scenes[2].beats[4].visual_anchors == ["Boxes filled: 6"]
 
 
 @pytest.mark.unit
@@ -201,9 +238,10 @@ def test_a_trace_lesson_costs_one_call_and_a_weak_one_goes_back_with_the_reason(
     (lambda a: a["scenes"][1]["beats"][1].update(move={"do": "send", "path": ["numbers", "target"]}),
      "'send' is not a move of a trace lesson"),
     (lambda a: a["scenes"][1]["beats"][1].update(move={"do": "fill", "array": "numbers", "cell": 1}),
-     "one of the two"),
+     'says what its cell comes to in "expect"'),
     (lambda a: a["scenes"][1]["beats"][1].update(
-        move={"do": "fill", "array": "numbers", "cell": 1, "from_cells": [0], "expect": 3}), '"op"'),
+        move={"do": "fill", "array": "numbers", "cell": 1, "expect": 3}),
+     "'numbers' has no rule to work a cell out from"),
 ])
 def test_a_move_that_does_not_fit_the_trace_is_refused(change, message):
     answer = _as_written("taught_search")
@@ -222,6 +260,18 @@ def test_a_move_that_does_not_fit_the_trace_is_refused(change, message):
     (lambda t: t["data"].__setitem__(0, {"id": "target", "kind": "value", "label": "T", "value": 1}),
      "unique"),
     (lambda t: t["data"][5].update(label="one by one"), "share the label 'one by one'"),
+    (lambda t: t["data"][0].update(rule={"start": [1, 1], "back": [1, 2], "op": "sum"}),
+     'has a rule, so it starts empty and is filled in: give it "size", not "items"'),
+    (lambda t: t["data"][2].update(rule={"start": [1], "back": [1], "op": "sum"}), "a pointer has no rule"),
+    (lambda t: t["data"].append({"id": "t", "kind": "array", "label": "T", "size": 4,
+                                 "rule": {"start": [0], "back": [0, 1], "op": "sum"}}),
+     "whole numbers from 1, each once"),
+    (lambda t: t["data"].append({"id": "t", "kind": "array", "label": "T", "size": 6,
+                                 "rule": {"start": [0], "back": [3, 4], "op": "min", "plus": 1}}),
+     'the first cell the rule works out is cell 1.*give "start" at least 3 values'),
+    (lambda t: t["data"].append({"id": "t", "kind": "array", "label": "T", "size": 2,
+                                 "rule": {"start": [1, 1, 2], "back": [1, 2], "op": "sum"}}),
+     "has 2 cells and 3 start values"),
 ])
 def test_a_malformed_trace_is_refused(change, message):
     trace = _as_written("taught_search")["trace"]
@@ -256,8 +306,7 @@ def test_a_run_of_fills_finishes_a_table_in_one_beat():
     answer = _as_written("taught_stairs")
     answer["scenes"][2]["beats"][0:2] = [{
         "spoken_text": "The same rule fills the rest: five ways for stair four, eight for stair five.",
-        "move": {"do": "fill", "array": "ways", "cells": [4, 5], "back": [1, 2], "op": "sum",
-                 "expect": [5, 8], "lines": [6]}}]
+        "move": {"do": "fill", "array": "ways", "cells": [4, 5], "expect": [5, 8], "lines": [6]}}]
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
     run = _steps(third, 0)
@@ -271,19 +320,19 @@ def test_a_run_of_fills_finishes_a_table_in_one_beat():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("move, message", [
-    ({"do": "fill", "array": "ways", "cells": [4, 5], "back": [1, 2], "op": "sum", "value": 3,
-      "expect": [5, 8]}, 'takes "back" and "op" only'),
-    ({"do": "fill", "array": "ways", "cells": [4, 5], "op": "sum", "expect": [5, 8]}, "how far back each one"),
-    ({"do": "fill", "array": "ways", "cell": 4, "value": 5, "back": [1, 2]},
-     '"back" belongs to a fill move over several'),
-    ({"do": "fill", "array": "ways", "cells": [1, 2], "back": [1, 2], "op": "sum", "expect": [1, 2]},
-     "has no cell 2 before it"),
-    ({"do": "fill", "array": "ways", "cells": [4, 5], "back": [1, 2], "op": "sum"}, 'says what it comes to in "expect"'),
-    ({"do": "fill", "array": "ways", "cells": [4, 5], "back": [1, 2], "op": "sum", "expect": 8},
-     "a list with one number per cell"),
+    ({"do": "fill", "array": "ways", "cells": [4, 5], "cell": 5, "expect": [5, 8]},
+     'one "cell" or several "cells", not both'),
+    ({"do": "fill", "array": "ways", "cells": [4, 5]}, 'says what its cell comes to in "expect"'),
+    ({"do": "fill", "array": "ways", "cells": [4, 5], "expect": 8}, "a list with one number per cell"),
+    ({"do": "fill", "array": "ways", "cell": 4, "expect": [5]}, "one number for one"),
     ({"do": "fill", "array": "ways", "cell": 4, "value": 5, "expect": 5}, "has nothing to check"),
+    # the working belongs to the table's rule; a move has nowhere to put its own
+    ({"do": "fill", "array": "ways", "cell": 4, "from_cells": [3, 2], "op": "sum", "expect": 5},
+     "from_cells"),
+    ({"do": "fill", "array": "ways", "cell": 4, "value": 5},
+     r"""'ways' is filled by its rule, so a fill gives no "value".*"cell":4,"expect":5\}"""),
 ])
-def test_a_run_of_fills_follows_its_rules(move, message):
+def test_a_fill_names_its_cell_and_the_number_expected_and_nothing_else(move, message):
     answer = _as_written("taught_stairs")
     answer["scenes"][2]["beats"][0]["move"] = move
     with pytest.raises(ValidationError, match=message):
@@ -418,13 +467,15 @@ def test_a_table_that_contradicts_the_lessons_own_numbers_is_sent_back():
     """What a live lesson did on 2026-10-11: it started the bottom stair at 0, so the table ended
     at 5 while its narration said eight ways."""
     wrong = _as_written("taught_stairs")
-    wrong["scenes"][0]["beats"][2]["move"]["value"] = 0                    # ways[0] = 0, not 1
+    wrong["trace"]["data"][0]["rule"]["start"] = [0, 1]                    # ways[0] = 0, not 1
+    wrong["scenes"][0]["beats"][2]["move"]["expect"] = 0
     client = _Scripted([wrong, _as_written("taught_stairs")])
     reasons = []
     lesson = lesson_plan.generate("Counting the ways to climb stairs", SKILL, client=client,
                                   schema_version=2, on_reject=reasons.append)
     assert len(client.asked) == 2
-    assert ("you expect cell 2 of 'ways' to hold 2, but the table gives Ways[2] = 1 + 0 = 1"
+    assert ("you expect cell 2 of 'ways' to hold 2, but its rule gives Ways[2] = 1 + 0 = 1. From "
+            "the start values [0, 1] the table comes to [0, 1, 1, 2, 3, 5], counting cells from 0"
             in reasons[0])
     _, _, third = plan_trace_scenes(lesson, SKILL)
     assert lesson.scenes[2].beats[1].visual_anchors[-1] == "Ways[5] = 5 + 3 = 8"
@@ -448,10 +499,29 @@ def test_a_total_the_lesson_states_is_checked_against_the_counter():
 
 @pytest.mark.unit
 def test_a_table_that_is_filled_in_must_start_empty():
-    answer = _as_written("taught_stairs")
-    answer["trace"]["data"][0] = {"id": "ways", "kind": "array", "label": "Ways", "items": [0, 1, 2, 3, 4, 5]}
-    with pytest.raises(ValueError, match='already holds 0; a table that is filled in starts empty'):
+    answer = _as_written("taught_search")
+    answer["scenes"][2]["beats"].append({
+        "spoken_text": "Write a one in the first box.",
+        "move": {"do": "fill", "array": "numbers", "cell": 0, "value": 1}})
+    with pytest.raises(ValueError, match='already holds 3; a table that is filled in starts empty'):
         plan_trace_scenes(_lesson(answer), SKILL)
+
+
+@pytest.mark.unit
+def test_a_table_with_no_rule_holds_the_numbers_it_is_given():
+    answer = _as_written("taught_stairs")
+    del answer["trace"]["data"][0]["rule"]
+    for scene in answer["scenes"]:
+        for beat in scene["beats"]:
+            if beat["move"]["do"] == "fill":
+                beat["move"]["value"] = beat["move"].pop("expect")
+    lesson = _lesson(answer)
+    first, second, third = plan_trace_scenes(lesson, SKILL)
+    assert _steps(second, 0)[1:] == [
+        ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None], "lit_indices": [], "new_index": 2}),
+        ("set_state", ["working"], {"expression": "Ways[2] = 2"})]
+    end = closing_state(third, closing_state(second, closing_state(first)))
+    assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
 
 
 @pytest.mark.unit
@@ -533,7 +603,7 @@ def test_lines_written_beside_a_move_are_put_into_it():
 @pytest.mark.unit
 def test_a_lesson_with_a_playbook_gets_five_informed_tries():
     wrong = _as_written("taught_stairs")
-    wrong["scenes"][0]["beats"][2]["move"]["value"] = 0                    # the table will not agree
+    wrong["scenes"][0]["beats"][2]["move"]["expect"] = 0                   # the table will not agree
     client = _Scripted([wrong, wrong, wrong, wrong, _as_written("taught_stairs")])
     lesson = lesson_plan.generate("Counting the ways to climb stairs", SKILL, client=client, schema_version=2)
     assert len(client.asked) == 5 and lesson.trace is not None
