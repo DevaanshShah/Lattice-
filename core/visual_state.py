@@ -17,7 +17,7 @@ _DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results"),
 
 
 # Payload keys that say HOW a piece is drawn, not what it holds. They are never shown as rows.
-STYLE_KEYS = {"tone", "icon", "placeholder", "members", "header", "count", "tick", "max"}
+STYLE_KEYS = {"tone", "icon", "placeholder", "members", "header", "count", "tick", "max", "ask"}
 # One colour per idea, on black. `red` is reserved for a problem.
 TONES = ("pink", "purple", "teal", "yellow", "blue", "green", "white", "red")
 

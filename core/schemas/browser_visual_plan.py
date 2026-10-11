@@ -100,6 +100,9 @@ class VisualBeat(BaseModel):
     narration_beat_id: str
     actions: list[VisualAction] = Field(..., min_length=1)
     evidence: list[VisualEvidence] = Field(..., min_length=1)
+    # Seconds the picture holds in silence after the narration: time for a viewer to think about
+    # a question before its answer is shown.
+    pause_after: float = Field(default=0, ge=0, le=5, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _ordered_cues(self) -> "VisualBeat":

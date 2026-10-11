@@ -8,6 +8,8 @@ script and the picture cannot disagree, because the picture is derived from the 
 """
 from __future__ import annotations
 
+import re
+
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import BeatMove, LessonMap, LessonPlan, LessonScene
 from core.visual_state import VisualState, closing_state
@@ -15,7 +17,10 @@ from core.visual_state import VisualState, closing_state
 # The proof each move owes the viewer. A move is compiled into actions that give exactly that
 # proof, and the validator still replays the result as a check on this module.
 PROOF = {"introduce": "label", "point": "label", "send": "relationship", "measure": "value",
-         "trouble": "state_change", "fix": "state_change", "remove": "state_change"}
+         "trouble": "state_change", "fix": "state_change", "remove": "state_change",
+         "ask": "label", "answer": "label"}
+LINES = {"ask", "answer"}       # moves that show a line of text, not a change on the map
+THINK_PAUSE = 1.6               # seconds a question is held before its answer
 _ROLES = {"piece": "operation", "panel": "destination", "meter": "metric"}
 
 
@@ -26,6 +31,15 @@ def _number(value: float):
 
 def takeaway_id(scene: LessonScene) -> str:
     return f"takeaway_{scene.id}"
+
+
+def line_id(beat) -> str:
+    return f"{beat.id}_line"
+
+
+def _closes_on_a_takeaway(scene: LessonScene) -> bool:
+    """A scene that gives an answer ends on that answer; a takeaway under it would be a third line."""
+    return bool(scene.takeaway) and not any(beat.move and beat.move.do == "answer" for beat in scene.beats)
 
 
 def map_objects(lesson_map: LessonMap, scene: LessonScene) -> tuple[list[dict], list[dict]]:
@@ -49,7 +63,14 @@ def map_objects(lesson_map: LessonMap, scene: LessonScene) -> tuple[list[dict], 
             kind = "icon"
         objects.append({"id": piece.id, "kind": kind, "role": _ROLES[piece.kind],
                         "label": piece.label, "payload": payload})
-    if scene.takeaway:
+    for beat in scene.beats:
+        if beat.move is not None and beat.move.do in LINES:
+            asks = beat.move.do == "ask"
+            objects.append({"id": line_id(beat), "kind": "caption", "role": "audit",
+                            "label": beat.move.text,
+                            "payload": {"tone": "white", "ask": True} if asks
+                            else {"tone": "teal", "tick": True}})
+    if _closes_on_a_takeaway(scene):
         objects.append({"id": takeaway_id(scene), "kind": "caption", "role": "audit",
                         "label": scene.takeaway, "payload": {"tone": "teal", "tick": True}})
     relationships = [{"source_id": arrow.source, "target_id": arrow.target, "kind": "flows_to",
@@ -74,7 +95,24 @@ def fill_map_lesson(data: dict) -> dict:
     lesson_map = data.get("map")
     if not isinstance(lesson_map, dict) or not isinstance(data.get("scenes"), list):
         return data
+    _tidy_ids(lesson_map, data["scenes"])
     routes = _one_arrow_per_pair(lesson_map)
+    brief = data.get("brief")
+    if isinstance(brief, dict):     # the brief already says what the lesson is for and for whom
+        if isinstance(brief.get("can_do"), str):
+            data.setdefault("learning_objective", brief["can_do"])
+        if isinstance(brief.get("learner"), str):
+            data.setdefault("audience", brief["learner"])
+        # The check question and its answer are the brief's own words, so code adds them after
+        # the last beat: the model cannot forget them and does not spend its beats on them.
+        closing = data["scenes"][-1].get("beats") if data["scenes"] and isinstance(data["scenes"][-1], dict) else None
+        check, answer = brief.get("check_question"), brief.get("check_answer")
+        asked = isinstance(closing, list) and any(
+            isinstance(beat, dict) and isinstance(beat.get("move"), dict)
+            and beat["move"].get("do") == "ask" for beat in closing)
+        if isinstance(closing, list) and isinstance(check, str) and isinstance(answer, str) and not asked:
+            closing.append({"spoken_text": check, "move": {"do": "ask", "text": check}})
+            closing.append({"spoken_text": answer, "move": {"do": "answer", "text": answer}})
     labels = {piece.get("id"): piece.get("label") for piece in lesson_map.get("pieces") or []
               if isinstance(piece, dict)}
     for scene_number, scene in enumerate(data["scenes"], 1):
@@ -87,6 +125,9 @@ def fill_map_lesson(data: dict) -> dict:
                 continue        # the schema reports a beat without a usable move
             if isinstance(move.get("path"), list):
                 move["path"] = _along_the_arrows(move["path"], routes)
+            if (move["do"] == "ask" and not move.get("text") and isinstance(brief, dict)
+                    and isinstance(brief.get("question"), str)):
+                move["text"] = brief["question"]        # an ask with no text asks the lesson's question
             beat["id"] = f"{scene['id']}_b{beat_number}"
             claim = f"{beat['id']}_c"
             beat["claim_ids"] = [claim]
@@ -95,8 +136,43 @@ def fill_map_lesson(data: dict) -> dict:
                        if isinstance(labels.get(item), str) and item != move.get("meter")][:3]
             if move.get("meter") in labels and isinstance(move.get("value"), (int, float)):
                 anchors.append(f"{labels[move['meter']]}: {_number(move['value'])}")
+            if move["do"] in LINES and isinstance(move.get("text"), str):
+                anchors = [move["text"]]
             beat["visual_anchors"] = anchors
     return data
+
+
+def _tidy_ids(lesson_map: dict, scenes: list) -> None:
+    """Write every piece id as a plain lower-case name, in the map and wherever a move or an arrow
+    uses it. An id is only a handle, so 'order-service' and 'DB 1' are tidied, not sent back."""
+    pieces = [piece for piece in lesson_map.get("pieces") or [] if isinstance(piece, dict)]
+    names = {}
+    for piece in pieces:
+        old = piece.get("id")
+        if not isinstance(old, str):
+            return                                  # not a usable map: the schema reports it
+        new = re.sub(r"[^a-z0-9]+", "_", old.lower()).strip("_")[:24] or "piece"
+        names[old] = new if new[0].isalpha() else ("p_" + new)[:24]
+    if len(set(names.values())) != len(names) or all(old == new for old, new in names.items()):
+        return                                      # nothing to tidy, or tidying would merge two ids
+    rename = lambda value: names.get(value, value) if isinstance(value, str) else value
+    for piece in pieces:
+        piece["id"] = rename(piece["id"])
+        if "panel" in piece:
+            piece["panel"] = rename(piece["panel"])
+    for arrow in lesson_map.get("arrows") or []:
+        if isinstance(arrow, dict):
+            arrow.update({end: rename(arrow[end]) for end in ("source", "target") if end in arrow})
+    for scene in scenes:
+        for beat in (scene.get("beats") or []) if isinstance(scene, dict) else []:
+            move = beat.get("move") if isinstance(beat, dict) else None
+            if not isinstance(move, dict):
+                continue
+            for key in ("pieces", "path"):
+                if isinstance(move.get(key), list):
+                    move[key] = [rename(item) for item in move[key]]
+            if "meter" in move:
+                move["meter"] = rename(move["meter"])
 
 
 def _one_arrow_per_pair(lesson_map: dict) -> dict[str, list[str]]:
@@ -152,14 +228,60 @@ def lesson_map_problems(lesson: LessonPlan, icons: list[str]) -> list[str]:
         return []
     problems = [f"map piece {piece.id!r} uses icon {piece.icon!r}, which is not in the icon list"
                 for piece in lesson.map.pieces if piece.kind == "piece" and piece.icon not in icons]
-    for scene in lesson.scenes[1:]:      # the first scene may simply present the pieces
-        if all(PROOF[beat.move.do] == "label" for beat in scene.beats):
-            problems.append(f"scene {scene.id} only names things; give at least one beat a send, "
-                            "trouble, fix or measure move")
+    # A scene may only present or point (an opening, a closing recap), but a lesson that mostly
+    # names things is a list of parts, not an explanation.
+    moves = [beat.move.do for scene in lesson.scenes for beat in scene.beats
+             if beat.move.do not in LINES]
+    showing = sum(PROOF[move] != "label" for move in moves)
+    if showing * 3 < len(moves):
+        problems.append(f"only {showing} of {len(moves)} beats show something travelling or "
+                        "changing; at least a third must be send, trouble, fix, measure or remove")
     return problems
 
 
-def _actions(move: BeatMove, lesson_map: LessonMap, visible: set[str], payloads: dict) -> list[dict]:
+def craft_problems(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
+    """Where a newly planned map lesson falls short as teaching, in words the lesson step can act
+    on. These test craft, never a plot: a lesson may take any shape that passes them."""
+    problems = []
+    if lesson.brief is None:
+        return ['the lesson starts with a "brief": decide the teaching before the scenes']
+    if not any(beat.move.do == "ask" for beat in lesson.scenes[0].beats):
+        problems.append("the first scene never puts the learner's question on screen; give one of "
+                        'its beats the move {"do":"ask"}, with the question '
+                        f"({lesson.brief.question!r}) as its sentence")
+    kinds = {piece.id: piece.kind for piece in lesson.map.pieces}
+    for scene in scenes:
+        for beat in scene.beats:
+            new = [target for action in beat.actions if action.kind == "appear"
+                   for target in action.target_ids if kinds.get(target) == "piece"]
+            if len(new) > 3:
+                problems.append(f"beat {beat.narration_beat_id} brings {len(new)} new pieces on "
+                                "screen at once; bring a piece on when the story first needs it, "
+                                "at most three in a beat")
+    moves = [beat.move for scene in lesson.scenes for beat in scene.beats]
+    acted = {item for move in moves if move.do != "introduce" for item in [*move.pieces, *move.path]}
+    idle = sorted(piece for piece, kind in kinds.items() if kind == "piece" and piece not in acted)
+    if idle:
+        problems.append(f"{idle} are shown but never do anything; give each a send, point, "
+                        "trouble or fix move, or leave it off the map")
+    read = {move.meter for move in moves if move.meter}
+    still = sorted(piece for piece, kind in kinds.items() if kind == "meter" and piece not in read)
+    if still:
+        problems.append(f"meter(s) {still} never change; move them with trouble, fix or measure, "
+                        "or leave them off the map")
+    return problems
+
+
+def story_shape(lesson: LessonPlan) -> str:
+    """A lesson's plot as its moves, scene by scene, for telling whether lessons on different
+    topics are one template: 'introduce send send | trouble fix'."""
+    if lesson.map is None:
+        return ""
+    return " | ".join(" ".join(beat.move.do for beat in scene.beats) for scene in lesson.scenes)
+
+
+def _actions(move: BeatMove, lesson_map: LessonMap, visible: set[str], payloads: dict,
+             line: str) -> list[dict]:
     """The actions one move becomes, given what is on screen. `visible` and `payloads` are
     advanced as the actions are written, so the next move sees their result."""
     pieces = {piece.id: piece for piece in lesson_map.pieces}
@@ -183,7 +305,10 @@ def _actions(move: BeatMove, lesson_map: LessonMap, visible: set[str], payloads:
                 payloads[item].update(params)
 
     meter = [move.meter] if move.meter else []
-    if move.do == "introduce":
+    if move.do in LINES:
+        actions.append({"kind": "appear", "target_ids": [line], "params": {}})
+        visible.add(line)
+    elif move.do == "introduce":
         show(move.pieces)
     elif move.do == "point":
         show(move.pieces)
@@ -216,6 +341,10 @@ def _actions(move: BeatMove, lesson_map: LessonMap, visible: set[str], payloads:
         if meter:
             change(meter, {"value": _number(move.value), "tone": pieces[move.meter].tone})
     elif move.do == "remove":
+        unseen = [item for item in move.pieces if item not in visible]
+        if unseen:
+            raise ValueError(f"a remove move names {unseen}, which are not on screen; only a piece "
+                             "that has been shown can be taken away")
         gone = [item for item in move.pieces if item in visible]
         if gone:
             actions.append({"kind": "hide", "target_ids": gone, "params": {}})
@@ -240,8 +369,8 @@ def compile_map_scene(lesson: LessonPlan, scene: LessonScene,
             payloads[obj_id] = dict(previous_state.payloads[obj_id])
     beats = []
     for position, beat in enumerate(scene.beats):
-        actions = _actions(beat.move, lesson.map, visible, payloads)
-        if scene.takeaway and position == len(scene.beats) - 1:
+        actions = _actions(beat.move, lesson.map, visible, payloads, line_id(beat))
+        if _closes_on_a_takeaway(scene) and position == len(scene.beats) - 1:
             actions.append({"kind": "appear", "target_ids": [takeaway_id(scene)], "params": {}})
             visible.add(takeaway_id(scene))
         if not actions:
@@ -257,11 +386,16 @@ def compile_map_scene(lesson: LessonPlan, scene: LessonScene,
             # Trouble on a piece that is already red, or a fix with nothing left to mend, changes
             # nothing: the sentence is emphasis, and what it owes the viewer is the piece itself.
             beat.claim_requirements = {claim: ["label"] for claim in beat.claim_ids}
-        shown = [item for item in _involved(beat.move.model_dump())]
+        shown = ([line_id(beat)] if beat.move.do in LINES
+                 else [item for item in _involved(beat.move.model_dump())])
         evidence = [{"claim_ids": [claim], "object_ids": shown, "kind": kind,
                      "action_ids": [action["id"] for action in actions]}
                     for claim, kinds in beat.claim_requirements.items() for kind in kinds]
-        beats.append({"narration_beat_id": beat.id, "actions": actions, "evidence": evidence})
+        entry = {"narration_beat_id": beat.id, "actions": actions, "evidence": evidence}
+        following = scene.beats[position + 1].move.do if position + 1 < len(scene.beats) else None
+        if beat.move.do == "ask" and following == "answer":
+            entry["pause_after"] = THINK_PAUSE      # the viewer gets a moment before the answer
+        beats.append(entry)
     return {"lesson_scene_id": scene.id, "pattern": "architecture", "render_mode": "browser",
             "objects": objects, "relationships": relationships,
             "layout_ids": [obj["id"] for obj in objects], "beats": beats,

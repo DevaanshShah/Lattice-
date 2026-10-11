@@ -31,21 +31,34 @@ ARROWS = [{"source": "phone", "target": "gateway", "label": "order"},
           {"source": "service", "target": "db", "label": "save"},
           {"source": "db", "target": "copy"}]
 SAY = "These are seventeen plain words that stand in for one sentence of narration in a test lesson."
+ASK = "Why would every single order from every customer in a city end up in just one place?"
+BRIEF = {
+    "learner": "A new developer who has used apps but never built a backend.",
+    "can_do": "Explain why one database becomes the weak point and what a copy changes.",
+    "question": "Why can't every order just go straight into one database?",
+    "problem": "A delivery app on a Friday night, with thousands of orders in ten minutes.",
+    "naive_attempt": "Send every order to the one database; it works until they all arrive at once.",
+    "turning_point": "A second copy shares the work, so no single store has to take it all.",
+    "check_question": "What happens to the load on the first database once the copy exists?",
+    "check_answer": "It falls, because the copy takes part of the work.",
+}
 
 
 def _answer() -> dict:
     """A lesson exactly as the model is asked to write it: narration and a move per beat."""
     return {
         "learning_objective": "Follow an order and see why the database gets a copy.",
+        "brief": dict(BRIEF),
         "map": {"pieces": copy.deepcopy(PIECES), "arrows": copy.deepcopy(ARROWS)},
         "scenes": [
             {"title": "An order", "learning_goal": "Follow it.",
              "takeaway": "Every order ends in one database",
              "beats": [
-                 {"spoken_text": SAY, "move": {"do": "introduce", "pieces": ["phone", "gateway", "service"]}},
+                 {"spoken_text": ASK, "move": {"do": "introduce", "pieces": ["phone", "gateway", "service"]}},
                  {"spoken_text": SAY, "move": {"do": "send", "path": ["phone", "gateway", "service"]}},
                  {"spoken_text": SAY, "move": {"do": "send", "path": ["service", "db"]}},
                  {"spoken_text": SAY, "move": {"do": "send", "path": ["db", "service", "gateway", "phone"]}},
+                 {"spoken_text": BRIEF["question"], "move": {"do": "ask"}},
              ]},
             {"title": "Too many orders", "learning_goal": "See the overload and the fix.",
              "beats": [
@@ -54,6 +67,7 @@ def _answer() -> dict:
                                                "count": 4}},
                  {"spoken_text": SAY, "move": {"do": "fix", "pieces": ["copy", "db"], "meter": "load",
                                                "value": 50}},
+                 {"spoken_text": SAY, "move": {"do": "point", "pieces": ["cache"]}},
              ]},
         ]}
 
@@ -88,7 +102,7 @@ def test_the_model_writes_only_narration_and_moves_and_code_fills_the_rest():
     lesson = _lesson()
     first = lesson.scenes[0]
     assert [scene.id for scene in lesson.scenes] == ["s1", "s2"]
-    assert [beat.id for beat in first.beats] == ["s1_b1", "s1_b2", "s1_b3", "s1_b4"]
+    assert [beat.id for beat in first.beats] == ["s1_b1", "s1_b2", "s1_b3", "s1_b4", "s1_b5"]
     assert first.beats[0].claim_requirements == {"s1_b1_c": ["label"]}
     assert first.beats[1].claim_requirements == {"s1_b2_c": ["relationship"]}
     assert first.beats[0].visual_anchors == ["Customer app", "Gateway", "Order service"]
@@ -106,7 +120,7 @@ def test_a_map_lesson_is_drawn_as_icon_pieces_with_no_model_call():
     kinds = {obj.id: obj.kind for obj in first.objects}
     assert kinds == {"phone": "icon", "gateway": "icon", "service": "icon", "cache": "icon",
                      "store": "group", "db": "icon", "load": "metric", "copy": "icon",
-                     "takeaway_s1": "caption"}
+                     "s1_b5_line": "caption", "takeaway_s1": "caption"}
     by_id = {obj.id: obj for obj in first.objects}
     assert by_id["store"].payload["members"] == ["db", "load", "copy"]
     assert by_id["copy"].payload["placeholder"] is True and by_id["service"].payload["count"] == 2
@@ -122,9 +136,10 @@ def test_each_move_becomes_the_actions_that_show_it():
     assert steps(first, 1) == [("trace", ["phone", "gateway", "service"], {})]
     # a piece the path needs comes on screen first, and its panel comes with it
     assert steps(first, 2) == [("appear", ["db", "store"], {}), ("trace", ["service", "db"], {})]
-    # a reply travels back along the arrows; the takeaway closes the scene
-    assert steps(first, 3) == [("trace", ["db", "service", "gateway", "phone"], {}),
-                               ("appear", ["takeaway_s1"], {})]
+    # a reply travels back along the arrows
+    assert steps(first, 3) == [("trace", ["db", "service", "gateway", "phone"], {})]
+    # the question goes on screen as a line, and the takeaway closes the scene under it
+    assert steps(first, 4) == [("appear", ["s1_b5_line"], {}), ("appear", ["takeaway_s1"], {})]
     assert steps(second, 0) == [
         ("appear", ["load"], {}),
         ("trace", ["phone", "gateway", "service", "db"], {"count": 4}),
@@ -173,11 +188,14 @@ def test_the_requested_length_reaches_the_lesson_and_a_short_lesson_is_sent_back
             beat["spoken_text"] = "Too short."
     client = _Scripted([short, _answer()])
     lesson = lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2,
-                                  target_seconds=40, max_scenes=4)
-    assert "is about 112 words, between 78 and 146" in client.asked[0][1]["content"]
+                                  target_seconds=50, max_scenes=4)
+    assert ("is about 140 words, between 98 and 182, counting the check question and its answer, "
+            "which are added after your last beat. Write about 6 beats, in 2 scenes"
+            in client.asked[0][1]["content"])
     assert "Use at most 4 scene(s)" in client.asked[0][1]["content"]
-    assert "the narration has 12 words" in client.asked[1][-1]["content"]
-    assert sum(len(b.spoken_text.split()) for s in lesson.scenes for b in s.beats) == 102
+    # eight two-word beats, plus the check question and answer that code adds
+    assert "the narration has 39 words" in client.asked[1][-1]["content"]
+    assert sum(len(b.spoken_text.split()) for s in lesson.scenes for b in s.beats) == 152
 
 
 @pytest.mark.unit
@@ -188,6 +206,7 @@ def test_the_requested_length_reaches_the_lesson_and_a_short_lesson_is_sent_back
     (lambda a: a["scenes"][0]["beats"][0].pop("move"), "needs a move"),
     (lambda a: a["scenes"][0]["beats"][0]["move"].update(do="explode"), "Input should be .introduce."),
     (lambda a: a["scenes"][0]["beats"][1]["move"].update(path=["phone"]), "two or more pieces"),
+    (lambda a: a["scenes"][0]["beats"][1]["move"].update(meter="load", value=42), "a send move has no meter"),
 ])
 def test_a_move_that_does_not_fit_the_map_is_refused(change, message):
     answer = _answer()
@@ -210,11 +229,13 @@ def test_a_scene_that_only_names_things_and_an_unknown_icon_are_reported():
     naming = [
         {"spoken_text": SAY, "move": {"do": "introduce", "pieces": ["phone", "gateway", "service", "db"]}},
         {"spoken_text": SAY, "move": {"do": "point", "pieces": ["gateway"]}}]
-    answer["scenes"][0]["beats"] = copy.deepcopy(naming)   # an opening that presents the pieces is fine
-    answer["scenes"].insert(1, {"title": "More names", "learning_goal": "g", "beats": naming})
+    answer["scenes"].append({"title": "Recap", "learning_goal": "g", "beats": copy.deepcopy(naming)})
+    assert len(lesson_map_problems(_lesson(answer), icons)) == 1   # a scene may only point: 5 of 9 beats act
+    for _ in range(5):                                            # but a lesson that mostly names things may not
+        answer["scenes"].append({"title": "More", "learning_goal": "g", "beats": copy.deepcopy(naming)})
     problems = lesson_map_problems(_lesson(answer), icons)
-    assert len(problems) == 2 and "icon 'unicorn'" in problems[0]
-    assert "scene s2 only names things" in problems[1]
+    assert "icon 'unicorn'" in problems[0]
+    assert "only 5 of 19 beats show something travelling or changing" in problems[1]
 
 
 @pytest.mark.unit
@@ -341,7 +362,10 @@ def test_the_recipe_decides_the_board_and_only_that_prompt_is_sent():
     client = _Scripted([_answer()])
     lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
     system, user = client.asked[0][0]["content"], client.asked[0][1]["content"]
-    assert system.startswith("You are the Lesson Director for a short learning video taught on ONE map")
+    assert "ONE map" in system and '"brief"' in system
+    # the prompt gives the shape and principles, not a plot to follow or a worked lesson to copy
+    for copied in ("Customer app", "Order service", "smartphone", "First introduce", "Then the fix"):
+        assert copied not in system
     assert "Icon list: " in user
     # a lesson that skips the map is sent back, and the reason is reported
     plain = {"learning_objective": "x", "scenes": [{"id": "a", "title": "t", "learning_goal": "g", "beats": [
@@ -405,3 +429,224 @@ def test_trouble_on_a_piece_already_red_is_emphasis_and_points_at_it():
     assert [(action.kind, action.target_ids) for action in again.actions] == [("highlight", ["db"])]
     assert [evidence.kind for evidence in again.evidence] == ["label"]
     assert lesson.scenes[1].beats[1].claim_requirements == {"s2_b2_c": ["label"]}
+
+
+@pytest.mark.unit
+def test_a_new_map_lesson_starts_from_a_brief_and_an_old_one_without_it_still_loads():
+    from planner.lesson_map import craft_problems
+
+    lesson = _lesson()
+    assert lesson.brief.question.endswith("?")
+    assert craft_problems(lesson, plan_map_scenes(lesson, SKILL)) == []
+    old = _answer()
+    del old["brief"]
+    old["scenes"][0]["beats"].pop()                        # and before questions were shown
+    saved = _lesson(old)                                   # a lesson saved before briefs existed
+    assert saved.brief is None and len(plan_map_scenes(saved, SKILL)) == 2
+    client = _Scripted([old, _answer()])                   # but a newly planned one is sent back
+    lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
+    assert 'starts with a "brief"' in client.asked[1][-1]["content"]
+    statement = _answer()
+    statement["brief"]["question"] = "One database is a weak point."
+    with pytest.raises(ValidationError, match="written as a question"):
+        _lesson(statement)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("change, message", [
+    (lambda a: a["scenes"][0]["beats"].pop(), "the first scene never puts the learner's question on screen"),
+    (lambda a: a["scenes"][0]["beats"][0]["move"].update(pieces=["phone", "gateway", "service", "cache"]),
+     "brings 4 new pieces on screen at once"),
+    (lambda a: a["scenes"][1]["beats"].pop(), "['cache'] are shown but never do anything"),
+    (lambda a: a["scenes"][1]["beats"].insert(0, {"spoken_text": SAY, "move": {"do": "introduce", "pieces": ["cache"]}}) or
+     a["scenes"][1]["beats"].pop(), "['cache'] are shown but never do anything"),
+    (lambda a: a["scenes"][1]["beats"].__setitem__(slice(0, 2), [
+        {"spoken_text": SAY, "move": {"do": "trouble", "pieces": ["db"]}},
+        {"spoken_text": SAY, "move": {"do": "fix", "pieces": ["copy"]}}]), "meter(s) ['load'] never change"),
+])
+def test_a_lesson_that_falls_short_as_teaching_is_sent_back_with_the_reason(change, message):
+    weak = _answer()
+    change(weak)
+    client = _Scripted([weak, _answer()])
+    lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
+    assert len(client.asked) == 2
+    assert "as teaching this falls short" in client.asked[1][-1]["content"]
+    assert message in client.asked[1][-1]["content"]
+
+
+@pytest.mark.unit
+def test_the_plot_of_a_lesson_can_be_read_off_and_compared():
+    from eval.plan_score import PlanBatteryReport, TopicResult
+    from planner.lesson_map import story_shape
+
+    shape = story_shape(_lesson())
+    assert shape == "introduce send send send ask | trouble fix point ask answer"
+    other = _answer()
+    other["scenes"][0]["beats"][1], other["scenes"][0]["beats"][2] = (
+        other["scenes"][0]["beats"][2], other["scenes"][0]["beats"][1])
+    report = PlanBatteryReport(model="m", results=[
+        TopicResult("a", planned=True, shape=shape), TopicResult("b", planned=True, shape=shape),
+        TopicResult("c", planned=True, shape="send point | measure")])
+    assert report.sameness == "2 distinct plots and 2 distinct opening scenes in 3 map lessons"
+    assert "sameness: 2 distinct plots" in report.table()
+    assert PlanBatteryReport.from_dict(report.to_dict()).results[0].shape == shape
+
+
+@pytest.mark.unit
+def test_the_brief_supplies_the_objective_and_audience_the_model_left_out():
+    answer = _answer()
+    del answer["learning_objective"]
+    lesson = _lesson(answer)
+    assert lesson.learning_objective == BRIEF["can_do"] and lesson.audience == BRIEF["learner"]
+
+
+@pytest.mark.unit
+def test_removing_a_piece_that_was_never_shown_says_so_plainly(tmp_path):
+    answer = _answer()
+    answer["scenes"][1]["beats"][2] = {"spoken_text": SAY, "move": {"do": "remove", "pieces": ["cache"]}}
+    client = _Scripted([answer, _answer()])
+    lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2,
+                         diagnostic_dir=tmp_path)
+    assert "a remove move names ['cache'], which are not on screen" in client.asked[1][-1]["content"]
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "lesson_attempt_01.txt", "lesson_attempt_02.txt"]              # both answers are kept
+
+
+@pytest.mark.unit
+def test_the_question_is_shown_and_the_check_gets_a_pause_and_an_answer():
+    lesson = _lesson()
+    first, second = plan_map_scenes(lesson, SKILL)
+    lines = {obj.id: obj for scene in (first, second) for obj in scene.objects if obj.kind == "caption"}
+    # an ask with no text shows the lesson's own question
+    assert lines["s1_b5_line"].label == BRIEF["question"] and lines["s1_b5_line"].payload["ask"] is True
+    # the check question and its answer are the brief's words, added after the model's last beat
+    asked, answered = lesson.scenes[1].beats[-2:]
+    assert (asked.spoken_text, asked.move.do) == (BRIEF["check_question"], "ask")
+    assert (answered.spoken_text, answered.move.do) == (BRIEF["check_answer"], "answer")
+    assert lines["s2_b4_line"].label == BRIEF["check_question"]
+    assert lines["s2_b5_line"].label == BRIEF["check_answer"] and lines["s2_b5_line"].payload["tick"] is True
+    # the picture holds after the check question, and nowhere else
+    assert [beat.pause_after for beat in second.beats] == [0, 0, 0, 1.6, 0]
+    assert all(beat.pause_after == 0 for beat in first.beats)
+    # a scene that ends on an answer shows no takeaway under it
+    closing = _answer()
+    closing["scenes"][1]["takeaway"] = "A copy shares the load"
+    _, last = plan_map_scenes(_lesson(closing), SKILL)
+    assert "takeaway_s2" not in {obj.id for obj in last.objects}
+
+
+@pytest.mark.unit
+def test_a_lesson_that_asks_its_own_check_is_left_as_written():
+    own = _answer()
+    own["scenes"][1]["beats"] += [
+        {"spoken_text": "So what changed?", "move": {"do": "ask", "text": "So what changed?"}},
+        {"spoken_text": "The copy took half the work.", "move": {"do": "answer", "text": "The copy took half the work."}}]
+    lesson = _lesson(own)
+    assert [beat.move.do for beat in lesson.scenes[1].beats] == ["trouble", "fix", "point", "ask", "answer"]
+    assert lesson.scenes[1].beats[-1].spoken_text == "The copy took half the work."
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("beats, message", [
+    ([{"do": "ask", "text": "One?"}, {"do": "ask", "text": "Two?"}], "asks at most one question"),
+    ([{"do": "answer", "text": "Because."}, {"do": "ask", "text": "Why?"}], "comes after an ask move"),
+    ([{"do": "ask", "text": "A statement."}], "is a question, ending in"),
+    ([{"do": "ask", "text": "Why " + "so " * 40 + "long?"}], "at most 110 characters"),
+    ([{"do": "send", "path": ["phone", "gateway"], "text": "hello"}], "a send move shows no text"),
+    ([{"do": "ask", "text": "Why?", "pieces": ["phone"]}], "names no pieces"),
+])
+def test_lines_of_text_follow_their_rules(beats, message):
+    answer = _answer()
+    answer["scenes"][1]["beats"] = [   # replaces the scene, so no check is added on top of an ask
+        {"spoken_text": SAY, "move": {"do": "trouble", "pieces": ["db"], "meter": "load", "value": 95}},
+        *({"spoken_text": SAY, "move": move} for move in beats)]
+    with pytest.raises(ValidationError, match=message):
+        _lesson(answer)
+
+
+@pytest.mark.unit
+def test_a_question_line_is_drawn_larger_with_its_own_mark():
+    from generation.browser_scene import _semantic_html
+
+    first, _ = plan_map_scenes(_lesson(), SKILL)
+    html = _semantic_html(first, closing_state(first))
+    assert ('semantic-caption-line is-question tone-white" data-object-id="s1_b5_line"' in html
+            and '<span class="ask-mark">?</span>' + BRIEF["question"].replace("'", "&#x27;") in html)
+    assert html.count("ask-mark") == 1                      # the takeaway keeps its own look
+
+
+@pytest.mark.integration
+def test_a_question_stays_bright_while_its_answer_appears():
+    from playwright.sync_api import sync_playwright
+
+    from composition.slides import chrome_path
+    from core.visual_state import apply_action, opening_state
+    from generation.browser_scene import CAPTURE_ARGS, animation_html
+
+    first, second = plan_map_scenes(_lesson(), SKILL)
+    state = opening_state(second, closing_state(first))
+    for beat in second.beats[:4]:                           # up to and including the check question
+        for action in beat.actions:
+            apply_action(state, action)
+    document = animation_html(second, second.beats[4], title="Check", opening=state, duration=3)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,
+                                             args=CAPTURE_ARGS)
+        page = browser.new_page(viewport={"width": 1280, "height": 720})
+        page.set_content(document)
+        page.evaluate("() => window.animationReady()")
+        page.evaluate("() => window.seekAnimation(2.9)")    # the answer is on screen
+        look = lambda obj_id: page.locator(f'[data-object-id="{obj_id}"]').evaluate(
+            "e=>getComputedStyle(e).opacity")
+        seen = {name: look(name) for name in ("s2_b4_line", "s2_b5_line", "phone")}
+        browser.close()
+    # the pieces not being talked about fade back; the question being answered does not
+    assert seen == {"s2_b4_line": "1", "s2_b5_line": "1", "phone": "0.62"}
+
+
+@pytest.mark.unit
+def test_the_taught_map_fixture_is_exactly_what_the_compiler_writes():
+    """The fixture's lesson is hand-written; its pictures must come from the compiler, so the
+    regression set renders the compiled path and cannot drift from it."""
+    from pathlib import Path
+
+    from core.schemas.browser_visual_plan import BrowserVisualPlan
+    from planner.lesson_map import craft_problems
+
+    folder = Path(__file__).parent / "fixtures" / "video_golden" / "taught_map"
+    lesson = LessonPlan.model_validate_json((folder / "lesson_plan.json").read_text(encoding="utf-8"))
+    saved = BrowserVisualPlan.model_validate_json(
+        (folder / "browser_visual_plan.json").read_text(encoding="utf-8"))
+    compiled = plan_map_scenes(lesson, SKILL)
+    assert saved.scenes == compiled
+    assert craft_problems(lesson, compiled) == []
+    assert [beat.pause_after for beat in compiled[-1].beats] == [0, 0, 0, 1.6, 0]
+
+
+@pytest.mark.unit
+def test_a_loosely_written_piece_id_is_tidied_everywhere_it_is_used():
+    answer = _answer()
+    loose = {"service": "Order-Service", "db": "DB 1", "load": "load%"}
+    swap = lambda value: loose.get(value, value)
+    for piece in answer["map"]["pieces"]:
+        piece["id"] = swap(piece["id"])
+    for arrow in answer["map"]["arrows"]:
+        arrow["source"], arrow["target"] = swap(arrow["source"]), swap(arrow["target"])
+    for scene in answer["scenes"]:
+        for beat in scene["beats"]:
+            move = beat["move"]
+            for key in ("pieces", "path"):
+                if key in move:
+                    move[key] = [swap(item) for item in move[key]]
+            if "meter" in move:
+                move["meter"] = swap(move["meter"])
+    lesson = _lesson(answer)                               # accepted, not sent back
+    assert {"order_service", "db_1", "load"} <= {piece.id for piece in lesson.map.pieces}
+    assert lesson.scenes[0].beats[2].move.path == ["order_service", "db_1"]
+    assert lesson.scenes[1].beats[0].move.meter == "load"
+    assert len(plan_map_scenes(lesson, SKILL)) == 2
+    # two ids that would become the same name are left for the schema to refuse
+    clash = _answer()
+    clash["map"]["pieces"][0]["id"], clash["map"]["pieces"][1]["id"] = "a-b", "a b"
+    with pytest.raises(ValidationError):
+        _lesson(clash)

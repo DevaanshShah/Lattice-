@@ -1,0 +1,453 @@
+{
+  "schema_version": 2,
+  "topic": "Why one crashed server takes a whole website down, and what a second server changes",
+  "skill_id": "workflow_explainer",
+  "learning_objective": "Explain why a second server keeps a site up when one server fails.",
+  "audience": "A beginner who has put a small website on one server.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner who has put a small website on one server.",
+    "can_do": "Explain why a second server keeps a site up when one server fails.",
+    "question": "Why does one crashed server take the whole website down?",
+    "problem": "A school posts exam results at nine, and four thousand students open the page in the same minute.",
+    "naive_attempt": "Buy a bigger server. It copes for a while, but it is still one machine: when it stops, everything stops.",
+    "turning_point": "With a second server behind the same front door, a request always has somewhere to go.",
+    "check_question": "A site has two servers and one crashes. What do visitors see?",
+    "check_answer": "The page still loads, because the front door sends them to the other server."
+  },
+  "map": {
+    "pieces": [
+      {
+        "id": "students",
+        "label": "Students",
+        "kind": "piece",
+        "icon": "users",
+        "tone": "pink",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "door",
+        "label": "Front door",
+        "kind": "piece",
+        "icon": "router",
+        "tone": "purple",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "server",
+        "label": "Server",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "teal",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "second",
+        "label": "Second server",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "blue",
+        "panel": null,
+        "count": 1,
+        "planned": true,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "load",
+        "label": "Load",
+        "kind": "meter",
+        "icon": null,
+        "tone": "teal",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": 20.0,
+        "max": 100.0
+      }
+    ],
+    "arrows": [
+      {
+        "source": "students",
+        "target": "door",
+        "label": "request"
+      },
+      {
+        "source": "door",
+        "target": "server",
+        "label": "page"
+      },
+      {
+        "source": "door",
+        "target": "second",
+        "label": null
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "Results day",
+      "learning_goal": "See one server fail under a rush.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "It is nine in the morning, and four thousand students open the school's results page in the same minute.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Students",
+            "Front door"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "students",
+              "door"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "Every request goes through the site's front door to the one server behind it.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "Students",
+            "Front door",
+            "Server"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "students",
+              "door",
+              "server"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "That single server cannot keep up, its load hits the top, and the page stops loading.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "Server",
+            "Students",
+            "Front door",
+            "Load: 100"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "server"
+            ],
+            "path": [
+              "students",
+              "door",
+              "server"
+            ],
+            "meter": "load",
+            "value": 100.0,
+            "count": 4
+          }
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "Why does one crashed server take the whole website down?",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "Why does one crashed server take the whole website down?"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Why does one crashed server take the whole website down?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "One server is one point of failure"
+    },
+    {
+      "id": "s2",
+      "title": "The obvious fix",
+      "learning_goal": "See why a bigger machine is not the answer.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "The obvious fix is a bigger machine, and for a while the load comes back down.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "Server",
+            "Load: 45"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fix",
+            "text": null,
+            "pieces": [
+              "server"
+            ],
+            "path": [],
+            "meter": "load",
+            "value": 45.0,
+            "count": 1
+          }
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "But it is still one machine, so the day it crashes, every student is locked out again.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "Server"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "server"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s2_b3",
+          "spoken_text": "The front door has nowhere else to send them.",
+          "claim_ids": [
+            "s2_b3_c"
+          ],
+          "visual_anchors": [
+            "Front door"
+          ],
+          "claim_requirements": {
+            "s2_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "point",
+            "text": null,
+            "pieces": [
+              "door"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Bigger is still only one"
+    },
+    {
+      "id": "s3",
+      "title": "A second server",
+      "learning_goal": "See a request reach a server that still works.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "So the school adds a second server beside the first, and the front door now has a choice.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "Second server"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fix",
+            "text": null,
+            "pieces": [
+              "second"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "When the first server fails, the front door simply passes requests to the other one.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "Students",
+            "Front door",
+            "Second server"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "students",
+              "door",
+              "second"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "With the work shared, neither machine is pushed to its limit.",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "Load: 50"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "value"
+            ]
+          },
+          "move": {
+            "do": "measure",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": "load",
+            "value": 50.0,
+            "count": 1
+          }
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "A site has two servers and one crashes. What do visitors see?",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "A site has two servers and one crashes. What do visitors see?"
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "A site has two servers and one crashes. What do visitors see?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        },
+        {
+          "id": "s3_b5",
+          "spoken_text": "The page still loads, because the front door sends them to the other server.",
+          "claim_ids": [
+            "s3_b5_c"
+          ],
+          "visual_anchors": [
+            "The page still loads, because the front door sends them to the other server."
+          ],
+          "claim_requirements": {
+            "s3_b5_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "The page still loads, because the front door sends them to the other server.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    }
+  ]
+}

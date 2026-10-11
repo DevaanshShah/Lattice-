@@ -366,7 +366,8 @@ measured pace of 2.8 words per second); item 3 and item 6 for map lessons (the r
 board and only that board's prompt is sent); item 5 for every scene after the first; item 8 as
 a measurement (`deepseek/deepseek-v4.1-flash` planned 6 of 6 at about $0.0013 a lesson).
 
-What remains, in order:
+What remains is planned in `docs/learning-video-teaching-plan-2026-10-10.md`, which
+replaces this list. The list as it stood when the first part was finished:
 
 1. Set the default model. `.env` is the owner's file and still names `gpt-4o-mini`.
 2. Widen the menu where videos feel alike: compare two options, a queue filling, one piece

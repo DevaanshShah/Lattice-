@@ -91,11 +91,18 @@ class LessonMap(BaseModel):
         return self
 
 
+# A question, an answer or a takeaway is shown as a line of text under the picture. It may wrap
+# onto a second line; past this length it would take the room the picture needs.
+LINE_LENGTH = 110
+
+
 class BeatMove(BaseModel):
     """What happens on the map while a beat is spoken, chosen from a short menu. Code turns a
     move into the actions, the claim and the proof, so they cannot disagree with each other."""
     model_config = ConfigDict(extra="forbid")
-    do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove"]
+    do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
+                "ask", "answer"]
+    text: str | None = None                           # the line an ask or an answer shows
     pieces: list[str] = Field(default_factory=list)
     path: list[str] = Field(default_factory=list)     # pieces a request travels through, in order
     meter: str | None = None
@@ -110,46 +117,30 @@ class BeatMove(BaseModel):
                  "remove": bool(self.pieces), "send": len(self.path) >= 2,
                  "measure": self.meter is not None,
                  "trouble": bool(self.pieces) or self.meter is not None,
-                 "fix": bool(self.pieces) or self.meter is not None}
+                 "fix": bool(self.pieces) or self.meter is not None,
+                 "ask": bool(self.text), "answer": bool(self.text)}
         if not needs[self.do]:
             raise ValueError({
                 "send": "a send move needs a path of two or more pieces",
                 "measure": "a measure move needs a meter and a value",
+                "ask": "an ask move needs the question it shows, as text",
+                "answer": "an answer move needs the answer it shows, as text",
             }.get(self.do, f"a {self.do} move needs pieces" + (
                 " or a meter" if self.do in {"trouble", "fix"} else "")))
         if self.path and self.do not in {"send", "trouble"}:
             raise ValueError(f"a {self.do} move has no path; only send and trouble do")
-        return self
-
-
-class BeatMove(BaseModel):
-    """What happens on the map while a beat is spoken, chosen from a short menu. Code turns a
-    move into the actions, the claim and the proof, so they cannot disagree with each other."""
-    model_config = ConfigDict(extra="forbid")
-    do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove"]
-    pieces: list[str] = Field(default_factory=list)
-    path: list[str] = Field(default_factory=list)     # pieces a request travels through, in order
-    meter: str | None = None
-    value: float | None = None
-    count: int = Field(default=1, ge=1, le=5)         # balls sent along the path: 4 is heavy traffic
-
-    @model_validator(mode="after")
-    def _shape(self) -> "BeatMove":
-        if (self.meter is None) != (self.value is None):
-            raise ValueError("a move names a meter together with the value it should read")
-        needs = {"introduce": bool(self.pieces), "point": bool(self.pieces),
-                 "remove": bool(self.pieces), "send": len(self.path) >= 2,
-                 "measure": self.meter is not None,
-                 "trouble": bool(self.pieces) or self.meter is not None,
-                 "fix": bool(self.pieces) or self.meter is not None}
-        if not needs[self.do]:
-            raise ValueError({
-                "send": "a send move needs a path of two or more pieces",
-                "measure": "a measure move needs a meter and a value",
-            }.get(self.do, f"a {self.do} move needs pieces" + (
-                " or a meter" if self.do in {"trouble", "fix"} else "")))
-        if self.path and self.do not in {"send", "trouble"}:
-            raise ValueError(f"a {self.do} move has no path; only send and trouble do")
+        if self.meter is not None and self.do not in {"trouble", "fix", "measure"}:
+            raise ValueError(f"a {self.do} move has no meter; only trouble, fix and measure move one")
+        if self.text is not None:
+            if self.do not in {"ask", "answer"}:
+                raise ValueError(f"a {self.do} move shows no text; only ask and answer do")
+            if len(self.text) > LINE_LENGTH:
+                raise ValueError(f"the text of an {self.do} move is shown under the picture: at "
+                                 f"most {LINE_LENGTH} characters, not {len(self.text)}")
+            if self.do == "ask" and not self.text.rstrip().endswith("?"):
+                raise ValueError("the text of an ask move is a question, ending in '?'")
+        if self.do in {"ask", "answer"} and (self.pieces or self.path):
+            raise ValueError(f"an {self.do} move shows a line of text and names no pieces")
         return self
 
 
@@ -160,7 +151,6 @@ class LessonBeat(BaseModel):
     claim_ids: list[str] = Field(..., min_length=1)
     visual_anchors: list[str] = Field(default_factory=list)
     claim_requirements: dict[str, list[VisualRequirement]] = Field(default_factory=dict)
-    move: BeatMove | None = None      # set on every beat of a map lesson, and only there
     move: BeatMove | None = None      # set on every beat of a map lesson, and only there
 
     @model_validator(mode="after")
@@ -186,6 +176,31 @@ class LessonScene(BaseModel):
     takeaway: str | None = Field(default=None, max_length=80)
 
 
+class LessonBrief(BaseModel):
+    """What a lesson is for, decided before any scene is written. The scenes serve it, and it is
+    what a teacher reads and approves."""
+    model_config = ConfigDict(extra="forbid")
+    learner: str = Field(..., min_length=1)           # who is watching and what they already know
+    can_do: str = Field(..., min_length=1)            # the one thing they can do afterwards
+    question: str = Field(..., min_length=1)          # the learner's own question
+    problem: str = Field(..., min_length=1)           # a concrete situation where it matters
+    naive_attempt: str = Field(..., min_length=1)     # what a beginner tries, and why it falls short
+    turning_point: str = Field(..., min_length=1)     # the idea that resolves it
+    check_question: str = Field(..., min_length=1)    # tests whether they understood
+    check_answer: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _questions_are_questions(self) -> "LessonBrief":
+        for name in ("question", "check_question"):
+            if not getattr(self, name).rstrip().endswith("?"):
+                raise ValueError(f"brief.{name} is written as a question, ending in '?'")
+        for name in ("question", "check_question", "check_answer"):
+            if len(getattr(self, name)) > LINE_LENGTH:
+                raise ValueError(f"brief.{name} is shown on screen: at most {LINE_LENGTH} "
+                                 f"characters, not {len(getattr(self, name))}")
+        return self
+
+
 class LessonPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal[1, 2] = 1
@@ -194,6 +209,7 @@ class LessonPlan(BaseModel):
     learning_objective: str = Field(..., min_length=1)
     audience: str | None = None
     prerequisites: list[str] = Field(default_factory=list)
+    brief: LessonBrief | None = None      # required of a newly planned map lesson; old ones lack it
     map: LessonMap | None = None
     scenes: list[LessonScene] = Field(..., min_length=1)
 
@@ -245,3 +261,11 @@ class LessonPlan(BaseModel):
             if move.do in {"trouble", "fix"} and any(kinds[item] != "piece" for item in move.pieces):
                 raise ValueError(f"beat {beat.id}: only icon pieces turn red or get fixed; use "
                                  "'meter' for a meter")
+        for scene in self.scenes:       # the lines under the picture: room for a question and one more
+            said = [beat.move.do for beat in scene.beats]
+            if said.count("ask") > 1 or said.count("answer") > 1:
+                raise ValueError(f"scene {scene.id}: a scene asks at most one question and gives "
+                                 "at most one answer")
+            if "answer" in said and ("ask" not in said or said.index("answer") < said.index("ask")):
+                raise ValueError(f"scene {scene.id}: an answer move comes after an ask move in "
+                                 "the same scene")

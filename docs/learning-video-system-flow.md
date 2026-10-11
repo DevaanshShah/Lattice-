@@ -71,11 +71,14 @@ and the renderer both use this replay, so they agree on what is on screen.
 - System message: `prompts/lesson-plan-map.md` for a map lesson, otherwise
   `prompts/lesson-plan-v2.md`. User message: topic, recipe guidance, the icon list for a map
   lesson (`core/visual_assets.py` `asset_inventory`), and a word budget of
-  `target_seconds × 2.8` (the measured pace of the voice) with ±30% tolerance.
+  `target_seconds × 2.8` (the measured pace of the voice) with ±30% tolerance, also stated as
+  a number of beats and scenes.
 - The call asks for JSON mode (`response_format={"type": "json_object"}`) and for reasoning to
   be off (`PLAN_EXTRA`), because a reasoning model otherwise spends its whole output budget
   thinking and returns nothing.
-- A **map lesson** is the map and, for every beat, only `spoken_text` and a `move`. Any other
+- A **map lesson** is a teaching brief (`LessonBrief`: the learner, what they will be able to
+  do, their question, a concrete problem, the naive attempt, the turning point, a check question
+  and its answer), the map and, for every beat, only `spoken_text` and a `move`. Any other
   lesson is the full shape with claims, requirements and anchors.
 - `fill_map_lesson` then completes a map lesson in code: scene and beat ids, one claim per
   beat, the proof kind that move owes (`PROOF`), and the anchors (labels of the pieces the move
@@ -92,6 +95,9 @@ and the renderer both use this replay, so they agree on what is on screen.
   5. for a map lesson, `plan_map_scenes`: the scenes are compiled and run through the same
      validator as a model-written scene (section 5). A lesson that cannot be drawn is rejected
      here, and so is one that has a fix but ends with something still red.
+  6. for a map lesson, `craft_problems`: there is a brief; the first scene has an `ask` move;
+     no beat brings more than three new pieces on screen; every piece is used by a move other
+     than its introduction; every meter is moved by some move. These test craft, not a plot.
 - Every rejection reason is passed to `on_reject`; a build records it in its run report and the
   battery prints it.
 
@@ -106,6 +112,13 @@ and the renderer both use this replay, so they agree on what is on screen.
 | `fix` | pieces, optional meter and value | planned pieces built, every red piece (named or not) back to its own colour, meter to value in its own colour | state_change |
 | `measure` | meter, value | meter to value | value |
 | `remove` | pieces | `hide` | state_change |
+| `ask` | optional text; without it, the brief's question | a question line appears under the map | label |
+| `answer` | text | an answer line appears under the question | label |
+
+The check question and its answer are not written by the model. `fill_map_lesson` appends them
+after the last beat, as an `ask` and an `answer` in the brief's own words, and the compiler
+holds the picture for 1.6 seconds between them (`pause_after`). A scene has at most one question
+and one answer. Piece ids written loosely are tidied by code wherever they are used.
 
 ## 4. Visual step (stage 5)
 
@@ -163,9 +176,12 @@ never count as proof.
   (`ROW_WIDTH`, `_column_width`); every object the scene will ever show has a fixed slot from
   the first frame and is invisible until it appears (`_shown_in_scene`); `window.fitFlow`
   scales the stage to the frame.
+- Columns come from the arrows (`_flow_layers`); a piece that nothing points to and that only
+  feeds later pieces is placed in the column before the first of them.
 - Arrows are routed in the page (`window.routeConnection`): straight when level; stepped
-  between columns at different heights, turning just outside the source's column and carrying
-  the label on the last run; through the row gap when a flow wraps; straight inside a panel.
+  between neighbouring columns at different heights, turning just outside the source's column
+  with the label beside the upright stroke; along a lane outside the row when other columns
+  lie between the two pieces; through the row gap when a flow wraps; straight inside a panel.
 - `animation_html` builds one page per beat holding a snapshot per action. The capture loop in
   `render_animated_beat` seeks the page to each frame time (`window.seekAnimation`) and takes a
   screenshot, 30 frames per second, with software rasterising (`CAPTURE_ARGS`) so frames are
@@ -174,8 +190,9 @@ never count as proof.
   arrow draws itself over 0.7 s; a `trace` moves the ball 1.1 s per hop, in either direction
   along an arrow.
 - Before capture, `verification/browser_layout.py` `audit_html` measures the page: nothing
-  clipped, no object overlapping another by more than a quarter, no label on a card, no two
-  arrow labels on one spot, no title overlap. On failure the beat is retried once in a compact layout; a second failure stops the
+  clipped, no object overlapping another by more than a quarter, no label on a card or an icon
+  piece, no two arrow labels on one spot, no arrow through a piece it does not join, no title
+  overlap. On failure the beat is retried once in a compact layout; a second failure stops the
   build with the measured geometry.
 - Array scenes marked `render_mode: "manim"` go to `generation/manim_visual_scene.py` and are
   rendered in the Docker image `lattice-render:0.2`.

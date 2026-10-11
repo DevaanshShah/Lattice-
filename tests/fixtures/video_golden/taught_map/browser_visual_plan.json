@@ -1,0 +1,871 @@
+{
+  "schema_version": 2,
+  "topic": "Why one crashed server takes a whole website down, and what a second server changes",
+  "skill_id": "workflow_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "students",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Students",
+          "payload": {
+            "asset_id": "users",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "door",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Front door",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "server",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "second",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Second server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "blue",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "s1_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Why does one crashed server take the whole website down?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "takeaway_s1",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One server is one point of failure",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "students",
+          "target_id": "door",
+          "kind": "flows_to",
+          "label": "request"
+        },
+        {
+          "source_id": "door",
+          "target_id": "server",
+          "kind": "flows_to",
+          "label": "page"
+        },
+        {
+          "source_id": "door",
+          "target_id": "second",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s1_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "students",
+                "door"
+              ],
+              "id": "s1_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b1_c"
+              ],
+              "object_ids": [
+                "students",
+                "door"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "server"
+              ],
+              "id": "s1_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "trace",
+              "target_ids": [
+                "students",
+                "door",
+                "server"
+              ],
+              "id": "s1_b2_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b2_c"
+              ],
+              "object_ids": [
+                "students",
+                "door",
+                "server"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s1_b2_1",
+                "s1_b2_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s1_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "trace",
+              "target_ids": [
+                "students",
+                "door",
+                "server"
+              ],
+              "id": "s1_b3_2",
+              "params": {
+                "count": 4
+              },
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s1_b3_3",
+              "params": {
+                "value": 100,
+                "tone": "red"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "server"
+              ],
+              "id": "s1_b3_4",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b3_c"
+              ],
+              "object_ids": [
+                "server",
+                "students",
+                "door",
+                "load"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b3_1",
+                "s1_b3_2",
+                "s1_b3_3",
+                "s1_b3_4"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s1_b4_line"
+              ],
+              "id": "s1_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s1"
+              ],
+              "id": "s1_b4_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b4_c"
+              ],
+              "object_ids": [
+                "s1_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b4_1",
+                "s1_b4_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "students",
+        "door",
+        "server",
+        "load",
+        "s1_b4_line",
+        "takeaway_s1"
+      ],
+      "carryover_ids": [],
+      "layout_ids": [
+        "students",
+        "door",
+        "server",
+        "second",
+        "load",
+        "s1_b4_line",
+        "takeaway_s1"
+      ]
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "students",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Students",
+          "payload": {
+            "asset_id": "users",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "door",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Front door",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "server",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "second",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Second server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "blue",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "takeaway_s2",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Bigger is still only one",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "students",
+          "target_id": "door",
+          "kind": "flows_to",
+          "label": "request"
+        },
+        {
+          "source_id": "door",
+          "target_id": "server",
+          "kind": "flows_to",
+          "label": "page"
+        },
+        {
+          "source_id": "door",
+          "target_id": "second",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s2_b1",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "server"
+              ],
+              "id": "s2_b1_1",
+              "params": {
+                "tone": "teal"
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s2_b1_2",
+              "params": {
+                "value": 45,
+                "tone": "teal"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b1_c"
+              ],
+              "object_ids": [
+                "server",
+                "load"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b1_1",
+                "s2_b1_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "server"
+              ],
+              "id": "s2_b2_1",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b2_c"
+              ],
+              "object_ids": [
+                "server"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b3",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "door"
+              ],
+              "id": "s2_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b3_c"
+              ],
+              "object_ids": [
+                "door"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s2_b3_1",
+                "s2_b3_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "students",
+        "door",
+        "server",
+        "load"
+      ],
+      "closing_visible_ids": [
+        "students",
+        "door",
+        "server",
+        "load",
+        "takeaway_s2"
+      ],
+      "carryover_ids": [
+        "students",
+        "door",
+        "server",
+        "load"
+      ],
+      "layout_ids": [
+        "students",
+        "door",
+        "server",
+        "second",
+        "load",
+        "takeaway_s2"
+      ]
+    },
+    {
+      "lesson_scene_id": "s3",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "students",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Students",
+          "payload": {
+            "asset_id": "users",
+            "tone": "pink"
+          }
+        },
+        {
+          "id": "door",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Front door",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "server",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "second",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Second server",
+          "payload": {
+            "asset_id": "server",
+            "tone": "blue",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "s3_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "A site has two servers and one crashes. What do visitors see?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "s3_b5_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "The page still loads, because the front door sends them to the other server.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "students",
+          "target_id": "door",
+          "kind": "flows_to",
+          "label": "request"
+        },
+        {
+          "source_id": "door",
+          "target_id": "server",
+          "kind": "flows_to",
+          "label": "page"
+        },
+        {
+          "source_id": "door",
+          "target_id": "second",
+          "kind": "flows_to",
+          "label": null
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s3_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "second"
+              ],
+              "id": "s3_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "second"
+              ],
+              "id": "s3_b1_2",
+              "params": {
+                "placeholder": false
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "server"
+              ],
+              "id": "s3_b1_3",
+              "params": {
+                "tone": "teal"
+              },
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b1_c"
+              ],
+              "object_ids": [
+                "second"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s3_b1_1",
+                "s3_b1_2",
+                "s3_b1_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b2",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "students",
+                "door",
+                "second"
+              ],
+              "id": "s3_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b2_c"
+              ],
+              "object_ids": [
+                "students",
+                "door",
+                "second"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s3_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s3_b3_1",
+              "params": {
+                "value": 50
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b3_c"
+              ],
+              "object_ids": [
+                "load"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "s3_b3_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b4_line"
+              ],
+              "id": "s3_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b4_c"
+              ],
+              "object_ids": [
+                "s3_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b4_1"
+              ]
+            }
+          ],
+          "pause_after": 1.6
+        },
+        {
+          "narration_beat_id": "s3_b5",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b5_line"
+              ],
+              "id": "s3_b5_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b5_c"
+              ],
+              "object_ids": [
+                "s3_b5_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b5_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "students",
+        "door",
+        "server",
+        "load"
+      ],
+      "closing_visible_ids": [
+        "students",
+        "door",
+        "server",
+        "second",
+        "load",
+        "s3_b4_line",
+        "s3_b5_line"
+      ],
+      "carryover_ids": [
+        "students",
+        "door",
+        "server",
+        "load"
+      ],
+      "layout_ids": [
+        "students",
+        "door",
+        "server",
+        "second",
+        "load",
+        "s3_b4_line",
+        "s3_b5_line"
+      ]
+    }
+  ]
+}

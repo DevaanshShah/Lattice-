@@ -119,7 +119,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                         beat_clip = out / "beats" / f"scene_{scene_index:02d}_{beat_index:02d}.mp4"
                         try:
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
-                                title=lesson_scene.title, opening=state, duration=audio.duration,
+                                title=lesson_scene.title, opening=state,
+                                duration=audio.duration + visual_beat.pause_after,
                                 audio=audio.path, fps=fps, ball=ball)
                             attempt = 1
                         except BrowserLayoutError as exc:
@@ -128,7 +129,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                                          action="retry_compact_layout", attempt=1,
                                          evidence={"geometry": exc.geometry})
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
-                                title=lesson_scene.title, opening=state, duration=audio.duration,
+                                title=lesson_scene.title, opening=state,
+                                duration=audio.duration + visual_beat.pause_after,
                                 audio=audio.path, fps=fps, layout_mode="compact", ball=ball)
                             attempt = 2
                         ball = ball_after(visual_scene, visual_beat, ball)
@@ -260,7 +262,8 @@ def plan(topic: str, *, recipe: str = "auto", approve_fn=None, out_dir: str | Pa
         lesson = lesson_plan.generate(
             topic, skill, client=client, **lesson_kwargs,
             **({"target_seconds": target_seconds, "max_scenes": max_scenes,
-                "on_reject": lambda reason: report.event(stage, "retry", detail=reason[:400])}
+                "on_reject": lambda reason: report.event(stage, "retry", detail=reason[:400]),
+                "diagnostic_dir": out / "lesson_attempts"}
                if schema_version == 2 else {}))
         report.event(stage, "passed", detail=f"{len(lesson.scenes)} scene(s)")
         if approve_fn is not None:

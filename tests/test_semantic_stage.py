@@ -179,3 +179,49 @@ def test_a_level_arrow_and_a_stepped_arrow_from_one_piece_keep_their_labels_apar
         "opening_visible_ids": ids, "closing_visible_ids": ids})
     data = audit_html(page_html(scene, title="Two ways out", state=closing_state(scene)))   # raises on overlap
     assert sorted(label["text"] for label in data["labels"]) == ["call", "invoke", "reject", "reply"]
+
+
+def _map(ids, arrows):
+    return BrowserScene.model_validate({
+        "lesson_scene_id": "s", "pattern": "architecture",
+        "objects": [{"id": i, "kind": "icon", "role": "operation", "label": i.title(),
+                     "payload": {"asset_id": "server"}} for i in ids],
+        "relationships": [{"source_id": a, "target_id": b, "kind": "flows_to", "label": label}
+                          for a, b, label in arrows],
+        "beats": [{"narration_beat_id": "b", "actions": [{"kind": "hold", "target_ids": [ids[0]]}],
+                   "evidence": [{"claim_ids": ["c"], "object_ids": [ids[0]], "kind": "label"}]}],
+        "opening_visible_ids": ids, "closing_visible_ids": ids})
+
+
+@pytest.mark.unit
+def test_a_piece_that_only_feeds_a_later_piece_sits_in_the_column_before_it():
+    from generation.browser_scene import _flow_layers
+
+    scene = _map(["input", "hidden", "output", "truth", "loss"],
+                 [("input", "hidden", "forward"), ("hidden", "output", "forward"),
+                  ("output", "loss", "compare"), ("truth", "loss", "compare")])
+    layers = _flow_layers(scene)
+    assert layers == {"input": 0, "hidden": 1, "output": 2, "truth": 2, "loss": 3}
+
+
+@pytest.mark.unit
+def test_an_arrow_through_a_piece_it_does_not_join_is_a_layout_defect():
+    data = {"viewport": [1280, 720], "title": [400, 20, 880, 80], "labels": [], "stage": [0, 100, 1280, 700],
+            "nodes": [{"id": name, "rect": rect, "parent": None} for name, rect in (
+                ("a", [100, 200, 200, 300]), ("mid", [400, 200, 500, 300]), ("b", [700, 200, 800, 300]))],
+            "edges": [{"source": "a", "target": "b", "points": [[200, 150], [700, 150]]}]}
+    assert _issues(data) == ["arrow 'a' -> 'b' crosses node 'mid'"]
+    data["edges"][0]["points"] = [[150, 100], [150, 60], [750, 60], [750, 100]]     # round the top
+    assert _issues(data) == []
+
+
+@pytest.mark.integration
+def test_a_long_arrow_goes_round_the_pieces_between_and_shared_targets_keep_labels_apart():
+    scene = _map(["a", "b", "c", "d", "e", "side"],
+                 [("a", "b", "one"), ("b", "c", "two"), ("c", "d", "three"), ("d", "e", "four"),
+                  ("e", "a", "back"),            # spans the whole row, against the flow
+                  ("side", "e", "also")])        # a second arrow into the same piece
+    data = audit_html(page_html(scene, title="Round trip", state=closing_state(scene)))
+    back = next(edge for edge in data["edges"] if (edge["source"], edge["target"]) == ("e", "a"))
+    assert len(back["points"]) == 4 and back["points"][1][1] == back["points"][2][1]   # one lane
+    assert len(data["labels"]) == 6

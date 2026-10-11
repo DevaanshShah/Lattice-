@@ -10,6 +10,28 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-11 — The question is shown, and code asks the check question
+
+**Context.** With the teaching brief in place the narration opened on a problem and a question
+and closed on a check question, but a still frame looked the same as before. The owner saw no
+difference. The question lived only in the voice.
+
+**Decision.** A question and an answer are things the viewer sees: lines of text under the
+picture, placed by two moves, `ask` and `answer`. The opening `ask` is the model's to place, at
+the moment the problem has made the learner want to ask. The closing check question and its
+answer are appended by code from the brief, with a pause between them for the viewer to think.
+
+**Why not the alternative.** Asking the model to write the check as beats cost it two of its
+beats, and it could forget them or word them unlike the brief; they are the brief's own words,
+so nothing is lost by adding them in code. Checking for a question mark in the first scene's
+narration was matching words, which tests wording and not teaching; an `ask` move is a
+structural fact. Centring the question over an empty stage was rejected because the pieces
+would then have to move when they arrive, and every piece keeps one place for the whole scene.
+
+**Consequence.** A lesson is two beats longer than what the model writes, and the length given
+to the model allows for that. A scene shows at most a question and one more line, so a scene
+that ends on an answer drops its takeaway.
+
 ### 2026-10-10 — A system lesson is narration plus one move per beat, and code draws it
 
 **Context.** A system lesson cost six model calls (one for the script, one per scene) plus

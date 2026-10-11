@@ -201,7 +201,8 @@ def run_case(name: str, folder: Path, out_dir: Path, *, fps: int = 30, voice: bo
     result.fallbacks = sum(event["status"] == "retry" for event in report.data["events"])
     result.duration = _duration(built.mp4)
     if plan.schema_version == 2:    # version 1 crossfades between clips, so its length is not a plain sum
-        result.expected_duration = round(sum(spoken), 3)
+        pauses = sum(beat.pause_after for scene in plan.scenes for beat in scene.beats)
+        result.expected_duration = round(sum(spoken) + pauses, 3)
         if abs(result.duration - result.expected_duration) > 0.2 + 0.1 * len(spoken):
             result.status = "fail"
             result.detail = (f"video is {result.duration:.2f}s but its narration is "

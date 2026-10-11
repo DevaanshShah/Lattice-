@@ -74,6 +74,7 @@ def _slug(text: str, n: int = 40) -> str:
 def plan_topic(topic: str, client: CappedClient, out_dir: Path) -> TopicResult:
     from core.llm import reset_usage, usage_snapshot
     from planner import browser_visual_plan, lesson_plan
+    from planner.lesson_map import story_shape
     from planner.product_recipe import pick_recipe
 
     result = TopicResult(topic)
@@ -84,12 +85,14 @@ def plan_topic(topic: str, client: CappedClient, out_dir: Path) -> TopicResult:
     lesson = None
     try:
         lesson = lesson_plan.generate(topic, skill, client=client, schema_version=2,
-                                      target_seconds=TARGET_SECONDS)
+                                      target_seconds=TARGET_SECONDS,
+                                      diagnostic_dir=out_dir / "lesson_attempts")
         result.lesson_ok = True
         result.lesson_tries = client.calls - start_calls
         result.lesson_words = sum(len(beat.spoken_text.split())
                                   for scene in lesson.scenes for beat in scene.beats)
         (out_dir / "lesson_plan.json").write_text(lesson.model_dump_json(indent=2), encoding="utf-8")
+        result.shape = story_shape(lesson)
         attempts = out_dir / "visual_attempts"
         try:
             plan = browser_visual_plan.generate(lesson, skill, client=client, schema_version=2,

@@ -65,7 +65,7 @@ _SEMANTIC_CSS = """
 /* Stage elements are replaced on every step and moved by paused Web Animations. A CSS transition
    here would run in wall-clock time (fitting the stage changes shadow sizes) and make a frame
    depend on when it was captured. */
-.semantic-stage,.semantic-stage *{transition:none!important}.semantic-object.is-past{opacity:.62}
+.semantic-stage,.semantic-stage *{transition:none!important}.semantic-object.is-past{opacity:.62}.semantic-caption-line.is-past{opacity:1}
 .semantic-object.is-hidden{opacity:0;transform:none;pointer-events:none}
 .semantic-card{flex:none;flex-direction:column;min-width:200px;max-width:380px;min-height:92px;padding:16px 24px;font-size:22px;line-height:1.25}
 .semantic-card .semantic-field{margin-top:7px;font-size:18px;overflow-wrap:anywhere}
@@ -98,6 +98,8 @@ body:has(.semantic-stage){background:#0a0a0a}
 .panel-header{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
 .panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:64px 56px;max-width:420px}
 .semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
+.semantic-caption-line.is-question{color:#f4f4f5;font-size:29px;line-height:1.3}
+.ask-mark{display:inline-block;width:36px;height:36px;line-height:36px;margin-right:14px;border-radius:50%;background:#fbbf24;color:#0a0a0a;font-weight:800;font-size:24px;vertical-align:2px}
 .semantic-meter{min-width:180px;color:var(--tone)}
 .meter-label{margin-bottom:8px;font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
 .meter-bar{height:14px;border:1.5px solid var(--tone);border-radius:4px}.meter-bar i{display:block;height:100%;background:var(--tone)}
@@ -166,6 +168,13 @@ def _flow_layers(scene: BrowserScene) -> dict[str, int]:
     for _ in order:
         for source, target in dag:
             layer[target] = max(layer[target], layer[source] + 1)
+    # A piece nothing points to, which only feeds later pieces, sits in the column just before the
+    # first of them. Left in the first column, its arrow would have to cross the whole diagram.
+    fed = {target for _, target in dag}
+    for node in order:
+        feeds = [layer[target] for source, target in dag if source == node]
+        if node not in fed and feeds:
+            layer[node] = max(layer[node], min(feeds) - 1)
     linked = {node for pair in dag for node in pair}
     last = max((layer[node] for node in linked), default=-1)
     roles = {obj.id: obj.role for obj in scene.objects}
@@ -317,8 +326,11 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                     f'<div class="piece-label">{label}</div></div>')
         elif obj.kind == "caption":
             tick = "✓ " if payload.get("tick") else ""
-            html = (f'<div class="semantic-object{flags} semantic-caption-line{tone}" {ident}>'
-                    f'{tick}{label}</div>')
+            # a question is the line the viewer is asked to think about: larger, with its own mark
+            asks = " is-question" if payload.get("ask") else ""
+            mark = '<span class="ask-mark">?</span>' if payload.get("ask") else ""
+            html = (f'<div class="semantic-object{flags} semantic-caption-line{asks}{tone}" {ident}>'
+                    f'{mark}{tick}{label}</div>')
         elif obj.kind == "group" and any(holder == obj.id for holder in inside.values()):
             # a panel: its members are drawn inside it
             members = "".join(drawn[member] for member in placed if inside.get(member) == obj.id)
@@ -451,7 +463,7 @@ def _pattern_overlay(scene: BrowserScene, active_beat_id: str | None) -> str:
 # the two boxes (the gap is sized for it), instead of high above a row of equally tall boxes.
 _SEMANTIC_LABEL_JS = (
     "if(r.label){const label=document.createElementNS('http://www.w3.org/2000/svg','text'),"
-    "horizontal=Math.abs(x2-x1)>Math.abs(y2-y1),fit=window.flowFit||1,"
+    "horizontal=!route.side&&Math.abs(x2-x1)>Math.abs(y2-y1),fit=window.flowFit||1,"
     "lines=r.lines&&r.lines.length?r.lines:[r.label],"
     "x=route.labelX+(horizontal?0:18*fit),bottom=route.labelY-(horizontal?17*fit:-5*fit);"
     "label.setAttribute('text-anchor',horizontal?'middle':'start');"
@@ -500,7 +512,7 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     // two pieces almost level: a slightly sloping arrow reads as a mistake, so draw it level
     y1=y2=(y1+y2)/2;line.setAttribute('y1',y1);line.setAttribute('y2',y2);
   }
-  let points=[[x1,y1],[x2,y2]],labelX=(x1+x2)/2,labelY=(y1+y2)/2,bent=false;
+  let points=[[x1,y1],[x2,y2]],labelX=(x1+x2)/2,labelY=(y1+y2)/2,bent=false,lane='',side=false;
   const rowA=a.closest('.semantic-row'),rowB=b.closest('.semantic-row');
   if(rowA&&rowB&&rowA!==rowB){
     // The flow wrapped to another row: leave the box, run along the empty gap between the two
@@ -513,6 +525,22 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     points=[[ax,(down?ra.bottom:ra.top)-box.top],[ax,lane],[bx,lane],
             [bx,(down?rb.top:rb.bottom)-box.top]];
     labelX=(ax+bx)/2;labelY=lane;bent=true;
+  }else if(rowA&&rowA===rowB&&a.closest('.semantic-column')&&b.closest('.semantic-column')
+      &&Math.abs([...rowA.children].indexOf(a.closest('.semantic-column'))
+                 -[...rowA.children].indexOf(b.closest('.semantic-column')))>1){
+    // The two pieces have other columns between them. Leave upward (or downward), run along a
+    // lane outside the whole row, and come back in at the target: the arrow goes round the
+    // pieces between, never through them. A second long arrow takes the next lane out.
+    const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(),row=rowA.getBoundingClientRect();
+    const fit=window.flowFit||1;
+    let above=(ra.top+rb.top)/2-row.top<=row.bottom-(ra.bottom+rb.bottom)/2;
+    const taken=side=>svg.querySelectorAll(`path.edge[data-lane="${side}"]`).length;
+    if(above&&row.top-box.top-(26+22*taken('above'))*fit<8)above=false;
+    lane=above?'above':'below';
+    const y=above?row.top-box.top-(26+22*taken('above'))*fit:row.bottom-box.top+(44+30*taken('below'))*fit;
+    const ax=ra.left+ra.width/2-box.left,bx=rb.left+rb.width/2-box.left;
+    points=[[ax,(above?ra.top:ra.bottom)-box.top],[ax,y],[bx,y],[bx,(above?rb.top:rb.bottom)-box.top]];
+    labelX=(ax+bx)/2;labelY=y;bent=true;
   }else if(a.closest('.semantic-column')&&b.closest('.semantic-column')
       &&a.closest('.semantic-column')!==b.closest('.semantic-column')
       &&!a.contains(b)&&!b.contains(a)&&Math.abs(y2-y1)>14){
@@ -524,11 +552,12 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     const sx=(right?ra.right:ra.left)-box.left,ex=(right?rb.left:rb.right)-box.left;
     // Turn just outside the source's column, then run level into the target. The upright
     // stroke stays clear of a level arrow's label, which is centred in the same gap, and this
-    // arrow's own label sits on its last run, where no other arrow is.
+    // arrow's own label sits beside that stroke: the one part of it no other arrow shares, even
+    // when a second arrow runs level into the same target.
     const turn=(right?ca.right:ca.left)-box.left+(right?12:-12)*(window.flowFit||1);
     const sy=ra.top+ra.height/2-box.top,ey=rb.top+rb.height/2-box.top;
     points=[[sx,sy],[turn,sy],[turn,ey],[ex,ey]];
-    labelX=(turn+ex)/2;labelY=ey;bent=true;
+    labelX=turn;labelY=(sy+ey)/2;bent=true;side=true;
     // A piece with several arrows out would stack them in the one gap, a turn through another
     // arrow's label. Leave from its top or bottom instead when nothing in its column is in the way.
     const several=JSON.parse(document.getElementById('relations').textContent)
@@ -539,7 +568,9 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
       .some(r=>r.bottom-box.top>low&&r.top-box.top<high);
     if(several&&clear){
       const cx=ra.left+ra.width/2-box.left;
-      points=[[cx,edge],[cx,ey],[ex,ey]];labelX=(cx+ex)/2;labelY=ey;
+      // the label sits on the part of the run that is clear of the source and its name
+      const clear=right?Math.max(cx,ra.right-box.left):Math.min(cx,ra.left-box.left);
+      points=[[cx,edge],[cx,ey],[ex,ey]];labelX=(clear+ex)/2;labelY=ey;side=false;
     }
   }else{
     const intersects=r=>{
@@ -575,10 +606,11 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     for(const attr of ['class','marker-end'])path.setAttribute(attr,line.getAttribute(attr));
     path.setAttribute('d',points.map((p,i)=>(i?'L':'M')+' '+p.join(' ')).join(' '));
     path.dataset.sourceId=line.dataset.sourceId;path.dataset.targetId=line.dataset.targetId;
+    if(lane)path.dataset.lane=lane;
     line.replaceWith(path);line=path;
   }
   line.dataset.route=JSON.stringify(points);
-  return {labelX,labelY};
+  return {labelX,labelY,side};
 };
 """
         script = script.replace("line.setAttribute('x1',x1);",
@@ -861,7 +893,7 @@ def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | P
         finally:
             browser.close()
     result = subprocess.run([_ffmpeg(), "-y", "-framerate", str(fps), "-i",
-        str(directory / "frame_%06d.png"), "-i", str(audio), "-t", str(duration),
+        str(directory / "frame_%06d.png"), "-i", str(audio), "-af", "apad", "-t", str(duration),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", str(out_mp4)], capture_output=True, timeout=300)
     if result.returncode or not out_mp4.exists():

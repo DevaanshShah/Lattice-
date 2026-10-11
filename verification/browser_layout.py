@@ -25,6 +25,20 @@ def _clipped(rect: list[float], width: int, height: int) -> bool:
     return rect[0] < -1 or rect[1] < -1 or rect[2] > width + 1 or rect[3] > height + 1
 
 
+def _crosses(start: list[float], end: list[float], box: list[float]) -> bool:
+    """Whether the straight stroke from `start` to `end` passes through the rectangle `box`."""
+    low, high = 0.0, 1.0
+    for origin, delta, near, far in ((start[0], end[0] - start[0], box[0], box[2]),
+                                     (start[1], end[1] - start[1], box[1], box[3])):
+        if abs(delta) < 1e-9:
+            if not near <= origin <= far:
+                return False
+            continue
+        first, second = (near - origin) / delta, (far - origin) / delta
+        low, high = max(low, min(first, second)), min(high, max(first, second))
+    return low < high
+
+
 def _issues(data: dict) -> list[str]:
     width, height = data["viewport"]
     title = data["title"]
@@ -45,6 +59,19 @@ def _issues(data: dict) -> list[str]:
     for node in nodes:
         if _intersection(title, node["rect"]) > 1:
             issues.append(f"title overlaps node {node['id']!r}")
+    # An arrow may touch only the two pieces it joins. Panels are skipped: an arrow to a piece
+    # inside a panel crosses the panel's edge by design.
+    left, top = data.get("stage", [0, 0, 0, 0])[:2]
+    family = {node["id"]: node.get("parent") for node in nodes}
+    for edge in data.get("edges", []):
+        own = {edge["source"], edge["target"], family.get(edge["source"]), family.get(edge["target"])}
+        for node in nodes:
+            if node["id"] in own or node.get("panel"):
+                continue
+            box = [node["rect"][0] + 6, node["rect"][1] + 6, node["rect"][2] - 6, node["rect"][3] - 6]
+            if any(_crosses([start[0] + left, start[1] + top], [end[0] + left, end[1] + top], box)
+                   for start, end in zip(edge["points"], edge["points"][1:])):
+                issues.append(f"arrow {edge['source']!r} -> {edge['target']!r} crosses node {node['id']!r}")
     for index, label in enumerate(labels):
         for other in labels[index + 1:]:     # two arrows' labels on one spot read as neither
             if _intersection(label["rect"], other["rect"]) > 1:
@@ -58,9 +85,10 @@ def _issues(data: dict) -> list[str]:
         for node in nodes:
             if node.get("panel"):
                 continue    # an arrow between two pieces of a panel is labelled inside the panel
-            # A card on the semantic stage leaves a gap sized for the label, so any overlap there is
-            # a defect; the original pattern layouts keep their looser allowance.
-            allowed = 1 if node.get("card") else _area(rect) * 0.25
+            # Anything on the semantic stage (a card, an icon piece and its name) leaves a gap sized
+            # for the label, so any overlap there is a defect; the original pattern layouts keep
+            # their looser allowance.
+            allowed = 1 if node.get("card") or node.get("piece") else _area(rect) * 0.25
             if _intersection(rect, node["rect"]) > allowed:
                 issues.append(f"edge label {label['text']!r} overlaps node {node['id']!r}")
     return issues
@@ -69,7 +97,7 @@ def _issues(data: dict) -> list[str]:
 def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
     script = """() => {
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
-return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card'),panel:e.classList.contains('semantic-panel'),parent:(e.parentElement.closest('[data-object-id]')||{dataset:{}}).dataset.objectId||null})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
+return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card'),piece:e.classList.contains('semantic-object'),panel:e.classList.contains('semantic-panel'),parent:(e.parentElement.closest('[data-object-id]')||{dataset:{}}).dataset.objectId||null})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),stage:rect(document.querySelector('.diagram')||document.body),edges:[...document.querySelectorAll('.connections line,.connections path.edge')].filter(e=>e.dataset.route).map(e=>({source:e.dataset.sourceId,target:e.dataset.targetId,points:JSON.parse(e.dataset.route)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
 }"""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True,

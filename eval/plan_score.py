@@ -31,6 +31,7 @@ class TopicResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost_usd: float = 0.0
+    shape: str = ""                     # the lesson's moves, scene by scene (map lessons)
 
 
 @dataclass
@@ -69,6 +70,17 @@ class PlanBatteryReport:
     def total_calls(self) -> int:
         return sum(r.calls for r in self.results)
 
+    @property
+    def sameness(self) -> str:
+        """How alike the planned map lessons are. One plot across different topics means the
+        prompt is writing the story, not the model."""
+        shapes = [r.shape for r in self.results if r.shape]
+        if len(shapes) < 2:
+            return ""
+        openings = [shape.split(" | ")[0] for shape in shapes]
+        return (f"{len(set(shapes))} distinct plots and {len(set(openings))} distinct opening "
+                f"scenes in {len(shapes)} map lessons")
+
     def table(self) -> str:
         rows = ["| topic | lesson | words | scenes ok | first try | calls | cost | note |",
                 "|---|---|---|---|---|---|---|---|"]
@@ -84,6 +96,9 @@ class PlanBatteryReport:
             f"\n{self.model}: planned {sum(r.planned for r in self.results)}/{self.n} "
             f"({self.plan_rate:.0%}) · first-try scenes {self.first_try_rate:.0%} · "
             f"mean tries {self.mean_tries:.2f} · {self.total_calls} calls · ${self.total_cost:.4f}")
+        if self.sameness:
+            rows.append(f"sameness: {self.sameness}")
+            rows.extend(f"  {r.topic[:38]:38s} {r.shape}" for r in self.results if r.shape)
         return "\n".join(rows)
 
     def to_dict(self) -> dict:

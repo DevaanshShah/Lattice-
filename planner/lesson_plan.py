@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import ValidationError
 
 from core.llm import LLMClient, get_client
 from core.schemas.lesson_plan import LessonPlan
 from core.textutil import extract_json
 from core.visual_assets import asset_inventory
-from planner.lesson_map import fill_map_lesson, lesson_map_problems, plan_map_scenes
+from planner.lesson_map import (craft_problems, fill_map_lesson, lesson_map_problems,
+                                plan_map_scenes)
 from planner.product_recipe import Recipe
 from prompts.loader import load
 
@@ -31,11 +34,14 @@ class LessonPlanError(RuntimeError):
 # length the user asked for before it is sent back.
 WORDS_PER_SECOND = 2.8    # measured on two rendered lessons: 154 and 174 words, 57 s each
 LENGTH_TOLERANCE = .3
+WORDS_PER_BEAT = 17       # one spoken sentence; a lesson's size is given to the model in beats
+BEATS_PER_SCENE = 3.5
 
 
 def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3,
              schema_version: int = 1, target_seconds: float | None = None,
-             max_scenes: int | None = None, on_reject=None) -> LessonPlan:
+             max_scenes: int | None = None, on_reject=None,
+             diagnostic_dir: str | Path | None = None) -> LessonPlan:
     """`on_reject(reason)` is called for every answer that is sent back, so a run can show why a
     lesson needed more than one call."""
     if schema_version not in (1, 2):
@@ -52,8 +58,18 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     words = round(target_seconds * WORDS_PER_SECOND) if target_seconds and schema_version == 2 else None
     low, high = ((round(words * (1 - LENGTH_TOLERANCE)), round(words * (1 + LENGTH_TOLERANCE)))
                  if words else (0, 0))
+    # A model follows a count of sentences far better than a count of words, so the budget is
+    # also given as beats and scenes.
+    beats = round(words / WORDS_PER_BEAT) if words else 0
+    # On a map the check question and its answer are added by code: two beats the model does not write.
+    own = max(3, beats - 2) if on_map else beats
     length = (f"Length: the narration (all spoken_text together) is about {words} words, between "
-              f"{low} and {high}.\n" if words else "")
+              f"{low} and {high}"
+              + (", counting the check question and its answer, which are added after your last "
+                 "beat" if on_map else "")
+              + f". Write about {own} beats, in "
+              f"{max(2, min(5, round(own / BEATS_PER_SCENE)))} scenes; do not write more."
+              + "\n" if words else "")
     if max_scenes and schema_version == 2:
         length += f"Use at most {max_scenes} scene(s).\n"
     length += "\n" if length else ""
@@ -66,9 +82,13 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
                                     + "Return the lesson plan JSON now."},
     ]
     last: Exception | None = None
-    for _ in range(attempts):
+    for attempt in range(attempts):
         raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0,
                           response_format=JSON_ONLY, extra_body=PLAN_EXTRA)
+        if diagnostic_dir is not None:      # what the model actually wrote, kept for diagnosis
+            folder = Path(diagnostic_dir)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"lesson_attempt_{attempt + 1:02d}.txt").write_text(raw, encoding="utf-8")
         try:
             data = extract_json(raw)
             if on_map and not isinstance(data.get("map"), dict):
@@ -98,7 +118,10 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             if plan.map is not None:
                 # The picture is compiled from the moves, so a lesson that cannot be drawn is
                 # found here and repaired by the one call that wrote it.
-                plan_map_scenes(plan, skill)
+                scenes = plan_map_scenes(plan, skill)
+                weak = craft_problems(plan, scenes)
+                if weak:
+                    raise ValueError("as teaching this falls short: " + "; ".join(weak[:4]))
             return plan
         except (ValueError, ValidationError) as exc:
             last = exc
