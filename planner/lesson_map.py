@@ -300,6 +300,9 @@ def _actions(move: BeatMove, lesson_map: LessonMap, visible: set[str], payloads:
                              "that has been shown can be taken away")
         gone = [item for item in move.pieces if item in visible]
         if gone:
+            # lit once, then gone: the viewer sees what is leaving, and so does the validator,
+            # which counts a piece as shown in a beat only if it is on screen after some step
+            actions.append({"kind": "highlight", "target_ids": gone, "params": {}})
             actions.append({"kind": "hide", "target_ids": gone, "params": {}})
             visible.difference_update(gone)
     if not actions:     # nothing left to change: still show what the sentence is about

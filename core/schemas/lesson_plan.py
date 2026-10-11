@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.call_tree import MAX_CALLS, call_tree
+
 
 VisualRequirement = Literal[
     "label", "value", "relationship", "state_change", "sequence", "comparison", "asset",
@@ -97,20 +99,23 @@ LINE_LENGTH = 110
 
 
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
-TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear")
+TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
+               "grow", "spot", "remove")
 LINE_MOVES = ("ask", "answer")        # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
 _TAKES = {
-    "introduce": {"pieces"}, "point": {"pieces"}, "remove": {"pieces"},
+    "introduce": {"pieces"}, "point": {"pieces"}, "remove": {"pieces", "items", "lines"},
+    "grow": {"tree", "depth", "lines"}, "spot": {"tree", "value", "lines"},
     "send": {"path", "count"}, "trouble": {"pieces", "meter", "value", "path", "count"},
     "fix": {"pieces", "meter", "value"}, "measure": {"meter", "value"},
     "ask": {"text"}, "answer": {"text"},
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
-    "fill": {"array", "cell", "cells", "back", "from_cells", "op", "plus", "value", "lines"},
-    "count": {"counter", "lines"},
+    "fill": {"array", "cell", "cells", "back", "from_cells", "op", "plus", "value", "expect",
+             "lines"},
+    "count": {"counter", "expect", "lines"},
 }
 _NEEDS = {
     "send": "a send move needs a path of two or more pieces",
@@ -125,6 +130,9 @@ _NEEDS = {
     "fill": "a fill move needs an array and the cell it fills",
     "count": "a count move needs a counter",
     "clear": "a clear move needs the array whose marks it wipes",
+    "grow": "a grow move needs the tree it reveals more of",
+    "spot": "a spot move needs a tree and the value it picks out",
+    "remove": "a remove move needs what it takes off the screen",
 }
 
 
@@ -135,7 +143,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "ask", "answer"]
+                "grow", "spot", "ask", "answer"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -157,6 +165,12 @@ class BeatMove(BaseModel):
     op: Literal["sum", "min", "max"] | None = None    # how the cells a fill reads are combined
     plus: float = 0
     counter: str | None = None
+    tree: str | None = None
+    depth: int | None = Field(default=None, ge=0)     # how many levels down a grow reveals
+    # The number the lesson says something comes to: a computed cell (or each cell of a run), or
+    # a counter's total. Code works the real value out and refuses a lesson whose number differs,
+    # so the narration cannot say eight over a table that shows five.
+    expect: float | list[float] | None = None
 
     @model_validator(mode="after")
     def _shape(self) -> "BeatMove":
@@ -170,7 +184,9 @@ class BeatMove(BaseModel):
         if self.do in {"trouble", "fix", "measure"} and (self.meter is None) != (self.value is None):
             raise ValueError("a move names a meter together with the value it should read")
         lacks = {
-            "introduce": not self.pieces, "point": not self.pieces, "remove": not self.pieces,
+            "introduce": not self.pieces, "point": not self.pieces,
+            "remove": not self.pieces and not self.items,
+            "grow": self.tree is None, "spot": self.tree is None or self.value is None,
             "send": len(self.path) < 2, "measure": self.meter is None,
             "trouble": not self.pieces and self.meter is None,
             "fix": not self.pieces and self.meter is None,
@@ -185,6 +201,18 @@ class BeatMove(BaseModel):
         if lacks[self.do]:
             raise ValueError(_NEEDS.get(self.do, f"a {self.do} move needs pieces" + (
                 " or a meter" if self.do in {"trouble", "fix"} else "")))
+        if self.do == "fill" and (self.cells or self.from_cells):
+            many = bool(self.cells)
+            if (self.expect is None or isinstance(self.expect, list) != many
+                    or (many and len(self.expect) != len(self.cells))):
+                raise ValueError('a fill move that works a value out says what it comes to in '
+                                 '"expect": one number for one cell, a list with one number per '
+                                 'cell for a run. It is checked against the table')
+        elif self.do == "fill" and self.expect is not None:
+            raise ValueError('"expect" is for a value that is worked out; a fill with a given '
+                             '"value" has nothing to check')
+        if self.do == "count" and isinstance(self.expect, list):
+            raise ValueError('a count move expects one total, not a list')
         if self.do == "fill" and self.cells:
             # a run: each of these cells in turn, from the cells `back` steps before it
             if self.cell is not None or self.from_cells or self.value is not None:
@@ -271,19 +299,24 @@ class TraceItem(BaseModel):
     into an array, a fixed value such as a target, or a counter."""
     model_config = ConfigDict(extra="forbid")
     id: str = Field(..., pattern=r"^[a-z][a-z0-9_]{0,23}$")
-    kind: Literal["array", "pointer", "value", "counter"]
+    kind: Literal["array", "pointer", "value", "counter", "tree"]
     label: str = Field(..., min_length=1, max_length=22)
     items: list[int | float | str] = Field(default_factory=list, max_length=12)   # an array's values
     size: int | None = Field(default=None, ge=2, le=12)     # an array that starts empty, to be filled
     on: str | None = None                                   # the array a pointer points into
     value: int | float | str | None = None                  # what a fixed value shows
-    counts: str | None = None       # a counter that goes up by itself on every compare of this pointer
+    # a counter that goes up by itself: on every compare of this pointer, every call of this tree,
+    # or every cell filled in this array
+    counts: str | None = None
+    start: int | None = Field(default=None, ge=1, le=12)    # a tree: the value the recursion is asked for
+    steps: list[int] = Field(default_factory=list, max_length=3)   # how much each call steps down by
+    stop: int = Field(default=1, ge=0)                      # the value at which a call asks no further
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
         mine = {"array": {"items", "size"}, "pointer": {"on"}, "value": {"value"},
-                "counter": {"counts"}}
-        stray = sorted(name for name in ("items", "size", "on", "value", "counts")
+                "counter": {"counts"}, "tree": {"start", "steps"}}
+        stray = sorted(name for name in ("items", "size", "on", "value", "counts", "start", "steps")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:
             raise ValueError(f"trace item {self.id!r}: a {self.kind} has no {stray[0]}")
@@ -296,7 +329,22 @@ class TraceItem(BaseModel):
             raise ValueError(f"trace pointer {self.id!r} names the array it points into in 'on'")
         if self.kind == "value" and self.value is None:
             raise ValueError(f"trace value {self.id!r} needs its value")
+        if self.kind == "tree":
+            if self.start is None or not self.steps or any(step < 1 for step in self.steps):
+                raise ValueError(f"trace tree {self.id!r} needs the value it starts from in "
+                                 "'start' and how much each call steps down by in 'steps'")
+            calls = len(call_tree(self.start, self.steps, self.stop))
+            if calls > MAX_CALLS:
+                raise ValueError(f"trace tree {self.id!r} would make more than {MAX_CALLS} calls, "
+                                 "too many to read; start from a smaller value")
+            if calls < 3:
+                raise ValueError(f"trace tree {self.id!r} makes no calls below its start")
         return self
+
+    @property
+    def calls(self) -> list[dict]:
+        """A tree's calls, in the order they are revealed."""
+        return call_tree(self.start, self.steps, self.stop)
 
     @property
     def length(self) -> int:
@@ -315,15 +363,15 @@ class LessonTrace(BaseModel):
         kinds = {item.id: item.kind for item in self.data}
         if len(kinds) != len(self.data) or "code" in kinds or "working" in kinds:
             raise ValueError("trace item ids must be unique, and 'code' and 'working' are taken")
-        if "array" not in kinds.values():
-            raise ValueError("a trace needs at least one array")
+        if not {"array", "tree"} & set(kinds.values()):
+            raise ValueError("a trace needs at least one array or tree")
         labels = [item.label.casefold() for item in self.data]
         twice = sorted({label for label in labels if labels.count(label) > 1})
         if twice:
             raise ValueError(f"trace items share the label {twice[0]!r}; name each one so a viewer "
                              "can tell them apart, such as 'Checks, one by one' and 'Checks, binary'")
         # Arrays, values and counters are stacked on the data side; pointers sit on their array.
-        room = {"array": 2, "value": 2, "counter": 3, "pointer": 4}
+        room = {"array": 2, "value": 2, "counter": 3, "pointer": 4, "tree": 1}
         for kind, most in room.items():
             if list(kinds.values()).count(kind) > most:
                 raise ValueError(f"a trace has room for at most {most} {kind}s")
@@ -331,9 +379,9 @@ class LessonTrace(BaseModel):
             if item.kind == "pointer" and kinds.get(item.on) != "array":
                 raise ValueError(f"trace pointer {item.id!r} points into {item.on!r}, which is "
                                  "not an array of the trace")
-            if item.counts is not None and kinds.get(item.counts) != "pointer":
-                raise ValueError(f"trace counter {item.id!r} counts the compares of "
-                                 f"{item.counts!r}, which is not a pointer of the trace")
+            if item.counts is not None and kinds.get(item.counts) not in {"pointer", "tree", "array"}:
+                raise ValueError(f"trace counter {item.id!r} counts {item.counts!r}, which is "
+                                 "not a pointer, a tree or an array of the trace")
         return self
 
 
@@ -442,6 +490,9 @@ class LessonPlan(BaseModel):
             if wrong or apart:
                 raise ValueError(f"beat {beat.id}: a path goes through icon pieces joined by an "
                                  f"arrow, in either direction; not pieces {wrong}, no arrow for {apart}")
+            if move.items:
+                raise ValueError(f"beat {beat.id}: a {move.do} move of a map lesson names pieces, "
+                                 "not items")
             if move.do in {"trouble", "fix"} and any(kinds[item] != "piece" for item in move.pieces):
                 raise ValueError(f"beat {beat.id}: only icon pieces turn red or get fixed; use "
                                  "'meter' for a meter")
@@ -452,7 +503,10 @@ class LessonPlan(BaseModel):
         for beat in beats:
             move, where = beat.move, f"beat {beat.id}"
             named = [*move.items, *(name for name in (move.pointer, move.against, move.array,
-                                                      move.counter) if name)]
+                                                      move.counter, move.tree) if name)]
+            if move.pieces:
+                raise ValueError(f"{where}: a {move.do} move of a trace lesson names \"items\", "
+                                 "not pieces")
             unknown = sorted(set(named) - set(items) - ({"code"} if rows else set()))
             if unknown:
                 raise ValueError(f"{where}: move names {unknown}, not in the trace; the trace has "
@@ -463,7 +517,8 @@ class LessonPlan(BaseModel):
                                  f"{outside[0]}" if rows else
                                  f"{where}: the move lights lines of code, but the trace has no code")
             for name, wanted in ((move.pointer, "pointer"), (move.against, "value"),
-                                 (move.array, "array"), (move.counter, "counter")):
+                                 (move.array, "array"), (move.counter, "counter"),
+                                 (move.tree, "tree")):
                 if name and items[name].kind != wanted:
                     raise ValueError(f"{where}: {name!r} is not {'an' if wanted == 'array' else 'a'} {wanted}")
             array = items[items[move.pointer].on] if move.pointer else items.get(move.array)
@@ -473,6 +528,17 @@ class LessonPlan(BaseModel):
             if beyond:
                 raise ValueError(f"{where}: {array.id!r} has cells 0 to {array.length - 1}; there "
                                  f"is no cell {beyond[0]}")
+            if move.do == "count" and items[move.counter].counts and move.expect is None:
+                raise ValueError(f"{where}: {move.counter!r} counts by itself; say the total you "
+                                 'expect it to read in "expect", and it is checked')
+            if move.tree:
+                calls = items[move.tree].calls
+                deepest = max(call["depth"] for call in calls)
+                if move.depth is not None and move.depth > deepest:
+                    raise ValueError(f"{where}: {move.tree!r} is {deepest} levels deep; there is "
+                                     f"no level {move.depth}")
+                if move.do == "spot" and move.value not in {call["value"] for call in calls}:
+                    raise ValueError(f"{where}: {move.tree!r} never calls for {move.value:g}")
             short = [cell for cell in move.cells if move.back and cell < max(move.back)]
             if short:
                 raise ValueError(f"{where}: cell {short[0]} has no cell {max(move.back)} before it "

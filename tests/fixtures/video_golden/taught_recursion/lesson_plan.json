@@ -1,0 +1,694 @@
+{
+  "schema_version": 2,
+  "topic": "Why plain recursion repeats its work, and how a table avoids it",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Explain why plain recursion repeats work, and how a table avoids it.",
+  "audience": "A beginner who has written a function that calls itself.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner who has written a function that calls itself.",
+    "can_do": "Explain why plain recursion repeats work, and how a table avoids it.",
+    "question": "Why does such short code do so much work?",
+    "problem": "Count the ways to climb five stairs, one or two at a time, with a function that calls itself.",
+    "naive_attempt": "Let ways(5) ask for ways(4) and ways(3), and so on down. It is short to write, and it makes fifteen calls for five stairs.",
+    "turning_point": "Write each answer down the first time, and every later request is a lookup.",
+    "check_question": "Plain recursion made 15 calls for 5 stairs. How many boxes does the table need?",
+    "check_answer": "Six: one for each stair from zero to five."
+  },
+  "map": null,
+  "trace": {
+    "code": {
+      "title": "stairs.py",
+      "source": "def ways(n):\n    table = [0] * (n + 1)\n    table[0] = 1\n    table[1] = 1\n    for i in range(2, n + 1):\n        table[i] = table[i - 1] + table[i - 2]\n    return table[n]"
+    },
+    "data": [
+      {
+        "id": "calls",
+        "kind": "tree",
+        "label": "Calls made by ways(5)",
+        "items": [],
+        "size": null,
+        "on": null,
+        "value": null,
+        "counts": null,
+        "start": 5,
+        "steps": [
+          1,
+          2
+        ],
+        "stop": 1
+      },
+      {
+        "id": "count",
+        "kind": "counter",
+        "label": "Calls",
+        "items": [],
+        "size": null,
+        "on": null,
+        "value": null,
+        "counts": "calls",
+        "start": null,
+        "steps": [],
+        "stop": 1
+      },
+      {
+        "id": "ways",
+        "kind": "array",
+        "label": "Ways",
+        "items": [],
+        "size": 6,
+        "on": null,
+        "value": null,
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "Ask, and ask again",
+      "learning_goal": "See how many calls plain recursion makes.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "To count the ways up five stairs, the obvious code asks for the ways up four, and the ways up three.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Calls made by ways(5)",
+            "Calls: 3"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "grow",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": "calls",
+            "depth": 1,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "Each of those asks two more questions of its own.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "Calls made by ways(5)",
+            "Calls: 7"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "grow",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": "calls",
+            "depth": 2,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "And so on, down to the bottom stairs: fifteen calls for a staircase of five.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "Calls made by ways(5)",
+            "Calls: 15"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "grow",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": "calls",
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "Look closer. The ways up three stairs are worked out twice.",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "3 is worked out 2 times"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "spot",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 3.0,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": "calls",
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b5",
+          "spoken_text": "And the ways up two stairs, three times over.",
+          "claim_ids": [
+            "s1_b5_c"
+          ],
+          "visual_anchors": [
+            "2 is worked out 3 times"
+          ],
+          "claim_requirements": {
+            "s1_b5_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "spot",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 2.0,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": "calls",
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s1_b6",
+          "spoken_text": "Why does such short code do so much work?",
+          "claim_ids": [
+            "s1_b6_c"
+          ],
+          "visual_anchors": [
+            "Why does such short code do so much work?"
+          ],
+          "claim_requirements": {
+            "s1_b6_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Why does such short code do so much work?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Fifteen calls, most of them repeats"
+    },
+    {
+      "id": "s2",
+      "title": "Write each answer down once",
+      "learning_goal": "Fill a table so nothing is worked out twice.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "Clear the tree away, and keep only its cost in mind: fifteen calls.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "Calls made by ways(5)"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "remove",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [
+              "calls"
+            ],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "This time each answer is written into a box. There is one way to stand at the bottom.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "table[0] = 1",
+            "Ways[0] = 1"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 1.0,
+            "count": 1,
+            "lines": [
+              3
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 0,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s2_b3",
+          "spoken_text": "And one way to reach the first stair.",
+          "claim_ids": [
+            "s2_b3_c"
+          ],
+          "visual_anchors": [
+            "table[1] = 1",
+            "Ways[1] = 1"
+          ],
+          "claim_requirements": {
+            "s2_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 1.0,
+            "count": 1,
+            "lines": [
+              4
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 1,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s2_b4",
+          "spoken_text": "Stair two is reached from stair one or stair zero, so its box is theirs added: two.",
+          "claim_ids": [
+            "s2_b4_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[2] = 1 + 1 = 2"
+          ],
+          "claim_requirements": {
+            "s2_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 2,
+            "from_cells": [
+              1,
+              0
+            ],
+            "back": [],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 2.0
+          }
+        },
+        {
+          "id": "s2_b5",
+          "spoken_text": "The same rule fills the rest, each from the two boxes before it: three, five, eight.",
+          "claim_ids": [
+            "s2_b5_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[5] = 5 + 3 = 8"
+          ],
+          "claim_requirements": {
+            "s2_b5_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [
+              3,
+              4,
+              5
+            ],
+            "cell": null,
+            "from_cells": [],
+            "back": [
+              1,
+              2
+            ],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": [
+              3.0,
+              5.0,
+              8.0
+            ]
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Each box is the two before it, added"
+    },
+    {
+      "id": "s3",
+      "title": "Fifteen calls, or six boxes",
+      "learning_goal": "Compare the two costs.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "The last box is the answer, eight ways. Six boxes filled once, where plain recursion made fifteen calls.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "return table[n]"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "run",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              7
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "Plain recursion made 15 calls for 5 stairs. How many boxes does the table need?",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "Plain recursion made 15 calls for 5 stairs. How many boxes does the table need?"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Plain recursion made 15 calls for 5 stairs. How many boxes does the table need?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "Six: one for each stair from zero to five.",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "Six: one for each stair from zero to five."
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "Six: one for each stair from zero to five.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "back": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    }
+  ]
+}

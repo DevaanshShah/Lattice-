@@ -585,8 +585,7 @@
               ],
               "object_ids": [
                 "code",
-                "numbers",
-                "scan"
+                "numbers"
               ],
               "kind": "state_change",
               "action_ids": [

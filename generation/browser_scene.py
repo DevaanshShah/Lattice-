@@ -13,6 +13,7 @@ from playwright.sync_api import sync_playwright
 
 from composition.slides import render_html, chrome_path, _ffmpeg, SlideRenderError
 from core.schemas.browser_visual_plan import BrowserScene, VisualBeat
+from core.call_tree import positions, repeats
 from core.visual_assets import asset_data_uri, icon_svg
 from core import cancel
 from core.visual_state import TONES, VisualState, apply_action, displayed_fields
@@ -46,6 +47,12 @@ _SEMANTIC_CSS = """
 .semantic-cells{display:flex;justify-content:center;gap:10px;max-width:100%}
 .semantic-cell{position:relative;width:min(11vw,110px);min-width:60px;height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid #61758c;border-radius:14px;background:#1a2633;font:650 34px/1 Segoe UI,system-ui,sans-serif}
 .semantic-cell.is-discarded{opacity:.22;border-color:#4c4d55;background:#17171b}
+.semantic-tree .semantic-caption{margin-bottom:6px}.tree-calls{display:block;margin:0 auto;overflow:visible}
+.tree-edge{stroke:#5b6474;stroke-width:2}.tree-node circle{fill:#1a2633;stroke:#61758c;stroke-width:2}
+.tree-node text{fill:#f4f4f5;font:650 20px/1 Segoe UI,system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+.tree-edge.is-waiting,.tree-node.is-waiting{opacity:0}
+.tree-node.is-marked circle{fill:#3a1518;stroke:#f87171;stroke-width:3}.tree-node.is-marked text{fill:#fecaca}
+.tree-note{margin-top:8px;min-height:30px;color:#f87171;font:650 22px/1.3 Segoe UI,system-ui,sans-serif}
 .semantic-cell.is-empty{border-style:dashed;border-color:#3a4656;background:transparent}
 .semantic-cell.is-lit{border-color:#fbbf24;box-shadow:0 0 0 3px #fbbf2444}
 .semantic-cell.is-new{border-color:#2dd4bf;background:#11302d;box-shadow:0 0 26px #2dd4bf66}
@@ -122,6 +129,36 @@ _ROLE_TONES = {"input": "pink", "source": "pink", "context": "pink", "before": "
                "operation": "teal", "tool": "teal", "decision": "yellow", "metric": "yellow",
                "audit": "yellow", "output": "purple", "result": "purple",
                "destination": "purple", "after": "purple"}
+
+
+def _tree_html(obj, payload: dict, flags: str, ident: str, label: str) -> str:
+    """A recursion's calls as a tree. Every call has its place from the first frame; `shown` says
+    how many are revealed, and the calls for a `marked` value are picked out in red, with a line
+    underneath saying how many times that value is worked out."""
+    nodes = payload["nodes"]
+    where, width, height = positions(nodes)
+    revealed, marked = payload.get("shown", 1), set(payload.get("marked") or [])
+    parts = []
+    for node in nodes:
+        if node["parent"] is None:
+            continue
+        (x1, y1), (x2, y2) = where[node["parent"]], where[node["id"]]
+        state = "" if node["id"] < revealed else " is-waiting"
+        parts.append(f'<line class="tree-edge{state}" data-visual-key="{escape(obj.id)}:edge:{node["id"]}" '
+                     f'x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}"/>')
+    for node in nodes:
+        x, y = where[node["id"]]
+        state = (" is-waiting" if node["id"] >= revealed
+                 else " is-marked" if node["value"] in marked else "")
+        parts.append(f'<g class="tree-node{state}" data-visual-key="{escape(obj.id)}:node:{node["id"]}">'
+                     f'<circle cx="{x:.1f}" cy="{y:.1f}" r="23"/>'
+                     f'<text x="{x:.1f}" y="{y:.1f}">{escape(str(node["value"]))}</text></g>')
+    note = " · ".join(repeats(payload))
+    return (f'<section class="semantic-object{flags} semantic-tree" {ident}>'
+            f'<div class="semantic-caption">{label}</div>'
+            f'<svg class="tree-calls" width="{width:.0f}" height="{height:.0f}" '
+            f'viewBox="0 0 {width:.0f} {height:.0f}">{"".join(parts)}</svg>'
+            f'<div class="tree-note">{escape(note) or "&nbsp;"}</div></section>')
 
 
 def _tone(obj, payload: dict) -> str:
@@ -297,6 +334,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
         elif obj.kind == "formula":
             html = (f'<div class="semantic-object{flags} semantic-formula" {ident}>'
                     f'{escape(str(payload["expression"]))}</div>')
+        elif obj.kind == "tree":
+            html = _tree_html(obj, payload, flags, ident, label)
         elif obj.kind == "code":
             # an editor window: the label is the file name in its title bar
             # `active_lines` (1-based) are the lines being explained: they stay bright, the rest dim

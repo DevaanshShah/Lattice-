@@ -6,6 +6,7 @@ import re
 
 from core.schemas.browser_visual_plan import BrowserScene, BrowserVisualPlan, VisualObject
 from core.schemas.lesson_plan import LessonPlan, LessonScene
+from core.call_tree import repeats
 from core.visual_state import (TONES, ActionEffect, VisualState, action_effect, apply_action,
                                closing_state, displayed_fields, opening_state)
 from core.visual_assets import resolve_asset
@@ -77,6 +78,8 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
                     elif obj.kind == "chart":
                         labels.extend(f"{item['label']}: {item['value']}"
                                       for item in payload["series"])
+                    elif obj.kind == "tree":
+                        labels.extend(repeats(payload))
                 labels.extend(relation.label for relation in scene.relationships
                               if relation.label and relation.source_id in view.visible
                               and relation.target_id in view.visible)

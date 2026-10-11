@@ -149,7 +149,16 @@ battery once (cap $0.10).
 Code on the left, data on the right. The renderer already draws the code window with a moving
 highlight, an array, a pointer, tick and cross marks, discarded cells and a counter.
 
-**Status on 2026-10-11: built, proved on two hand-written lessons, and run live four times.**
+**Where it stands at the end of 2026-10-11.** Three hand-written lessons (`taught_search`,
+`taught_stairs`, `taught_recursion`) compile, validate and render. With a live model the
+lessons are right when they plan, because code checks the numbers the lesson states against
+what the picture comes to; before that check one lesson planned and taught a wrong answer. On
+the final code, with five tries, `deepseek/deepseek-v4.1-flash` planned binary search and
+Fibonacci and failed climbing stairs; a fourth run stopped when the key ran out of credit.
+Three runs are not a pass rate. The gate below is open, and what holds it open is the model
+keeping a table's starting cells straight, not the drawing.
+
+**Earlier the same day: built, proved on two hand-written lessons, and run live four times.**
 On `deepseek/deepseek-v4.1-flash` the first version of the prompt planned 0 of 2; after four
 fixes found from those answers it planned 2 of 2 (binary search, climbing stairs). That is too
 few runs for a pass rate, so the gate below is open. The AI-written binary-search lesson is
@@ -205,6 +214,12 @@ These are available to every playbook.
 2. **A recursion tree with a work counter.** Calls grow as a tree, a repeated call is marked,
    and a counter shows the work done. This is the picture of the need for dynamic programming,
    shown before the table that solves it.
+   **Built on 2026-10-11** as part of the trace playbook: the lesson gives the recursion as a
+   start value, the steps each call takes and where it stops, and code works out every call.
+   Moves `grow` and `spot`, a counter that reads the calls shown, and `remove` to clear the
+   tree before the table. It covers recursions that step down by fixed amounts (stairs,
+   Fibonacci, coin change); halving recursions such as merge sort are not covered. Proved on
+   the hand-written fixture `taught_recursion`; not yet run against a live model.
 3. **Compare.** Two approaches side by side with one difference marked. Carried over from the
    hardening plan's Phase 3.
 4. **Zoom into a piece.** One piece of a map opens into its own small picture and closes again.
@@ -281,9 +296,11 @@ ways to be sent back. Phase A's live run measures that.
   cannot judge that. The teacher's approval and the owner's review are the only checks, which
   is why approval is a phase and not an option.
 - **Nothing checks that a sentence matches its move.** A sentence can say one thing while the
-  move shows another. The trace checks of Phase C close this for algorithms. For maps it stays
-  open; a second cheap call that reads the lesson against the brief is the likely answer, to
-  be decided after Phase A's videos are watched.
+  move shows another. On 2026-10-11 this produced a lesson that planned and was wrong (a table
+  ending at five under narration saying eight). For traces it is now partly closed: a computed
+  cell and a counter's total carry the number the lesson expects, and code rejects a mismatch.
+  It is still open for a number no move states, and for maps, where a second cheap call that
+  reads the lesson against the brief is the likely answer.
 - **Each playbook is real work.** A new picture needs a fixture, a renderer piece, moves, checks
   and a live test. Phase D lists four; more will be asked for.
 - **Approval adds a step.** Some users want one click. Quick mode is there for them.

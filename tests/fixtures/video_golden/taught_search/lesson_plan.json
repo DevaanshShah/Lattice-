@@ -38,7 +38,10 @@
         "size": null,
         "on": null,
         "value": null,
-        "counts": null
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
       },
       {
         "id": "target",
@@ -48,7 +51,10 @@
         "size": null,
         "on": null,
         "value": 30,
-        "counts": null
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
       },
       {
         "id": "scan",
@@ -58,7 +64,10 @@
         "size": null,
         "on": "numbers",
         "value": null,
-        "counts": null
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
       },
       {
         "id": "mid",
@@ -68,7 +77,10 @@
         "size": null,
         "on": "numbers",
         "value": null,
-        "counts": null
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
       },
       {
         "id": "slow",
@@ -78,7 +90,10 @@
         "size": null,
         "on": null,
         "value": null,
-        "counts": "scan"
+        "counts": "scan",
+        "start": null,
+        "steps": [],
+        "stop": 1
       },
       {
         "id": "fast",
@@ -88,7 +103,10 @@
         "size": null,
         "on": null,
         "value": null,
-        "counts": "mid"
+        "counts": "mid",
+        "start": null,
+        "steps": [],
+        "stop": 1
       }
     ]
   },
@@ -134,9 +152,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -178,9 +200,13 @@
             ],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -214,9 +240,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         }
       ],
@@ -263,9 +293,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -302,9 +336,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -342,9 +380,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -387,9 +429,13 @@
             ],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         }
       ],
@@ -438,9 +484,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -476,9 +526,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -512,9 +566,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -548,9 +606,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         }
       ],

@@ -129,13 +129,15 @@ recipe's `board` names the playbook.
 | Playbook | For | Picture | Moves |
 |---|---|---|---|
 | `map` | systems and processes | icon pieces joined by arrows | introduce, send, trouble, fix, measure, point, remove |
-| `trace` | algorithms | code on the left, data on the right | show, run, look, compare, discard, fill, count, clear |
+| `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, discard, fill, count, clear, grow, spot, remove |
 
 Both also take `ask` and `answer`. On a trace any move may light lines of the code, and code
 works out every result: a compare is decided by the values on screen, a filled cell is computed
 from the cells it names (`sum`, `min`, `max`, plus a constant) with its working shown, a counter
-tied to a pointer counts that pointer's checks, and each beat's anchors are read off the state
-its move produced.
+tied to a pointer counts that pointer's checks, the calls of a recursion tree are worked out
+from its start, steps and stop (`core/call_tree.py`), and each beat's anchors are read off the
+state its move produced. Where code works a number out, the move also carries the number the
+lesson expects (`expect`), and a lesson whose number differs from the real one is sent back.
 
 ## 4. Visual step (stage 5)
 

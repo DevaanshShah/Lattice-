@@ -651,3 +651,17 @@ def test_a_loosely_written_piece_id_is_tidied_everywhere_it_is_used():
     clash["map"]["pieces"][0]["id"], clash["map"]["pieces"][1]["id"] = "a-b", "a b"
     with pytest.raises(ValidationError):
         _lesson(clash)
+
+
+@pytest.mark.unit
+def test_removing_a_piece_that_is_on_screen_is_shown_and_accepted():
+    answer = _answer()
+    answer["scenes"][1]["beats"].append(
+        {"spoken_text": SAY, "move": {"do": "remove", "pieces": ["cache"]}})
+    lesson = _lesson(answer)
+    _, second = plan_map_scenes(lesson, SKILL)              # the validator accepts it
+    gone = second.beats[3]
+    assert [(action.kind, action.target_ids) for action in gone.actions] == [
+        ("highlight", ["cache"]), ("hide", ["cache"])]      # lit once, then it leaves
+    assert lesson.scenes[1].beats[3].claim_requirements == {"s2_b4_c": ["state_change"]}
+    assert "cache" not in second.closing_visible_ids

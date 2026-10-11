@@ -10,6 +10,28 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-11 — The lesson states the number it expects, and code checks it
+
+**Context.** Code computed every cell of a table from the cells the model named, so the
+arithmetic on screen was always right for the starting values given. A live lesson then started
+a table from the wrong value: the screen showed five ways to climb the stairs and the narration
+said eight. It passed every check, because nothing connected the sentence to the picture.
+
+**Decision.** Wherever code works a number out and the narration is likely to say it, the move
+carries the number the lesson expects: `expect` on a computed fill (one per cell of a run) and
+on a count that points at a self-counting counter. Code compares it with the real value and
+rejects a mismatch, quoting the working.
+
+**Why not the alternative.** Reading numbers out of the narration ("eight", "8 ways") would be
+matching words, which breaks on phrasing and languages. Letting the model write the cell values
+and dropping the computation would bring back wrong arithmetic on screen. Stating the number
+twice, once for the picture's rule and once as the expected result, makes the model's two
+accounts check each other, and the structured one is what code compares.
+
+**Consequence.** Fewer lessons plan: in the first run after it, one of three, where before it
+three of three planned and one was wrong. A model can still narrate a number it did not put in
+`expect`. The check covers tables and counters, not yet comparisons or discarded ranges.
+
 ### 2026-10-11 — In an algorithm lesson the model chooses the step and code does the arithmetic
 
 **Context.** Algorithm topics went through the model-written visual step and failed on every

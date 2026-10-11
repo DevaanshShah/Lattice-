@@ -30,7 +30,10 @@
         "size": 6,
         "on": null,
         "value": null,
-        "counts": null
+        "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
       }
     ]
   },
@@ -74,9 +77,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -110,9 +117,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -149,9 +160,13 @@
             "cells": [],
             "cell": 0,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -188,9 +203,13 @@
             "cells": [],
             "cell": 1,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         }
       ],
@@ -240,9 +259,13 @@
               1,
               0
             ],
+            "back": [],
             "op": "sum",
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 2.0
           }
         },
         {
@@ -282,9 +305,13 @@
               2,
               1
             ],
+            "back": [],
             "op": "sum",
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 3.0
           }
         }
       ],
@@ -334,9 +361,13 @@
               3,
               2
             ],
+            "back": [],
             "op": "sum",
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 5.0
           }
         },
         {
@@ -376,9 +407,13 @@
               4,
               3
             ],
+            "back": [],
             "op": "sum",
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 8.0
           }
         },
         {
@@ -414,9 +449,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -450,9 +489,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         },
         {
@@ -486,9 +529,13 @@
             "cells": [],
             "cell": null,
             "from_cells": [],
+            "back": [],
             "op": null,
             "plus": 0.0,
-            "counter": null
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
           }
         }
       ],

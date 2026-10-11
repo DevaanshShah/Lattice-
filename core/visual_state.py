@@ -13,7 +13,8 @@ FIELD_KINDS = {"message", "node", "document", "card", "gate", "tool", "group"}
 _DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results", "lit_indices", "new_index"),
                "pointer": ("target_id", "index"), "counter": ("value",), "metric": ("value",),
                "value": ("value",), "formula": ("expression",), "code": ("source", "active_lines"),
-               "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id", "count")}
+               "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id", "count"),
+               "tree": ("shown", "marked")}
 
 
 # Payload keys that say HOW a piece is drawn, not what it holds. They are never shown as rows.

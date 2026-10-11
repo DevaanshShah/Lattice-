@@ -33,6 +33,7 @@ class LessonPlanError(RuntimeError):
 # length the user asked for before it is sent back.
 WORDS_PER_SECOND = 2.8    # measured on two rendered lessons: 154 and 174 words, 57 s each
 LENGTH_TOLERANCE = .3
+PLAYBOOK_ATTEMPTS = 5     # tries for a lesson with a playbook; each rejection carries its reason
 WORDS_PER_BEAT = 17       # one spoken sentence; a lesson's size is given to the model in beats
 BEATS_PER_SCENE = 3.5
 
@@ -82,7 +83,10 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
                                     + "Return the lesson plan JSON now."},
     ]
     last: Exception | None = None
-    for attempt in range(attempts):
+    # A lesson with a playbook is checked much harder (its numbers, its order, its room in the
+    # frame), and every rejection says exactly what to change, so it is given more tries.
+    tries = max(attempts, PLAYBOOK_ATTEMPTS) if playbook is not None else attempts
+    for attempt in range(tries):
         raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0,
                           response_format=JSON_ONLY, extra_body=PLAN_EXTRA)
         if diagnostic_dir is not None:      # what the model actually wrote, kept for diagnosis
@@ -133,4 +137,4 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
                 on_reject(str(exc))
             messages += [{"role": "assistant", "content": raw},
                          {"role": "user", "content": f"That was invalid ({exc}). Return only valid JSON."}]
-    raise LessonPlanError(f"lesson plan invalid after {attempts} attempts: {last}")
+    raise LessonPlanError(f"lesson plan invalid after {tries} attempts: {last}")
