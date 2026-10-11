@@ -25,7 +25,7 @@ is a separate path and is not covered.
 | 2 | Pick a recipe (skill) by keywords | code | `planner/product_recipe.py` `pick_recipe`, data in `prompts/product_video_recipes.json` | no |
 | 3 | Write the lesson | model, 1 call (up to 3 tries) | `planner/lesson_plan.py` `generate`, prompt `prompts/lesson-plan-v2.md` | yes |
 | 4 | Check the lesson | code | `LessonPlan` schema, `planner/lesson_map.py` | no |
-| 5 | Write each scene's visuals | map lesson: code. Otherwise: model, 1 call per scene (up to 3 tries) | `planner/lesson_map.py` `plan_map_scenes`, or `planner/browser_visual_plan.py` `generate` | only without a map |
+| 5 | Write each scene's visuals | lesson with a playbook (map, trace): code. Otherwise: model, 1 call per scene (up to 3 tries) | `planner/playbooks.py` → `lesson_map.py` or `lesson_trace.py`; or `planner/browser_visual_plan.py` `generate` | only without a playbook |
 | 6 | Check each scene | code | `verification/visual_plan_validation.py` `validate_scene` | no |
 | 7 | User approves the outline, then build starts | user | `POST /api/projects/{pid}/build` → `Engine._build_browser` | no |
 | 8 | Speak each beat and measure its length | local voice | `narration/tts.py` `synthesize` (Kokoro when `LATTICE_TTS_ENGINE=kokoro`) | no |
@@ -119,6 +119,23 @@ The check question and its answer are not written by the model. `fill_map_lesson
 after the last beat, as an `ask` and an `answer` in the brief's own words, and the compiler
 holds the picture for 1.6 seconds between them (`pause_after`). A scene has at most one question
 and one answer. Piece ids written loosely are tidied by code wherever they are used.
+
+### Playbooks
+
+`planner/playbooks.py` lists the playbooks. Each has a lesson prompt, a menu of moves, a fill
+step, a compiler and craft checks; `planner/lesson_shared.py` holds what they share. The
+recipe's `board` names the playbook.
+
+| Playbook | For | Picture | Moves |
+|---|---|---|---|
+| `map` | systems and processes | icon pieces joined by arrows | introduce, send, trouble, fix, measure, point, remove |
+| `trace` | algorithms | code on the left, data on the right | show, run, look, compare, discard, fill, count, clear |
+
+Both also take `ask` and `answer`. On a trace any move may light lines of the code, and code
+works out every result: a compare is decided by the values on screen, a filled cell is computed
+from the cells it names (`sum`, `min`, `max`, plus a constant) with its working shown, a counter
+tied to a pointer counts that pointer's checks, and each beat's anchors are read off the state
+its move produced.
 
 ## 4. Visual step (stage 5)
 

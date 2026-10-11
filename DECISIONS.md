@@ -10,6 +10,26 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-11 — In an algorithm lesson the model chooses the step and code does the arithmetic
+
+**Context.** Algorithm topics went through the model-written visual step and failed on every
+model tried: anchors that were never on screen, counters that started at their final value,
+marks that did not match the values. The renderer could already draw code beside an array.
+
+**Decision.** An algorithm lesson is a trace: the code, the data, and one move per beat from a
+menu (show, run, look, compare, discard, fill, count, clear). The model says which cell is
+compared or which cells a value is worked out from. Code decides the outcome of the compare,
+computes the value, counts the checks, and writes the text each beat must show.
+
+**Why not the alternative.** Running the model's code to check the trace would mean executing
+untrusted code and still would not say what to draw. Letting the model state results ("the
+value is 8", "that took six checks") is exactly where it was wrong before; a number computed
+from the picture cannot disagree with the picture.
+
+**Consequence.** A lesson can only combine cells by sum, minimum or maximum plus a constant,
+which covers the common table problems and not all of them. Nothing checks that the moves
+follow the code shown beside them: a lesson could light one line and do another thing.
+
 ### 2026-10-11 — The question is shown, and code asks the check question
 
 **Context.** With the teaching brief in place the narration opened on a problem and a question

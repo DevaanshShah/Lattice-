@@ -343,7 +343,7 @@ def test_v2_planners_send_semantic_contract_and_keep_versions_aligned():
             return self.response
 
     lesson_client = Client(lesson.model_dump_json())
-    generated_lesson = lesson_plan.generate("Binary search", load_recipes()["algorithm_explainer"],
+    generated_lesson = lesson_plan.generate("Binary search", load_recipes()["metric_story"],
                                             client=lesson_client,
                                             schema_version=2)
     assert generated_lesson.schema_version == 2

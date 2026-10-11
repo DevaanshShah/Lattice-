@@ -1,0 +1,803 @@
+{
+  "schema_version": 2,
+  "topic": "How a table of small answers counts the ways to climb stairs",
+  "skill_id": "algorithm_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "stairs.py",
+          "payload": {
+            "source": "def ways(n):\n    table = [0] * (n + 1)\n    table[0] = 1\n    table[1] = 1\n    for i in range(2, n + 1):\n        table[i] = table[i - 1] + table[i - 2]\n    return table[n]"
+          }
+        },
+        {
+          "id": "ways",
+          "kind": "array",
+          "role": "input",
+          "label": "Ways",
+          "payload": {
+            "items": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        },
+        {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
+          "id": "s1_b2_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "How many ways are there to climb five stairs, one or two at a time?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s1_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s1_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b1_c"
+              ],
+              "object_ids": [
+                "ways"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s1_b2_line"
+              ],
+              "id": "s1_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b2_c"
+              ],
+              "object_ids": [
+                "s1_b2_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s1_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.236
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s1_b3_2",
+              "params": {
+                "active_lines": [
+                  3
+                ]
+              },
+              "start_fraction": 0.236,
+              "end_fraction": 0.412
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s1_b3_3",
+              "params": {
+                "items": [
+                  1,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null
+                ],
+                "lit_indices": [],
+                "new_index": 0
+              },
+              "start_fraction": 0.412,
+              "end_fraction": 0.588
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b3_4",
+              "params": {
+                "expression": "Ways[0] = 1"
+              },
+              "start_fraction": 0.588,
+              "end_fraction": 0.764
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b3_5",
+              "params": {},
+              "start_fraction": 0.764,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b3_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b3_1",
+                "s1_b3_2",
+                "s1_b3_3",
+                "s1_b3_4",
+                "s1_b3_5"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b4",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s1_b4_1",
+              "params": {
+                "active_lines": [
+                  4
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s1_b4_2",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  null,
+                  null,
+                  null,
+                  null
+                ],
+                "lit_indices": [],
+                "new_index": 1
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b4_3",
+              "params": {
+                "expression": "Ways[1] = 1"
+              },
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b4_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b4_1",
+                "s1_b4_2",
+                "s1_b4_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "code",
+        "ways",
+        "working",
+        "s1_b2_line"
+      ],
+      "carryover_ids": [],
+      "layout_ids": []
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "stairs.py",
+          "payload": {
+            "source": "def ways(n):\n    table = [0] * (n + 1)\n    table[0] = 1\n    table[1] = 1\n    for i in range(2, n + 1):\n        table[i] = table[i - 1] + table[i - 2]\n    return table[n]"
+          }
+        },
+        {
+          "id": "ways",
+          "kind": "array",
+          "role": "input",
+          "label": "Ways",
+          "payload": {
+            "items": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        },
+        {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
+          "id": "takeaway_s2",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Each box is the two before it, added",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s2_b1",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b1_1",
+              "params": {
+                "active_lines": [
+                  6
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b1_2",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  null,
+                  null,
+                  null
+                ],
+                "lit_indices": [
+                  1,
+                  0
+                ],
+                "new_index": 2
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b1_3",
+              "params": {
+                "expression": "Ways[2] = 1 + 1 = 2"
+              },
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b1_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b1_1",
+                "s2_b1_2",
+                "s2_b1_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b2_1",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  null,
+                  null
+                ],
+                "lit_indices": [
+                  2,
+                  1
+                ],
+                "new_index": 3
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b2_2",
+              "params": {
+                "expression": "Ways[3] = 2 + 1 = 3"
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b2_3",
+              "params": {},
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b2_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b2_1",
+                "s2_b2_2",
+                "s2_b2_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "code",
+        "ways",
+        "working"
+      ],
+      "closing_visible_ids": [
+        "code",
+        "ways",
+        "working",
+        "takeaway_s2"
+      ],
+      "carryover_ids": [
+        "code",
+        "ways",
+        "working"
+      ],
+      "layout_ids": []
+    },
+    {
+      "lesson_scene_id": "s3",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "stairs.py",
+          "payload": {
+            "source": "def ways(n):\n    table = [0] * (n + 1)\n    table[0] = 1\n    table[1] = 1\n    for i in range(2, n + 1):\n        table[i] = table[i - 1] + table[i - 2]\n    return table[n]"
+          }
+        },
+        {
+          "id": "ways",
+          "kind": "array",
+          "role": "input",
+          "label": "Ways",
+          "payload": {
+            "items": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        },
+        {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
+          "id": "s3_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Stair 4 can be reached 5 ways and stair 5 in 8. How many ways reach stair 6?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "s3_b5_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Thirteen: five plus eight.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s3_b1",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s3_b1_1",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  5,
+                  null
+                ],
+                "lit_indices": [
+                  3,
+                  2
+                ],
+                "new_index": 4
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s3_b1_2",
+              "params": {
+                "expression": "Ways[4] = 3 + 2 = 5"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b1_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s3_b1_1",
+                "s3_b1_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s3_b2_1",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  5,
+                  8
+                ],
+                "lit_indices": [
+                  4,
+                  3
+                ],
+                "new_index": 5
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s3_b2_2",
+              "params": {
+                "expression": "Ways[5] = 5 + 3 = 8"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b2_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s3_b2_1",
+                "s3_b2_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b3_1",
+              "params": {
+                "active_lines": [
+                  7
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b3_c"
+              ],
+              "object_ids": [
+                "code"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b3_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b4_line"
+              ],
+              "id": "s3_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b4_c"
+              ],
+              "object_ids": [
+                "s3_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b4_1"
+              ]
+            }
+          ],
+          "pause_after": 1.6
+        },
+        {
+          "narration_beat_id": "s3_b5",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b5_line"
+              ],
+              "id": "s3_b5_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b5_c"
+              ],
+              "object_ids": [
+                "s3_b5_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b5_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "code",
+        "ways",
+        "working"
+      ],
+      "closing_visible_ids": [
+        "code",
+        "ways",
+        "working",
+        "s3_b4_line",
+        "s3_b5_line"
+      ],
+      "carryover_ids": [
+        "code",
+        "ways",
+        "working"
+      ],
+      "layout_ids": []
+    }
+  ]
+}

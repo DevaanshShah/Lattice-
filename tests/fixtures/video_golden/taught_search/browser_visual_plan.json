@@ -1,0 +1,1123 @@
+{
+  "schema_version": 2,
+  "topic": "Why binary search needs so few checks",
+  "skill_id": "algorithm_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "find.py",
+          "payload": {
+            "source": "def find(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+          }
+        },
+        {
+          "id": "numbers",
+          "kind": "array",
+          "role": "input",
+          "label": "Sorted list",
+          "payload": {
+            "items": [
+              3,
+              8,
+              12,
+              17,
+              21,
+              30,
+              44
+            ]
+          }
+        },
+        {
+          "id": "target",
+          "kind": "value",
+          "role": "context",
+          "label": "Target",
+          "payload": {
+            "value": 30
+          }
+        },
+        {
+          "id": "scan",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "check",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "mid",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "mid",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "slow",
+          "kind": "counter",
+          "role": "metric",
+          "label": "One by one",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "fast",
+          "kind": "counter",
+          "role": "metric",
+          "label": "Binary search",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "s1_b3_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Do we really have to check every number to find one?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "takeaway_s1",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Six checks to find one number",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s1_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "numbers",
+                "target"
+              ],
+              "id": "s1_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b1_c"
+              ],
+              "object_ids": [
+                "numbers",
+                "target"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.1063
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_2",
+              "params": {},
+              "start_fraction": 0.1063,
+              "end_fraction": 0.1526
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_3",
+              "params": {},
+              "start_fraction": 0.1526,
+              "end_fraction": 0.1989
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_4",
+              "params": {},
+              "start_fraction": 0.1989,
+              "end_fraction": 0.2453
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_5",
+              "params": {
+                "index": 1
+              },
+              "start_fraction": 0.2453,
+              "end_fraction": 0.2916
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_6",
+              "params": {},
+              "start_fraction": 0.2916,
+              "end_fraction": 0.3379
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_7",
+              "params": {},
+              "start_fraction": 0.3379,
+              "end_fraction": 0.3842
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_8",
+              "params": {
+                "index": 2
+              },
+              "start_fraction": 0.3842,
+              "end_fraction": 0.4305
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_9",
+              "params": {},
+              "start_fraction": 0.4305,
+              "end_fraction": 0.4768
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_10",
+              "params": {},
+              "start_fraction": 0.4768,
+              "end_fraction": 0.5232
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_11",
+              "params": {
+                "index": 3
+              },
+              "start_fraction": 0.5232,
+              "end_fraction": 0.5695
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_12",
+              "params": {},
+              "start_fraction": 0.5695,
+              "end_fraction": 0.6158
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_13",
+              "params": {},
+              "start_fraction": 0.6158,
+              "end_fraction": 0.6621
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_14",
+              "params": {
+                "index": 4
+              },
+              "start_fraction": 0.6621,
+              "end_fraction": 0.7084
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_15",
+              "params": {},
+              "start_fraction": 0.7084,
+              "end_fraction": 0.7547
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_16",
+              "params": {},
+              "start_fraction": 0.7547,
+              "end_fraction": 0.8011
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_17",
+              "params": {
+                "index": 5
+              },
+              "start_fraction": 0.8011,
+              "end_fraction": 0.8474
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_18",
+              "params": {},
+              "start_fraction": 0.8474,
+              "end_fraction": 0.8937
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_19",
+              "params": {},
+              "start_fraction": 0.8937,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b2_c"
+              ],
+              "object_ids": [
+                "scan",
+                "target",
+                "numbers",
+                "slow"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b2_1",
+                "s1_b2_2",
+                "s1_b2_3",
+                "s1_b2_4",
+                "s1_b2_5",
+                "s1_b2_6",
+                "s1_b2_7",
+                "s1_b2_8",
+                "s1_b2_9",
+                "s1_b2_10",
+                "s1_b2_11",
+                "s1_b2_12",
+                "s1_b2_13",
+                "s1_b2_14",
+                "s1_b2_15",
+                "s1_b2_16",
+                "s1_b2_17",
+                "s1_b2_18",
+                "s1_b2_19"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s1_b3_line"
+              ],
+              "id": "s1_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s1"
+              ],
+              "id": "s1_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b3_c"
+              ],
+              "object_ids": [
+                "s1_b3_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b3_1",
+                "s1_b3_2"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "numbers",
+        "target",
+        "scan",
+        "slow",
+        "s1_b3_line",
+        "takeaway_s1"
+      ],
+      "carryover_ids": [],
+      "layout_ids": []
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "find.py",
+          "payload": {
+            "source": "def find(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+          }
+        },
+        {
+          "id": "numbers",
+          "kind": "array",
+          "role": "input",
+          "label": "Sorted list",
+          "payload": {
+            "items": [
+              3,
+              8,
+              12,
+              17,
+              21,
+              30,
+              44
+            ]
+          }
+        },
+        {
+          "id": "target",
+          "kind": "value",
+          "role": "context",
+          "label": "Target",
+          "payload": {
+            "value": 30
+          }
+        },
+        {
+          "id": "scan",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "check",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "mid",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "mid",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "slow",
+          "kind": "counter",
+          "role": "metric",
+          "label": "One by one",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "fast",
+          "kind": "counter",
+          "role": "metric",
+          "label": "Binary search",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "takeaway_s2",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One look removed half the list",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s2_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b1_2",
+              "params": {
+                "active_lines": [
+                  1
+                ]
+              },
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "numbers"
+              ],
+              "id": "s2_b1_3",
+              "params": {
+                "checked_results": {}
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s2_b1_4",
+              "params": {},
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b1_c"
+              ],
+              "object_ids": [
+                "code",
+                "numbers",
+                "scan"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b1_1",
+                "s2_b1_2",
+                "s2_b1_3",
+                "s2_b1_4"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b2_1",
+              "params": {
+                "active_lines": [
+                  4
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "mid"
+              ],
+              "id": "s2_b2_2",
+              "params": {
+                "index": 3
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "mid"
+              ],
+              "id": "s2_b2_3",
+              "params": {},
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b2_c"
+              ],
+              "object_ids": [
+                "code",
+                "mid",
+                "numbers"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "s2_b2_1",
+                "s2_b2_2",
+                "s2_b2_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b3_1",
+              "params": {
+                "active_lines": [
+                  5
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "mid",
+                "target"
+              ],
+              "id": "s2_b3_2",
+              "params": {},
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "fast"
+              ],
+              "id": "s2_b3_3",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "fast"
+              ],
+              "id": "s2_b3_4",
+              "params": {},
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b3_c"
+              ],
+              "object_ids": [
+                "code",
+                "mid",
+                "target",
+                "numbers",
+                "fast"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b3_1",
+                "s2_b3_2",
+                "s2_b3_3",
+                "s2_b3_4"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b4",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b4_1",
+              "params": {
+                "active_lines": [
+                  7,
+                  8
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "numbers"
+              ],
+              "id": "s2_b4_2",
+              "params": {
+                "discarded_indices": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b4_3",
+              "params": {},
+              "start_fraction": 0.6467,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b4_c"
+              ],
+              "object_ids": [
+                "code",
+                "numbers"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b4_1",
+                "s2_b4_2",
+                "s2_b4_3"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "numbers",
+        "target",
+        "scan",
+        "slow"
+      ],
+      "closing_visible_ids": [
+        "code",
+        "numbers",
+        "target",
+        "mid",
+        "slow",
+        "fast",
+        "takeaway_s2"
+      ],
+      "carryover_ids": [
+        "numbers",
+        "target",
+        "scan",
+        "slow"
+      ],
+      "layout_ids": []
+    },
+    {
+      "lesson_scene_id": "s3",
+      "pattern": "workflow",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "code",
+          "kind": "code",
+          "role": "context",
+          "label": "find.py",
+          "payload": {
+            "source": "def find(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+          }
+        },
+        {
+          "id": "numbers",
+          "kind": "array",
+          "role": "input",
+          "label": "Sorted list",
+          "payload": {
+            "items": [
+              3,
+              8,
+              12,
+              17,
+              21,
+              30,
+              44
+            ]
+          }
+        },
+        {
+          "id": "target",
+          "kind": "value",
+          "role": "context",
+          "label": "Target",
+          "payload": {
+            "value": 30
+          }
+        },
+        {
+          "id": "scan",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "check",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "mid",
+          "kind": "pointer",
+          "role": "operation",
+          "label": "mid",
+          "payload": {
+            "target_id": "numbers",
+            "index": 0
+          }
+        },
+        {
+          "id": "slow",
+          "kind": "counter",
+          "role": "metric",
+          "label": "One by one",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "fast",
+          "kind": "counter",
+          "role": "metric",
+          "label": "Binary search",
+          "payload": {
+            "value": 0
+          }
+        },
+        {
+          "id": "s3_b3_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "A sorted list has 1,000 numbers. About how many checks does binary search need?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "s3_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "About ten, because every check halves what is left.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [],
+      "beats": [
+        {
+          "narration_beat_id": "s3_b1",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b1_1",
+              "params": {
+                "active_lines": [
+                  4,
+                  5
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "mid"
+              ],
+              "id": "s3_b1_2",
+              "params": {
+                "index": 5
+              },
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "mid",
+                "target"
+              ],
+              "id": "s3_b1_3",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "fast"
+              ],
+              "id": "s3_b1_4",
+              "params": {},
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b1_c"
+              ],
+              "object_ids": [
+                "code",
+                "mid",
+                "target",
+                "numbers",
+                "fast"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s3_b1_1",
+                "s3_b1_2",
+                "s3_b1_3",
+                "s3_b1_4"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b2_1",
+              "params": {
+                "active_lines": [
+                  6
+                ]
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b2_c"
+              ],
+              "object_ids": [
+                "code"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b3_line"
+              ],
+              "id": "s3_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b3_c"
+              ],
+              "object_ids": [
+                "s3_b3_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b3_1"
+              ]
+            }
+          ],
+          "pause_after": 1.6
+        },
+        {
+          "narration_beat_id": "s3_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b4_line"
+              ],
+              "id": "s3_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b4_c"
+              ],
+              "object_ids": [
+                "s3_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b4_1"
+              ]
+            }
+          ],
+          "pause_after": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "code",
+        "numbers",
+        "target",
+        "mid",
+        "slow",
+        "fast"
+      ],
+      "closing_visible_ids": [
+        "code",
+        "numbers",
+        "target",
+        "mid",
+        "slow",
+        "fast",
+        "s3_b3_line",
+        "s3_b4_line"
+      ],
+      "carryover_ids": [
+        "code",
+        "numbers",
+        "target",
+        "mid",
+        "slow",
+        "fast"
+      ],
+      "layout_ids": []
+    }
+  ]
+}

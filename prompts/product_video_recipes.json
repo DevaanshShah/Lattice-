@@ -18,10 +18,16 @@
       "brute-force",
       "linear search",
       "sorting",
-      "search procedure"
+      "search procedure",
+      "dynamic programming",
+      "recursion",
+      "memoization",
+      "two pointers",
+      "sliding window"
     ],
     "outline_guidance": "Teach the algorithm with one concrete input. Establish the input and target, trace the important checks or state changes in order, then show the result and a meaningful comparison. Do not claim a step count unless the shown trace supports it.",
-    "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box."
+    "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box.",
+    "board": "trace"
   },
   "architecture_explainer": {
     "visual_pattern": "architecture_map",

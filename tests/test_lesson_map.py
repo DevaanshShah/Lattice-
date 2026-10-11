@@ -357,8 +357,9 @@ def test_an_arrow_that_merely_exists_does_not_prove_a_relationship():
 @pytest.mark.unit
 def test_the_recipe_decides_the_board_and_only_that_prompt_is_sent():
     recipes = load_recipes()
-    assert {name for name, recipe in recipes.items() if recipe.board == "map"} == {
-        "architecture_explainer", "workflow_explainer", "before_after"}
+    assert {name: recipe.board for name, recipe in recipes.items()} == {
+        "architecture_explainer": "map", "workflow_explainer": "map", "before_after": "map",
+        "algorithm_explainer": "trace", "funnel_explainer": "free", "metric_story": "free"}
     client = _Scripted([_answer()])
     lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
     system, user = client.asked[0][0]["content"], client.asked[0][1]["content"]
@@ -378,7 +379,7 @@ def test_the_recipe_decides_the_board_and_only_that_prompt_is_sent():
     assert len(reasons) == 1 and "taught on a map" in reasons[0]
     # a free-board recipe gets the general prompt, with no map and no icon list
     client = _Scripted([plain])
-    lesson_plan.generate("Search", recipes["algorithm_explainer"], client=client, schema_version=2)
+    lesson_plan.generate("Revenue", recipes["metric_story"], client=client, schema_version=2)
     assert "map" not in client.asked[0][0]["content"].lower()
     assert "Icon list" not in client.asked[0][1]["content"]
 
@@ -552,8 +553,8 @@ def test_a_lesson_that_asks_its_own_check_is_left_as_written():
     ([{"do": "answer", "text": "Because."}, {"do": "ask", "text": "Why?"}], "comes after an ask move"),
     ([{"do": "ask", "text": "A statement."}], "is a question, ending in"),
     ([{"do": "ask", "text": "Why " + "so " * 40 + "long?"}], "at most 110 characters"),
-    ([{"do": "send", "path": ["phone", "gateway"], "text": "hello"}], "a send move shows no text"),
-    ([{"do": "ask", "text": "Why?", "pieces": ["phone"]}], "names no pieces"),
+    ([{"do": "send", "path": ["phone", "gateway"], "text": "hello"}], "a send move has no text"),
+    ([{"do": "ask", "text": "Why?", "pieces": ["phone"]}], "an ask move has no pieces"),
 ])
 def test_lines_of_text_follow_their_rules(beats, message):
     answer = _answer()

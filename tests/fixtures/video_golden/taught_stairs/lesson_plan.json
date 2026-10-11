@@ -1,0 +1,499 @@
+{
+  "schema_version": 2,
+  "topic": "How a table of small answers counts the ways to climb stairs",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Explain how a table of small answers builds the answer to a bigger problem.",
+  "audience": "A beginner who knows loops and lists.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner who knows loops and lists.",
+    "can_do": "Explain how a table of small answers builds the answer to a bigger problem.",
+    "question": "How many ways are there to climb five stairs, one or two at a time?",
+    "problem": "A staircase of five stairs. Each move climbs one stair or two.",
+    "naive_attempt": "List every route by hand. It works for three stairs, and then the list gets too long to trust.",
+    "turning_point": "The ways to reach a stair are the ways to reach the two stairs below it, added together.",
+    "check_question": "Stair 4 can be reached 5 ways and stair 5 in 8. How many ways reach stair 6?",
+    "check_answer": "Thirteen: five plus eight."
+  },
+  "map": null,
+  "trace": {
+    "code": {
+      "title": "stairs.py",
+      "source": "def ways(n):\n    table = [0] * (n + 1)\n    table[0] = 1\n    table[1] = 1\n    for i in range(2, n + 1):\n        table[i] = table[i - 1] + table[i - 2]\n    return table[n]"
+    },
+    "data": [
+      {
+        "id": "ways",
+        "kind": "array",
+        "label": "Ways",
+        "items": [],
+        "size": 6,
+        "on": null,
+        "value": null,
+        "counts": null
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "Start with what is certain",
+      "learning_goal": "Fill the two answers nobody has to work out.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "Here is one box for each stair, zero to five. Each will hold the number of ways to reach that stair.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Ways"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "show",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [
+              "ways"
+            ],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "How many ways are there to climb five stairs, one or two at a time?",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "How many ways are there to climb five stairs, one or two at a time?"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "How many ways are there to climb five stairs, one or two at a time?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "Two boxes need no thought. There is one way to stand at the bottom: do nothing.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "table[0] = 1",
+            "Ways[0] = 1"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 1.0,
+            "count": 1,
+            "lines": [
+              3
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 0,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "And one way to reach the first stair: a single step.",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "table[1] = 1",
+            "Ways[1] = 1"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": 1.0,
+            "count": 1,
+            "lines": [
+              4
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 1,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    },
+    {
+      "id": "s2",
+      "title": "Each stair from the two below",
+      "learning_goal": "See one box worked out from two others.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "You arrive at stair two either from stair one or from stair zero, so its ways are theirs added together.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[2] = 1 + 1 = 2"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 2,
+            "from_cells": [
+              1,
+              0
+            ],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "Stair three is reached from stairs two and one: two plus one is three.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[3] = 2 + 1 = 3"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 3,
+            "from_cells": [
+              2,
+              1
+            ],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Each box is the two before it, added"
+    },
+    {
+      "id": "s3",
+      "title": "Fill to the top",
+      "learning_goal": "Read the answer off the last box.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "The same rule gives stair four: three plus two is five.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[4] = 3 + 2 = 5"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 4,
+            "from_cells": [
+              3,
+              2
+            ],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "And stair five: five plus three is eight.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[5] = 5 + 3 = 8"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 5,
+            "from_cells": [
+              4,
+              3
+            ],
+            "op": "sum",
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "The last box is the answer. Eight ways, and no route was ever listed.",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "return table[n]"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "run",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              7
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "Stair 4 can be reached 5 ways and stair 5 in 8. How many ways reach stair 6?",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "Stair 4 can be reached 5 ways and stair 5 in 8. How many ways reach stair 6?"
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Stair 4 can be reached 5 ways and stair 5 in 8. How many ways reach stair 6?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b5",
+          "spoken_text": "Thirteen: five plus eight.",
+          "claim_ids": [
+            "s3_b5_c"
+          ],
+          "visual_anchors": [
+            "Thirteen: five plus eight."
+          ],
+          "claim_requirements": {
+            "s3_b5_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "Thirteen: five plus eight.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    }
+  ]
+}

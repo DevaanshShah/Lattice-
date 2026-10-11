@@ -9,6 +9,7 @@ from verification.visual_plan_validation import validate
 
 EXPECTED = {"binary_search", "binary_search_manim", "binary_search_stills", "chart_compare",
             "code_and_picture", "legacy_cards", "structured_args", "system_map", "taught_map",
+            "taught_search", "taught_stairs",
             "tool_flow"}
 
 

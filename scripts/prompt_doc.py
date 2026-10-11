@@ -34,12 +34,15 @@ are compiled by code (`planner/lesson_map.py`), so it has no visual prompt.
 
 One call per video, up to three attempts. Code: `planner/lesson_plan.py` `generate`.
 
-The recipe picked for the topic decides which of two system prompts is sent (`board` in
+The recipe picked for the topic decides which one of these system prompts is sent (`board` in
 `prompts/product_video_recipes.json`); the model is never sent both.
 
 ### System prompt, map lesson
 
 {_block("lesson-plan-map.md")}
+### System prompt, trace lesson (algorithms: code beside data)
+
+{_block("lesson-plan-trace.md")}
 ### System prompt, any other lesson
 
 {_block("lesson-plan-v2.md")}

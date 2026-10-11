@@ -8,8 +8,7 @@ from core.llm import LLMClient, get_client
 from core.schemas.lesson_plan import LessonPlan
 from core.textutil import extract_json
 from core.visual_assets import asset_inventory
-from planner.lesson_map import (craft_problems, fill_map_lesson, lesson_map_problems,
-                                plan_map_scenes)
+from planner.playbooks import PLAYBOOKS
 from planner.product_recipe import Recipe
 from prompts.loader import load
 
@@ -47,10 +46,10 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     if schema_version not in (1, 2):
         raise ValueError(f"unsupported lesson plan schema version: {schema_version}")
     client = client or get_client()
-    # The recipe decides the board. A map lesson gets the map prompt and the icon list; any
-    # other lesson gets the general prompt, which never mentions maps.
-    on_map = schema_version == 2 and skill.board == "map"
-    icons = asset_inventory()["icons"] if on_map else []
+    # The recipe decides the board, and the board its playbook: a prompt of its own, a menu of
+    # moves, and the code that draws them. A board without a playbook gets the general prompt.
+    playbook = PLAYBOOKS.get(skill.board) if schema_version == 2 else None
+    icons = asset_inventory()["icons"] if playbook is not None and playbook.needs_icons else []
     contract = f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
     if schema_version == 1:
         contract += f"\nRequired visual roles: {', '.join(skill.required_roles)}"
@@ -60,13 +59,13 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
                  if words else (0, 0))
     # A model follows a count of sentences far better than a count of words, so the budget is
     # also given as beats and scenes.
-    beats = round(words / WORDS_PER_BEAT) if words else 0
+    beats = round(words / (playbook.beat_words if playbook is not None else WORDS_PER_BEAT)) if words else 0
     # On a map the check question and its answer are added by code: two beats the model does not write.
-    own = max(3, beats - 2) if on_map else beats
+    own = max(3, beats - 2) if playbook is not None else beats
     length = (f"Length: the narration (all spoken_text together) is about {words} words, between "
               f"{low} and {high}"
               + (", counting the check question and its answer, which are added after your last "
-                 "beat" if on_map else "")
+                 "beat" if playbook is not None else "")
               + f". Write about {own} beats, in "
               f"{max(2, min(5, round(own / BEATS_PER_SCENE)))} scenes; do not write more."
               + "\n" if words else "")
@@ -75,7 +74,8 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     length += "\n" if length else ""
     messages = [
         {"role": "system", "content": load(
-            "lesson-plan-map" if on_map else "lesson-plan-v2" if schema_version == 2 else "lesson-plan")},
+            playbook.prompt if playbook is not None
+            else "lesson-plan-v2" if schema_version == 2 else "lesson-plan")},
         {"role": "user", "content": f"Topic: {topic}\n\n{contract}\n\n"
                                     + (f"Icon list: {', '.join(icons)}\n\n" if icons else "")
                                     + length
@@ -91,19 +91,22 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             (folder / f"lesson_attempt_{attempt + 1:02d}.txt").write_text(raw, encoding="utf-8")
         try:
             data = extract_json(raw)
-            if on_map and not isinstance(data.get("map"), dict):
-                raise ValueError('this lesson is taught on a map: return the "map" and a "move" '
-                                 "for every beat")
-            if schema_version == 2 and not on_map and data.get("map") is not None:
-                raise ValueError('this lesson is not taught on a map: leave "map" out')
-            if on_map:
-                data = fill_map_lesson(data)
+            if playbook is not None and not isinstance(data.get(playbook.key), dict):
+                raise ValueError(f'this lesson is taught on a {playbook.key}: return the '
+                                 f'"{playbook.key}" and a "move" for every beat')
+            for other in PLAYBOOKS.values():
+                if schema_version == 2 and other is not playbook and data.get(other.key) is not None:
+                    raise ValueError(f'this lesson is not taught on a {other.key}: leave '
+                                     f'"{other.key}" out')
+            if playbook is not None:
+                data = playbook.fill(data)
             data["topic"] = topic
             data["skill_id"] = skill.id
             data["schema_version"] = schema_version
             plan = LessonPlan.model_validate(data)
-            missing_anchors = [beat.id for scene in plan.scenes for beat in scene.beats
-                               if not beat.visual_anchors]
+            # a playbook's anchors come from its moves, and are checked when it is compiled
+            missing_anchors = [] if playbook is not None else [
+                beat.id for scene in plan.scenes for beat in scene.beats if not beat.visual_anchors]
             if missing_anchors:
                 raise ValueError(f"visual_anchors required for beat(s): {missing_anchors}")
             spoken = sum(len(beat.spoken_text.split()) for scene in plan.scenes for beat in scene.beats)
@@ -112,14 +115,15 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
                                  "by adding or removing beats, not by padding sentences")
             if max_scenes and schema_version == 2 and len(plan.scenes) > max_scenes:
                 raise ValueError(f"{len(plan.scenes)} scenes; use at most {max_scenes}")
-            problems = lesson_map_problems(plan, icons)
-            if problems:
-                raise ValueError("the map lesson cannot be drawn as written: " + "; ".join(problems[:6]))
-            if plan.map is not None:
+            if playbook is not None:
+                problems = playbook.problems(plan, icons)
+                if problems:
+                    raise ValueError(f"the {playbook.key} lesson cannot be drawn as written: "
+                                     + "; ".join(problems[:6]))
                 # The picture is compiled from the moves, so a lesson that cannot be drawn is
                 # found here and repaired by the one call that wrote it.
-                scenes = plan_map_scenes(plan, skill)
-                weak = craft_problems(plan, scenes)
+                scenes = playbook.scenes(plan, skill)
+                weak = playbook.craft(plan, scenes)
                 if weak:
                     raise ValueError("as teaching this falls short: " + "; ".join(weak[:4]))
             return plan

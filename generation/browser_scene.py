@@ -46,6 +46,9 @@ _SEMANTIC_CSS = """
 .semantic-cells{display:flex;justify-content:center;gap:10px;max-width:100%}
 .semantic-cell{position:relative;width:min(11vw,110px);min-width:60px;height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid #61758c;border-radius:14px;background:#1a2633;font:650 34px/1 Segoe UI,system-ui,sans-serif}
 .semantic-cell.is-discarded{opacity:.22;border-color:#4c4d55;background:#17171b}
+.semantic-cell.is-empty{border-style:dashed;border-color:#3a4656;background:transparent}
+.semantic-cell.is-lit{border-color:#fbbf24;box-shadow:0 0 0 3px #fbbf2444}
+.semantic-cell.is-new{border-color:#2dd4bf;background:#11302d;box-shadow:0 0 26px #2dd4bf66}
 .semantic-cell.is-pointed{border-color:var(--amber);background:#3c2d18;box-shadow:0 0 28px #edb34a55}
 .semantic-index{font:500 15px/1 Segoe UI,system-ui,sans-serif;color:var(--muted);margin-top:11px}
 .semantic-pointer-label{height:26px;margin-bottom:10px;font:700 18px/1 Segoe UI,system-ui,sans-serif;color:var(--amber)}
@@ -251,6 +254,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
         ident = f'data-object-id="{escape(obj.id)}"'
         if obj.kind == "array":
             discarded = set(payload.get("discarded_indices", []))
+            # a table being filled: empty cells, the cells a value is read from, the cell just written
+            read, written = set(payload.get("lit_indices") or []), payload.get("new_index")
             cells = []
             for index, item in enumerate(payload["items"]):
                 here = [pointer for pointer in pointers
@@ -258,6 +263,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                         and state.payloads[pointer.id]["index"] == index]
                 pointed = " is-pointed" if here else ""
                 dimmed = " is-discarded" if index in discarded else ""
+                dimmed += " is-empty" if item is None else ""
+                dimmed += " is-new" if index == written else " is-lit" if index in read else ""
                 pointer_label = " / ".join(
                     f'<span data-visual-key="{escape(pointer.id)}">{escape(pointer.label)}</span>'
                     for pointer in here)
@@ -268,7 +275,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                 cells.append(f'<div class="semantic-cell-wrap"><div class="semantic-pointer-label">'
                              f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}" '
                              f'data-visual-key="{escape(obj.id)}:cell:{index}">'
-                             f'{escape(str(item))}{marker}<span class="semantic-index">{index}</span></div></div>')
+                             f'{"" if item is None else escape(str(item))}{marker}'
+                             f'<span class="semantic-index">{index}</span></div></div>')
             html = (f'<section class="semantic-object{flags} semantic-array" {ident}>'
                     f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
                     f'{"".join(cells)}</div></section>')

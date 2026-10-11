@@ -12,7 +12,7 @@ from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, closing_state
 from core.visual_assets import asset_inventory
 from core.textutil import extract_json
-from planner.lesson_map import plan_map_scenes
+from planner.playbooks import playbook_of
 from planner.lesson_plan import JSON_ONLY, PLAN_EXTRA, TRANSPORT_ATTEMPTS
 from planner.product_recipe import Recipe
 from prompts.loader import load
@@ -180,10 +180,11 @@ def generate(lesson: LessonPlan, skill: Recipe, *, client: LLMClient | None = No
     if schema_version != lesson.schema_version:
         raise ValueError("visual planner schema version must match lesson plan")
     client = client or get_client()
-    if schema_version == 2 and lesson.map is not None:
-        # A map lesson already says what happens in every beat: code writes its scenes.
+    playbook = playbook_of(lesson) if schema_version == 2 else None
+    if playbook is not None:
+        # A lesson with a playbook already says what happens in every beat: code writes its scenes.
         plan = BrowserVisualPlan(schema_version=2, topic=lesson.topic, skill_id=skill.id,
-                                 scenes=plan_map_scenes(lesson, skill))
+                                 scenes=playbook.scenes(lesson, skill))
         validate(lesson, plan, skill)
         return plan
     scenes: list[BrowserScene] = list(starting_scenes or [])

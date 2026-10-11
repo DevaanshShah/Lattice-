@@ -622,7 +622,7 @@ def test_one_dropped_connection_does_not_end_lesson_planning(monkeypatch):
     monkeypatch.setattr(llm_mod.time, "sleep", lambda _s: None)
     client = llm_mod.LLMClient(model="m")
     client._client = fake
-    lesson = lesson_planner.generate("Order lookup", recipes()["algorithm_explainer"],
+    lesson = lesson_planner.generate("Order lookup", recipes()["metric_story"],
                                      client=client, schema_version=2)
     assert len(calls) == 2              # the dropped call was retried once, then answered
     assert len(lesson.scenes) == 3

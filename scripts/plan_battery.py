@@ -74,7 +74,7 @@ def _slug(text: str, n: int = 40) -> str:
 def plan_topic(topic: str, client: CappedClient, out_dir: Path) -> TopicResult:
     from core.llm import reset_usage, usage_snapshot
     from planner import browser_visual_plan, lesson_plan
-    from planner.lesson_map import story_shape
+    from planner.lesson_shared import story_shape
     from planner.product_recipe import pick_recipe
 
     result = TopicResult(topic)

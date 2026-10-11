@@ -1,0 +1,561 @@
+{
+  "schema_version": 2,
+  "topic": "Why binary search needs so few checks",
+  "skill_id": "algorithm_explainer",
+  "learning_objective": "Explain why binary search needs so few checks on a sorted list.",
+  "audience": "A beginner who can read a simple loop.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner who can read a simple loop.",
+    "can_do": "Explain why binary search needs so few checks on a sorted list.",
+    "question": "Do we really have to check every number to find one?",
+    "problem": "Seven sorted numbers, 3 8 12 17 21 30 44, and we want to know where 30 is.",
+    "naive_attempt": "Check from the left, one number at a time. It takes six checks here, and more as the list grows.",
+    "turning_point": "Because the list is sorted, one look at the middle rules out half of it.",
+    "check_question": "A sorted list has 1,000 numbers. About how many checks does binary search need?",
+    "check_answer": "About ten, because every check halves what is left."
+  },
+  "map": null,
+  "trace": {
+    "code": {
+      "title": "find.py",
+      "source": "def find(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+    },
+    "data": [
+      {
+        "id": "numbers",
+        "kind": "array",
+        "label": "Sorted list",
+        "items": [
+          3,
+          8,
+          12,
+          17,
+          21,
+          30,
+          44
+        ],
+        "size": null,
+        "on": null,
+        "value": null,
+        "counts": null
+      },
+      {
+        "id": "target",
+        "kind": "value",
+        "label": "Target",
+        "items": [],
+        "size": null,
+        "on": null,
+        "value": 30,
+        "counts": null
+      },
+      {
+        "id": "scan",
+        "kind": "pointer",
+        "label": "check",
+        "items": [],
+        "size": null,
+        "on": "numbers",
+        "value": null,
+        "counts": null
+      },
+      {
+        "id": "mid",
+        "kind": "pointer",
+        "label": "mid",
+        "items": [],
+        "size": null,
+        "on": "numbers",
+        "value": null,
+        "counts": null
+      },
+      {
+        "id": "slow",
+        "kind": "counter",
+        "label": "One by one",
+        "items": [],
+        "size": null,
+        "on": null,
+        "value": null,
+        "counts": "scan"
+      },
+      {
+        "id": "fast",
+        "kind": "counter",
+        "label": "Binary search",
+        "items": [],
+        "size": null,
+        "on": null,
+        "value": null,
+        "counts": "mid"
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "One by one",
+      "learning_goal": "See what checking every number costs.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "Here are seven sorted numbers, and we want to know where thirty is.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Sorted list",
+            "Target"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "show",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [
+              "numbers",
+              "target"
+            ],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "The obvious way is to start at the left and check each number in turn, until we reach thirty.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "30 ✓",
+            "One by one: 6"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "compare",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": "scan",
+            "index": null,
+            "against": "target",
+            "array": null,
+            "cells": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "Do we really have to check every number to find one?",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "Do we really have to check every number to find one?"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Do we really have to check every number to find one?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Six checks to find one number"
+    },
+    {
+      "id": "s2",
+      "title": "Look in the middle",
+      "learning_goal": "See one check rule out half the list.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "Wipe the marks and start again, this time with the code on screen.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "def find(items, target):",
+            "Sorted list"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "clear",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              1
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "numbers",
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "Binary search looks at the middle first: position three, which holds seventeen.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "mid = (low + high) // 2",
+            "mid: 17"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "value"
+            ]
+          },
+          "move": {
+            "do": "look",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              4
+            ],
+            "items": [],
+            "pointer": "mid",
+            "index": 3,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s2_b3",
+          "spoken_text": "Seventeen is not thirty.",
+          "claim_ids": [
+            "s2_b3_c"
+          ],
+          "visual_anchors": [
+            "if items[mid] == target:",
+            "17 ✗",
+            "Binary search: 1"
+          ],
+          "claim_requirements": {
+            "s2_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "compare",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              5
+            ],
+            "items": [],
+            "pointer": "mid",
+            "index": null,
+            "against": "target",
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s2_b4",
+          "spoken_text": "But it is smaller, and the list is sorted, so everything up to seventeen is ruled out at once.",
+          "claim_ids": [
+            "s2_b4_c"
+          ],
+          "visual_anchors": [
+            "if items[mid] < target:",
+            "discard [3,8,12,17]"
+          ],
+          "claim_requirements": {
+            "s2_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "discard",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              7,
+              8
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": "numbers",
+            "cells": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "One look removed half the list"
+    },
+    {
+      "id": "s3",
+      "title": "Again, on what is left",
+      "learning_goal": "See the search finish in two checks.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "The middle of what remains is position five, and it holds thirty.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "mid = (low + high) // 2",
+            "30 ✓",
+            "Binary search: 2"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "compare",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              4,
+              5
+            ],
+            "items": [],
+            "pointer": "mid",
+            "index": 5,
+            "against": "target",
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "Found in two checks, where checking one by one took six.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "return mid"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "run",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "A sorted list has 1,000 numbers. About how many checks does binary search need?",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "A sorted list has 1,000 numbers. About how many checks does binary search need?"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "A sorted list has 1,000 numbers. About how many checks does binary search need?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "About ten, because every check halves what is left.",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "About ten, because every check halves what is left."
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "About ten, because every check halves what is left.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "from_cells": [],
+            "op": null,
+            "plus": 0.0,
+            "counter": null
+          }
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": null
+    }
+  ]
+}

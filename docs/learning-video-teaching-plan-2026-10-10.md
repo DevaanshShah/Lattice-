@@ -123,6 +123,12 @@ above 5 of 6. Cap: $0.30.
 
 No new drawing.
 
+**Status on 2026-10-11: item 1 is built.** There is a registry (`planner/playbooks.py`) with
+two playbooks, map and trace, and the planners go through it. Item 2 is not built as written:
+the brief is written in the same call as the lesson, so the playbook has to be known before
+that call, and it still comes from keyword matching on the topic. A small routing step is the
+open piece. Item 3 (several playbooks in one lesson) is not built.
+
 1. **A playbook registry.** One place lists each playbook: its name, a one-line description of
    what it is for, its lesson prompt, its move menu, its compiler and its craft checks. The map
    is the first entry. Keyword matching on `board` in the recipes file is removed.
@@ -142,6 +148,23 @@ battery once (cap $0.10).
 
 Code on the left, data on the right. The renderer already draws the code window with a moving
 highlight, an array, a pointer, tick and cross marks, discarded cells and a counter.
+
+**Status on 2026-10-11: built, proved on two hand-written lessons, and run live four times.**
+On `deepseek/deepseek-v4.1-flash` the first version of the prompt planned 0 of 2; after four
+fixes found from those answers it planned 2 of 2 (binary search, climbing stairs). That is too
+few runs for a pass rate, so the gate below is open. The AI-written binary-search lesson is
+rendered in `out/phase4_review/ai_binary_search/`. Its weak spot is the naive attempt for
+climbing stairs: with no recursion tree to draw (Phase D), the model acts it out with moves
+that mean something else.
+
+Items 1 to 5 are in the code, with two changes from what is written below. The
+working of a filled cell is shown as a line under the table ("Ways[3] = 2 + 1 = 3") with the
+cells it reads lit, not as arrows between cells. And the trace checks do not run the lesson's
+code: the model names which cells are compared or combined, and code works out every result,
+so the numbers on screen cannot be wrong, but nothing checks that the moves follow the code.
+Added on the way: a compare over several cells in one beat, a counter that counts a pointer's
+checks by itself, and a clear move for starting a second attempt on the same data. Fixtures:
+`taught_search` and `taught_stairs`. Item 6 (use of the frame) is done for traces only.
 
 1. **Hand-written fixtures first.** `binary_search` exists. Add `dp_stairs`: climbing five
    stairs, a table of answers filled from left to right, each cell lit together with the two
@@ -176,8 +199,9 @@ These are available to every playbook.
    put a line of text under the map; the opening question is the brief's; the check question
    and its answer are added by code after the last beat, with a 1.6-second hold between them.
    Proved on the hand-written fixture `taught_map`, which is compiled by the same code as an
-   AI-written lesson. Its live check was cut short by a network outage and is still owed,
-   together with Phase A's gate.
+   AI-written lesson. Live, with the ask move in the prompt, two system lessons planned out of
+   two (food delivery on the first call, backpropagation on the second). Phase A's gate of five
+   in six is still owed.
 2. **A recursion tree with a work counter.** Calls grow as a tree, a repeated call is marked,
    and a counter shows the work done. This is the picture of the need for dynamic programming,
    shown before the table that solves it.
