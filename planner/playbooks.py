@@ -25,18 +25,23 @@ class Playbook:
     scenes: Callable    # compile every scene, checked by the validator
     craft: Callable     # where the lesson falls short as teaching
     shortest: int = 0   # seconds below which this kind of lesson is not asked for
+    guided: bool = True     # whether the recipe's own outline is sent as well as the prompt
+    facts: Callable | None = None   # what code works out from the picture alone, sent with a repair
 
 
 PLAYBOOKS = {
     "map": Playbook("map", "map", "lesson-plan-map", True, 17, lesson_map.fill_map_lesson,
                     lesson_map.lesson_map_problems, lesson_map.plan_map_scenes,
                     lesson_map.craft_problems),
-    # sentences about a step of an algorithm are short ("Seventeen is not thirty."), so more beats.
+    # A sentence that carries the reason for a step runs to about fifteen words; sized any
+    # shorter, a lesson that explains itself comes out over length and is sent back for it.
+    # The recipe's outline is not sent: it is an older story than the prompt's and was read last.
     # An algorithm needs a naive attempt, a better one and the reason between them: reviewed at
     # 45 seconds, every lesson rushed its core, so none is asked for in under ninety.
-    "trace": Playbook("trace", "trace", "lesson-plan-trace", False, 13, lesson_trace.fill_trace_lesson,
+    "trace": Playbook("trace", "trace", "lesson-plan-trace", False, 15, lesson_trace.fill_trace_lesson,
                       lesson_trace.trace_problems, lesson_trace.plan_trace_scenes,
-                      lesson_trace.craft_trace, shortest=90),
+                      lesson_trace.craft_trace, shortest=90, guided=False,
+                      facts=lesson_trace.trace_facts),
 }
 
 

@@ -117,9 +117,21 @@ and the renderer both use this replay, so they agree on what is on screen.
 
 The check question and its answer are not written by the model. `fill_map_lesson` appends them
 after the last beat, as an `ask` and an `answer` in the brief's own words, and the compiler
-holds the picture for 3 seconds between them (`pause_after`). A scene has at most one question
+holds the picture for 4 seconds between them (`pause_after`). A scene has at most one question
 and one answer. Piece ids written loosely are tidied by code wherever they are used, and what an
 `ask` beat speaks is the question it shows.
+
+The reason behind the idea is said by construction on a trace. The brief's `turning_point` is
+written as a reason ("Because ..., ..."), and a `turn` move shows and speaks it at the beat
+where the better idea begins; a trace lesson without one is sent back. On the beat after it code
+puts the first attempt away: marks wiped, its pointers, used-up values and tree gone, its
+counters keeping their totals. A beat may carry `why`, the model's own reason for the step,
+written before the sentence and never shown: with reasoning off it is the only room to think.
+
+A lesson that is sent back gets every fault of its moves at once, named by beat, without the
+validator's boilerplate, with what code works out from its trace (each table cell by cell, each
+tree's calls), and told to change only what is named. Only the latest answer is sent back with
+it. A fault repeated unchanged is answered with a stronger instruction.
 
 Pacing is code's job in both playbooks. Every beat is followed by 0.4 seconds of silence, and a
 scene's last beat by 0.9. A beat also carries the least time its steps need (`min_seconds`): 1.8
@@ -135,7 +147,7 @@ recipe's `board` names the playbook.
 | Playbook | For | Picture | Moves |
 |---|---|---|---|
 | `map` | systems and processes | icon pieces joined by arrows | introduce, send, trouble, fix, measure, point, remove |
-| `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, take, discard, fill, count, clear, grow, spot, remove |
+| `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, take, discard, fill, count, clear, grow, spot, remove, turn |
 
 Both also take `ask` and `answer`. On a trace any move may light lines of the code, and code
 works out every result: a compare is decided by the values on screen, a table is worked out in

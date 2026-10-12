@@ -11,7 +11,7 @@
     "question": "Is taking the biggest coin first always the fewest coins?",
     "problem": "Make 6 from coins worth 1, 3 and 4, using as few coins as possible.",
     "naive_attempt": "Take the biggest coin that fits, again and again: a 4, then a 1, then another 1. Three coins.",
-    "turning_point": "The fewest coins for an amount is one coin more than the fewest for a smaller amount.",
+    "turning_point": "Because the last coin leaves a smaller amount, the fewest for an amount is one more than the fewest for that.",
     "check_question": "With coins of 1, 3 and 4, what is the fewest coins that make 7?",
     "check_answer": "Two: a three and a four."
   },
@@ -160,7 +160,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b2",
@@ -199,7 +200,8 @@
             "tree": null,
             "depth": null,
             "expect": 2.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b3",
@@ -238,7 +240,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b4",
@@ -277,7 +280,8 @@
             "tree": null,
             "depth": null,
             "expect": 0.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b5",
@@ -314,7 +318,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -328,13 +333,12 @@
       "beats": [
         {
           "id": "s2_b1",
-          "spoken_text": "Put that attempt aside, and look at the code for a way that cannot be fooled.",
+          "spoken_text": "Because the last coin leaves a smaller amount, the fewest for an amount is one more than the fewest for that.",
           "claim_ids": [
             "s2_b1_c"
           ],
           "visual_anchors": [
-            "def fewest(coins, amount):",
-            "Coins"
+            "Because the last coin leaves a smaller amount, the fewest for an amount is one more than the fewest for that."
           ],
           "claim_requirements": {
             "s2_b1_c": [
@@ -342,29 +346,28 @@
             ]
           },
           "move": {
-            "do": "clear",
-            "text": null,
+            "do": "turn",
+            "text": "Because the last coin leaves a smaller amount, the fewest for an amount is one more than the fewest for that.",
             "pieces": [],
             "path": [],
             "meter": null,
             "value": null,
             "count": 1,
-            "lines": [
-              1
-            ],
+            "lines": [],
             "items": [],
             "pointer": null,
             "index": null,
             "against": null,
             "out_of": null,
-            "array": "coins",
+            "array": null,
             "cells": [],
             "cell": null,
             "counter": null,
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b2",
@@ -406,7 +409,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b3",
@@ -446,7 +450,8 @@
             "tree": null,
             "depth": null,
             "expect": 0.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b4",
@@ -486,7 +491,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b5",
@@ -526,7 +532,8 @@
             "tree": null,
             "depth": null,
             "expect": 2.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b6",
@@ -568,7 +575,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -624,7 +632,8 @@
               1.0,
               2.0
             ]
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b2",
@@ -666,7 +675,8 @@
             "tree": null,
             "depth": null,
             "expect": 2.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b3",
@@ -705,7 +715,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b4",
@@ -742,7 +753,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b5",
@@ -779,7 +791,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,

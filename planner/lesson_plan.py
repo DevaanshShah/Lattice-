@@ -38,6 +38,29 @@ WORDS_PER_BEAT = 17       # one spoken sentence; a lesson's size is given to the
 BEATS_PER_SCENE = 3.5
 
 
+def _reason(exc: Exception) -> str:
+    """Why an answer is sent back, in words a model can act on: every fault with the beat or item
+    it is in, and none of the validator's own boilerplate. A live lesson spent five tries going
+    back and forth between two faults it could not see for eighty lines of noise."""
+    if not isinstance(exc, ValidationError):
+        return str(exc)
+    faults = []
+    for error in exc.errors():
+        where = [str(part) for part in error["loc"]]
+        if where[:1] == ["scenes"] and len(where) >= 4 and where[2] == "beats":
+            place = f"beat s{int(where[1]) + 1}_b{int(where[3]) + 1}"
+            rest = [part for part in where[4:] if part != "move"]
+        elif where[:1] == ["scenes"] and len(where) >= 2:
+            place, rest = f"scene {int(where[1]) + 1}", where[2:]
+        elif where[:2] == ["trace", "data"] and len(where) >= 3:
+            place, rest = f"item {int(where[2]) + 1} of the trace's data", where[3:]
+        else:
+            place, rest = ".".join(where[:1]) or "the lesson", where[1:]
+        faults.append(" ".join([place, *rest]) + ": " + error["msg"].removeprefix("Value error, "))
+    faults = list(dict.fromkeys(faults))
+    return "; ".join(faults[:8]) + (f"; and {len(faults) - 8} more like these" if len(faults) > 8 else "")
+
+
 def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3,
              schema_version: int = 1, target_seconds: float | None = None,
              max_scenes: int | None = None, on_reject=None,
@@ -51,7 +74,8 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     # moves, and the code that draws them. A board without a playbook gets the general prompt.
     playbook = PLAYBOOKS.get(skill.board) if schema_version == 2 else None
     icons = asset_inventory()["icons"] if playbook is not None and playbook.needs_icons else []
-    contract = f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
+    contract = (f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
+                if playbook is None or playbook.guided else "")
     if schema_version == 1:
         contract += f"\nRequired visual roles: {', '.join(skill.required_roles)}"
     if playbook is not None and target_seconds:
@@ -79,7 +103,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
         {"role": "system", "content": load(
             playbook.prompt if playbook is not None
             else "lesson-plan-v2" if schema_version == 2 else "lesson-plan")},
-        {"role": "user", "content": f"Topic: {topic}\n\n{contract}\n\n"
+        {"role": "user", "content": f"Topic: {topic}\n\n" + (f"{contract}\n\n" if contract else "")
                                     + (f"Icon list: {', '.join(icons)}\n\n" if icons else "")
                                     + length
                                     + "Return the lesson plan JSON now."},
@@ -88,7 +112,10 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     # A lesson with a playbook is checked much harder (its numbers, its order, its room in the
     # frame), and every rejection says exactly what to change, so it is given more tries.
     tries = max(attempts, PLAYBOOK_ATTEMPTS) if playbook is not None else attempts
+    asked = list(messages)
+    before = None
     for attempt in range(tries):
+        data = None
         raw = client.chat(messages, max_tokens=4096, attempts=TRANSPORT_ATTEMPTS, timeout=60.0,
                           response_format=JSON_ONLY, extra_body=PLAN_EXTRA)
         if diagnostic_dir is not None:      # what the model actually wrote, kept for diagnosis
@@ -135,8 +162,29 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             return plan
         except (ValueError, ValidationError) as exc:
             last = exc
+            reason = _reason(exc)
             if on_reject is not None:
-                on_reject(str(exc))
-            messages += [{"role": "assistant", "content": raw},
-                         {"role": "user", "content": f"That was invalid ({exc}). Return only valid JSON."}]
-    raise LessonPlanError(f"lesson plan invalid after {tries} attempts: {last}")
+                on_reject(reason)
+            repair = f"That was invalid ({reason}). Return only valid JSON."
+            if playbook is not None:
+                # A reviewed lesson showed what a bare reason invites: the checked number is
+                # changed, a step is added so a count comes out, and the sentence is left wrong.
+                facts = playbook.facts(data) if playbook.facts is not None and isinstance(data, dict) else ""
+                repair += (" Change what this names and nothing else: return the whole plan with "
+                           "every other beat exactly as it was. If you change a number in a move, "
+                           "rewrite that beat's sentence to say the same number. Do not add a step "
+                           "to make a count come out, and do not delete a move to make an error "
+                           "go away." + (f" Worked out from your trace: {facts}." if facts else ""))
+                if reason == before:
+                    # the same fault twice: the move cannot do what the lesson wants of it
+                    repair += (" This is the same fault as last time, so the change you made did "
+                               "not touch it. If a move cannot do what you want, replace it with a "
+                               "show move that lights the items the sentence is about, and let the "
+                               "sentence carry the step.")
+                before = reason
+                # only the latest answer goes back: earlier ones are the faults already repaired
+                messages = asked + [{"role": "assistant", "content": raw},
+                                    {"role": "user", "content": repair}]
+            else:
+                messages += [{"role": "assistant", "content": raw}, {"role": "user", "content": repair}]
+    raise LessonPlanError(f"lesson plan invalid after {tries} attempts: {_reason(last)}")

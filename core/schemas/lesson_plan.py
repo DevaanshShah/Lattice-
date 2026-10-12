@@ -101,7 +101,7 @@ LINE_LENGTH = 110
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
 TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
                "grow", "spot", "take", "remove")
-LINE_MOVES = ("ask", "answer")        # a line of text under the picture, in any lesson
+LINE_MOVES = ("ask", "answer", "turn")    # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
 _TAKES = {
@@ -109,7 +109,7 @@ _TAKES = {
     "grow": {"tree", "depth", "lines"}, "spot": {"tree", "value", "lines"},
     "send": {"path", "count"}, "trouble": {"pieces", "meter", "value", "path", "count"},
     "fix": {"pieces", "meter", "value"}, "measure": {"meter", "value"},
-    "ask": {"text"}, "answer": {"text"},
+    "ask": {"text"}, "answer": {"text"}, "turn": {"text"},
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "take": {"pointer", "index", "out_of", "expect", "lines"},
@@ -121,9 +121,11 @@ _NEEDS = {
     "send": "a send move needs a path of two or more pieces",
     "measure": "a measure move needs a meter and a value",
     "ask": "an ask move needs the question it shows, as text",
+    "turn": "a turn move needs the turning point it shows, as text",
     "answer": "an answer move needs the answer it shows, as text",
     "show": "a show move needs the items it puts on screen",
-    "run": "a run move needs the lines of code it lights",
+    "run": "a run move needs the lines of code it lights; for a sentence that only explains what "
+           "is on screen, use a show move naming the items it is about",
     "look": "a look move needs a pointer and the index of the cell it points at",
     "compare": "a compare move needs a pointer and the value it is compared against",
     "take": 'a take move needs a pointer, the value its cell is taken out of in "out_of", and '
@@ -145,7 +147,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "grow", "spot", "take", "ask", "answer"]
+                "grow", "spot", "take", "ask", "answer", "turn"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -189,7 +191,7 @@ class BeatMove(BaseModel):
             "send": len(self.path) < 2, "measure": self.meter is None,
             "trouble": not self.pieces and self.meter is None,
             "fix": not self.pieces and self.meter is None,
-            "ask": not self.text, "answer": not self.text,
+            "ask": not self.text, "answer": not self.text, "turn": not self.text,
             "show": not self.items, "run": not self.lines,
             "look": self.pointer is None or self.index is None,
             "compare": self.pointer is None or self.against is None,
@@ -225,8 +227,10 @@ class BeatMove(BaseModel):
             raise ValueError("lines of code are counted from 1")
         if self.text is not None:
             if len(self.text) > LINE_LENGTH:
-                raise ValueError(f"the text of an {self.do} move is shown under the picture: at "
-                                 f"most {LINE_LENGTH} characters, not {len(self.text)}")
+                source = {"ask": "; it is the brief's question, so shorten that",
+                          "turn": "; it is the brief's turning_point, so shorten that"}.get(self.do, "")
+                raise ValueError(f"the text of {a} {self.do} move is shown under the picture: at "
+                                 f"most {LINE_LENGTH} characters, not {len(self.text)}{source}")
             if self.do == "ask" and not self.text.rstrip().endswith("?"):
                 raise ValueError("the text of an ask move is a question, ending in '?'")
         return self
@@ -240,6 +244,9 @@ class LessonBeat(BaseModel):
     visual_anchors: list[str] = Field(default_factory=list)
     claim_requirements: dict[str, list[VisualRequirement]] = Field(default_factory=dict)
     move: BeatMove | None = None      # set on every beat of a map lesson, and only there
+    # The model's own reason for this step, written before the sentence and never shown or spoken.
+    # With no hidden reasoning, what a model writes first is where it thinks.
+    why: str | None = None
 
     @model_validator(mode="after")
     def _requirements_reference_claims(self) -> "LessonBeat":
@@ -341,6 +348,10 @@ class TraceItem(BaseModel):
                              "starts empty and is filled")
         if self.kind == "array" and self.items and len(self.items) < 2:
             raise ValueError(f"trace array {self.id!r} needs at least two items")
+        wide = [item for item in self.items if len(str(item)) > 7]
+        if wide:
+            raise ValueError(f"trace array {self.id!r}: {wide[0]!r} does not fit in a cell; an "
+                             "item is at most seven characters")
         if self.rule is not None and self.items:
             raise ValueError(f'trace array {self.id!r} has a rule, so it starts empty and is filled '
                              'in: give it "size", not "items"')
@@ -490,6 +501,9 @@ class LessonPlan(BaseModel):
             self._moves_fit_the_map(beats)
         else:
             self._moves_fit_the_trace(beats)
+        turns = [beat.id for beat in beats if beat.move.do == "turn"]
+        if len(turns) > 1:
+            raise ValueError(f"beats {turns} are both turn moves; a lesson has one turning point")
         for scene in self.scenes:       # the lines under the picture: room for a question and one more
             said = [beat.move.do for beat in scene.beats]
             if said.count("ask") > 1 or said.count("answer") > 1:
@@ -525,55 +539,70 @@ class LessonPlan(BaseModel):
                                  "'meter' for a meter")
 
     def _moves_fit_the_trace(self, beats: list[LessonBeat]) -> None:
+        """Every beat is checked, and the faults of all of them are reported together: a model
+        told of one fault a try mends one fault a try, and has five."""
         items = {item.id: item for item in self.trace.data}
         rows = len(self.trace.code.source.split("\n")) if self.trace.code else 0
+        faults = []
         for beat in beats:
-            move, where = beat.move, f"beat {beat.id}"
-            named = [*move.items, *(name for name in (move.pointer, move.against, move.out_of,
-                                                      move.array, move.counter, move.tree) if name)]
-            if move.pieces:
-                raise ValueError(f"{where}: a {move.do} move of a trace lesson names \"items\", "
-                                 "not pieces")
-            unknown = sorted(set(named) - set(items) - ({"code"} if rows else set()))
-            if unknown:
-                raise ValueError(f"{where}: move names {unknown}, not in the trace; the trace has "
-                                 f"{sorted(items) + (['code'] if rows else [])}")
-            outside = [line for line in move.lines if line > rows]
-            if outside:
-                raise ValueError(f"{where}: the code has lines 1 to {rows}; there is no line "
-                                 f"{outside[0]}" if rows else
-                                 f"{where}: the move lights lines of code, but the trace has no code")
-            for name, wanted in ((move.pointer, "pointer"), (move.against, "value"),
-                                 (move.out_of, "value"), (move.array, "array"),
-                                 (move.counter, "counter"), (move.tree, "tree")):
-                if name and items[name].kind != wanted:
-                    raise ValueError(f"{where}: {name!r} is not {'an' if wanted == 'array' else 'a'} {wanted}")
-            array = items[items[move.pointer].on] if move.pointer else items.get(move.array)
-            cells = [*move.cells, *(cell for cell in (move.index, move.cell) if cell is not None)]
-            beyond = sorted(cell for cell in cells if array is not None
-                            and not array.base <= cell < array.base + array.length)
-            if beyond:
-                raise ValueError(f"{where}: {array.id!r} has cells {array.base} to "
-                                 f"{array.base + array.length - 1}; there is no cell {beyond[0]}")
-            if move.do == "count" and items[move.counter].counts and move.expect is None:
-                raise ValueError(f"{where}: {move.counter!r} counts by itself; say the total you "
-                                 'expect it to read in "expect", and it is checked')
-            if move.tree:
-                calls = items[move.tree].calls
-                deepest = max(call["depth"] for call in calls)
-                if move.depth is not None and move.depth > deepest:
-                    raise ValueError(f"{where}: {move.tree!r} is {deepest} levels deep; there is "
-                                     f"no level {move.depth}")
-                if move.do == "spot" and move.value not in {call["value"] for call in calls}:
-                    raise ValueError(f"{where}: {move.tree!r} never calls for {move.value:g}")
-            if move.do == "fill" and array.rule is not None and move.value is not None:
-                raise ValueError(
-                    f'{where}: {array.id!r} is filled by its rule, so a fill gives no "value". '
-                    "Name the cell and the number you say it holds, which is checked: "
-                    f'{{"do":"fill","array":"{array.id}","cell":{move.cell},'
-                    f'"expect":{move.value:g}}}')
-            if move.do == "fill" and array.rule is None and move.value is None:
-                raise ValueError(
-                    f"{where}: {array.id!r} has no rule to work a cell out from. State it once on "
-                    'the array, as "rule": {"start":[1,1],"back":[1,2],"op":"sum"}, or give the '
-                    'fill the "value" it writes')
+            try:
+                self._move_fits_the_trace(beat, items, rows)
+            except ValueError as fault:
+                faults.append(str(fault))
+        if faults:
+            raise ValueError("; ".join(faults[:6])
+                             + (f"; and {len(faults) - 6} more like these" if len(faults) > 6 else ""))
+
+    def _move_fits_the_trace(self, beat: LessonBeat, items: dict, rows: int) -> None:
+        move, where = beat.move, f"beat {beat.id}"
+        named = [*move.items, *(name for name in (move.pointer, move.against, move.out_of,
+                                                  move.array, move.counter, move.tree) if name)]
+        if move.pieces:
+            raise ValueError(f"{where}: a {move.do} move of a trace lesson names \"items\", "
+                             "not pieces")
+        unknown = sorted(set(named) - set(items) - ({"code"} if rows else set()))
+        if unknown:
+            raise ValueError(f"{where}: move names {unknown}, not in the trace; the trace has "
+                             f"{sorted(items) + (['code'] if rows else [])}")
+        outside = [line for line in move.lines if line > rows]
+        if outside:
+            raise ValueError(f"{where}: the code has lines 1 to {rows}; there is no line "
+                             f"{outside[0]}" if rows else
+                             f"{where}: the move lights lines of code, but the trace has no code")
+        for name, wanted in ((move.pointer, "pointer"), (move.against, "value"),
+                             (move.out_of, "value"), (move.array, "array"),
+                             (move.counter, "counter"), (move.tree, "tree")):
+            if name and items[name].kind != wanted:
+                how = (f'; to count it, add a counter to the trace\'s data with "counts": '
+                       f'"{name}" and name that counter here' if wanted == "counter" else "")
+                raise ValueError(f"{where}: {name!r} is not {'an' if wanted == 'array' else 'a'} "
+                                 f"{wanted}{how}")
+        array = items[items[move.pointer].on] if move.pointer else items.get(move.array)
+        cells = [*move.cells, *(cell for cell in (move.index, move.cell) if cell is not None)]
+        beyond = sorted(cell for cell in cells if array is not None
+                        and not array.base <= cell < array.base + array.length)
+        if beyond:
+            raise ValueError(f"{where}: {array.id!r} has cells {array.base} to "
+                             f"{array.base + array.length - 1}; there is no cell {beyond[0]}")
+        if move.do == "count" and items[move.counter].counts and move.expect is None:
+            raise ValueError(f"{where}: {move.counter!r} counts by itself; say the total you "
+                             'expect it to read in "expect", and it is checked')
+        if move.tree:
+            calls = items[move.tree].calls
+            deepest = max(call["depth"] for call in calls)
+            if move.depth is not None and move.depth > deepest:
+                raise ValueError(f"{where}: {move.tree!r} is {deepest} levels deep; there is "
+                                 f"no level {move.depth}")
+            if move.do == "spot" and move.value not in {call["value"] for call in calls}:
+                raise ValueError(f"{where}: {move.tree!r} never calls for {move.value:g}")
+        if move.do == "fill" and array.rule is not None and move.value is not None:
+            raise ValueError(
+                f'{where}: {array.id!r} is filled by its rule, so a fill gives no "value". '
+                "Name the cell and the number you say it holds, which is checked: "
+                f'{{"do":"fill","array":"{array.id}","cell":{move.cell},'
+                f'"expect":{move.value:g}}}')
+        if move.do == "fill" and array.rule is None and move.value is None:
+            raise ValueError(
+                f"{where}: {array.id!r} has no rule to work a cell out from. State it once on "
+                'the array, as "rule": {"start":[1,1],"back":[1,2],"op":"sum"}, or give the '
+                'fill the "value" it writes')

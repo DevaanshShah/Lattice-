@@ -82,6 +82,15 @@
           }
         },
         {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
           "id": "s1_b3_line",
           "kind": "caption",
           "role": "audit",
@@ -148,7 +157,7 @@
               "id": "s1_b2_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.1063
+              "end_fraction": 0.0938
             },
             {
               "kind": "compare",
@@ -158,8 +167,8 @@
               ],
               "id": "s1_b2_2",
               "params": {},
-              "start_fraction": 0.1063,
-              "end_fraction": 0.1526
+              "start_fraction": 0.0938,
+              "end_fraction": 0.1277
             },
             {
               "kind": "appear",
@@ -168,8 +177,8 @@
               ],
               "id": "s1_b2_3",
               "params": {},
-              "start_fraction": 0.1526,
-              "end_fraction": 0.1989
+              "start_fraction": 0.1277,
+              "end_fraction": 0.1615
             },
             {
               "kind": "increment",
@@ -178,53 +187,42 @@
               ],
               "id": "s1_b2_4",
               "params": {},
-              "start_fraction": 0.1989,
-              "end_fraction": 0.2453
+              "start_fraction": 0.1615,
+              "end_fraction": 0.1954
             },
             {
-              "kind": "move",
+              "kind": "set_state",
               "target_ids": [
-                "scan"
+                "working"
               ],
               "id": "s1_b2_5",
               "params": {
-                "index": 1
+                "expression": "3 < 30"
               },
-              "start_fraction": 0.2453,
-              "end_fraction": 0.2916
+              "start_fraction": 0.1954,
+              "end_fraction": 0.2292
             },
             {
-              "kind": "compare",
+              "kind": "appear",
               "target_ids": [
-                "scan",
-                "target"
+                "working"
               ],
               "id": "s1_b2_6",
               "params": {},
-              "start_fraction": 0.2916,
-              "end_fraction": 0.3379
-            },
-            {
-              "kind": "increment",
-              "target_ids": [
-                "slow"
-              ],
-              "id": "s1_b2_7",
-              "params": {},
-              "start_fraction": 0.3379,
-              "end_fraction": 0.3842
+              "start_fraction": 0.2292,
+              "end_fraction": 0.2631
             },
             {
               "kind": "move",
               "target_ids": [
                 "scan"
               ],
-              "id": "s1_b2_8",
+              "id": "s1_b2_7",
               "params": {
-                "index": 2
+                "index": 1
               },
-              "start_fraction": 0.3842,
-              "end_fraction": 0.4305
+              "start_fraction": 0.2631,
+              "end_fraction": 0.2969
             },
             {
               "kind": "compare",
@@ -232,20 +230,32 @@
                 "scan",
                 "target"
               ],
-              "id": "s1_b2_9",
+              "id": "s1_b2_8",
               "params": {},
-              "start_fraction": 0.4305,
-              "end_fraction": 0.4768
+              "start_fraction": 0.2969,
+              "end_fraction": 0.3308
             },
             {
               "kind": "increment",
               "target_ids": [
                 "slow"
               ],
-              "id": "s1_b2_10",
+              "id": "s1_b2_9",
               "params": {},
-              "start_fraction": 0.4768,
-              "end_fraction": 0.5232
+              "start_fraction": 0.3308,
+              "end_fraction": 0.3646
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b2_10",
+              "params": {
+                "expression": "8 < 30"
+              },
+              "start_fraction": 0.3646,
+              "end_fraction": 0.3985
             },
             {
               "kind": "move",
@@ -254,10 +264,10 @@
               ],
               "id": "s1_b2_11",
               "params": {
-                "index": 3
+                "index": 2
               },
-              "start_fraction": 0.5232,
-              "end_fraction": 0.5695
+              "start_fraction": 0.3985,
+              "end_fraction": 0.4323
             },
             {
               "kind": "compare",
@@ -267,8 +277,8 @@
               ],
               "id": "s1_b2_12",
               "params": {},
-              "start_fraction": 0.5695,
-              "end_fraction": 0.6158
+              "start_fraction": 0.4323,
+              "end_fraction": 0.4662
             },
             {
               "kind": "increment",
@@ -277,53 +287,32 @@
               ],
               "id": "s1_b2_13",
               "params": {},
-              "start_fraction": 0.6158,
-              "end_fraction": 0.6621
+              "start_fraction": 0.4662,
+              "end_fraction": 0.5
             },
             {
-              "kind": "move",
+              "kind": "set_state",
               "target_ids": [
-                "scan"
+                "working"
               ],
               "id": "s1_b2_14",
               "params": {
-                "index": 4
+                "expression": "12 < 30"
               },
-              "start_fraction": 0.6621,
-              "end_fraction": 0.7084
-            },
-            {
-              "kind": "compare",
-              "target_ids": [
-                "scan",
-                "target"
-              ],
-              "id": "s1_b2_15",
-              "params": {},
-              "start_fraction": 0.7084,
-              "end_fraction": 0.7547
-            },
-            {
-              "kind": "increment",
-              "target_ids": [
-                "slow"
-              ],
-              "id": "s1_b2_16",
-              "params": {},
-              "start_fraction": 0.7547,
-              "end_fraction": 0.8011
+              "start_fraction": 0.5,
+              "end_fraction": 0.5338
             },
             {
               "kind": "move",
               "target_ids": [
                 "scan"
               ],
-              "id": "s1_b2_17",
+              "id": "s1_b2_15",
               "params": {
-                "index": 5
+                "index": 3
               },
-              "start_fraction": 0.8011,
-              "end_fraction": 0.8474
+              "start_fraction": 0.5338,
+              "end_fraction": 0.5677
             },
             {
               "kind": "compare",
@@ -331,19 +320,121 @@
                 "scan",
                 "target"
               ],
-              "id": "s1_b2_18",
+              "id": "s1_b2_16",
               "params": {},
-              "start_fraction": 0.8474,
-              "end_fraction": 0.8937
+              "start_fraction": 0.5677,
+              "end_fraction": 0.6015
             },
             {
               "kind": "increment",
               "target_ids": [
                 "slow"
               ],
-              "id": "s1_b2_19",
+              "id": "s1_b2_17",
               "params": {},
-              "start_fraction": 0.8937,
+              "start_fraction": 0.6015,
+              "end_fraction": 0.6354
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b2_18",
+              "params": {
+                "expression": "17 < 30"
+              },
+              "start_fraction": 0.6354,
+              "end_fraction": 0.6692
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_19",
+              "params": {
+                "index": 4
+              },
+              "start_fraction": 0.6692,
+              "end_fraction": 0.7031
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_20",
+              "params": {},
+              "start_fraction": 0.7031,
+              "end_fraction": 0.7369
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_21",
+              "params": {},
+              "start_fraction": 0.7369,
+              "end_fraction": 0.7708
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b2_22",
+              "params": {
+                "expression": "21 < 30"
+              },
+              "start_fraction": 0.7708,
+              "end_fraction": 0.8046
+            },
+            {
+              "kind": "move",
+              "target_ids": [
+                "scan"
+              ],
+              "id": "s1_b2_23",
+              "params": {
+                "index": 5
+              },
+              "start_fraction": 0.8046,
+              "end_fraction": 0.8385
+            },
+            {
+              "kind": "compare",
+              "target_ids": [
+                "scan",
+                "target"
+              ],
+              "id": "s1_b2_24",
+              "params": {},
+              "start_fraction": 0.8385,
+              "end_fraction": 0.8723
+            },
+            {
+              "kind": "increment",
+              "target_ids": [
+                "slow"
+              ],
+              "id": "s1_b2_25",
+              "params": {},
+              "start_fraction": 0.8723,
+              "end_fraction": 0.9062
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s1_b2_26",
+              "params": {
+                "expression": "30 = 30"
+              },
+              "start_fraction": 0.9062,
               "end_fraction": 0.94
             }
           ],
@@ -353,6 +444,7 @@
                 "s1_b2_c"
               ],
               "object_ids": [
+                "working",
                 "scan",
                 "target",
                 "numbers",
@@ -378,7 +470,14 @@
                 "s1_b2_16",
                 "s1_b2_17",
                 "s1_b2_18",
-                "s1_b2_19"
+                "s1_b2_19",
+                "s1_b2_20",
+                "s1_b2_21",
+                "s1_b2_22",
+                "s1_b2_23",
+                "s1_b2_24",
+                "s1_b2_25",
+                "s1_b2_26"
               ]
             }
           ],
@@ -434,6 +533,7 @@
         "target",
         "scan",
         "slow",
+        "working",
         "s1_b3_line",
         "takeaway_s1"
       ],
@@ -519,6 +619,25 @@
           }
         },
         {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
+          "id": "s2_b1_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Because the list is sorted, one look at the middle rules out half of it.",
+          "payload": {
+            "tone": "yellow",
+            "idea": true
+          }
+        },
+        {
           "id": "takeaway_s2",
           "kind": "caption",
           "role": "audit",
@@ -537,47 +656,11 @@
             {
               "kind": "appear",
               "target_ids": [
-                "code"
+                "s2_b1_line"
               ],
               "id": "s2_b1_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.28
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "code"
-              ],
-              "id": "s2_b1_2",
-              "params": {
-                "active_lines": [
-                  1
-                ]
-              },
-              "start_fraction": 0.28,
-              "end_fraction": 0.5
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "numbers"
-              ],
-              "id": "s2_b1_3",
-              "params": {
-                "checked_results": {}
-              },
-              "start_fraction": 0.5,
-              "end_fraction": 0.72
-            },
-            {
-              "kind": "hide",
-              "target_ids": [
-                "scan"
-              ],
-              "id": "s2_b1_4",
-              "params": {},
-              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -587,15 +670,11 @@
                 "s2_b1_c"
               ],
               "object_ids": [
-                "code",
-                "numbers"
+                "s2_b1_line"
               ],
-              "kind": "state_change",
+              "kind": "label",
               "action_ids": [
-                "s2_b1_1",
-                "s2_b1_2",
-                "s2_b1_3",
-                "s2_b1_4"
+                "s2_b1_1"
               ]
             }
           ],
@@ -608,37 +687,70 @@
             {
               "kind": "set_state",
               "target_ids": [
-                "code"
+                "numbers"
               ],
               "id": "s2_b2_1",
+              "params": {
+                "checked_results": {}
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.2067
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "scan",
+                "working"
+              ],
+              "id": "s2_b2_2",
+              "params": {},
+              "start_fraction": 0.2067,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b2_3",
+              "params": {},
+              "start_fraction": 0.3533,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b2_4",
               "params": {
                 "active_lines": [
                   4
                 ]
               },
-              "start_fraction": 0.06,
-              "end_fraction": 0.3533
+              "start_fraction": 0.5,
+              "end_fraction": 0.6467
             },
             {
               "kind": "move",
               "target_ids": [
                 "mid"
               ],
-              "id": "s2_b2_2",
+              "id": "s2_b2_5",
               "params": {
                 "index": 3
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
+              "start_fraction": 0.6467,
+              "end_fraction": 0.7933
             },
             {
               "kind": "appear",
               "target_ids": [
                 "mid"
               ],
-              "id": "s2_b2_3",
+              "id": "s2_b2_6",
               "params": {},
-              "start_fraction": 0.6467,
+              "start_fraction": 0.7933,
               "end_fraction": 0.94
             }
           ],
@@ -656,7 +768,10 @@
               "action_ids": [
                 "s2_b2_1",
                 "s2_b2_2",
-                "s2_b2_3"
+                "s2_b2_3",
+                "s2_b2_4",
+                "s2_b2_5",
+                "s2_b2_6"
               ]
             }
           ],
@@ -678,7 +793,7 @@
                 ]
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.28
+              "end_fraction": 0.2067
             },
             {
               "kind": "compare",
@@ -688,8 +803,8 @@
               ],
               "id": "s2_b3_2",
               "params": {},
-              "start_fraction": 0.28,
-              "end_fraction": 0.5
+              "start_fraction": 0.2067,
+              "end_fraction": 0.3533
             },
             {
               "kind": "appear",
@@ -698,8 +813,8 @@
               ],
               "id": "s2_b3_3",
               "params": {},
-              "start_fraction": 0.5,
-              "end_fraction": 0.72
+              "start_fraction": 0.3533,
+              "end_fraction": 0.5
             },
             {
               "kind": "increment",
@@ -708,7 +823,29 @@
               ],
               "id": "s2_b3_4",
               "params": {},
-              "start_fraction": 0.72,
+              "start_fraction": 0.5,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b3_5",
+              "params": {
+                "expression": "17 < 30"
+              },
+              "start_fraction": 0.6467,
+              "end_fraction": 0.7933
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b3_6",
+              "params": {},
+              "start_fraction": 0.7933,
               "end_fraction": 0.94
             }
           ],
@@ -719,6 +856,7 @@
               ],
               "object_ids": [
                 "code",
+                "working",
                 "mid",
                 "target",
                 "numbers",
@@ -729,7 +867,9 @@
                 "s2_b3_1",
                 "s2_b3_2",
                 "s2_b3_3",
-                "s2_b3_4"
+                "s2_b3_4",
+                "s2_b3_5",
+                "s2_b3_6"
               ]
             }
           ],
@@ -807,7 +947,8 @@
         "numbers",
         "target",
         "scan",
-        "slow"
+        "slow",
+        "working"
       ],
       "closing_visible_ids": [
         "code",
@@ -816,13 +957,16 @@
         "mid",
         "slow",
         "fast",
+        "working",
+        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [
         "numbers",
         "target",
         "scan",
-        "slow"
+        "slow",
+        "working"
       ],
       "layout_ids": []
     },
@@ -905,6 +1049,15 @@
           }
         },
         {
+          "id": "working",
+          "kind": "formula",
+          "role": "operation",
+          "label": "Working",
+          "payload": {
+            "expression": "="
+          }
+        },
+        {
           "id": "s3_b3_line",
           "kind": "caption",
           "role": "audit",
@@ -953,7 +1106,7 @@
                 ]
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.28
+              "end_fraction": 0.236
             },
             {
               "kind": "move",
@@ -964,8 +1117,8 @@
               "params": {
                 "index": 5
               },
-              "start_fraction": 0.28,
-              "end_fraction": 0.5
+              "start_fraction": 0.236,
+              "end_fraction": 0.412
             },
             {
               "kind": "compare",
@@ -975,8 +1128,8 @@
               ],
               "id": "s3_b1_3",
               "params": {},
-              "start_fraction": 0.5,
-              "end_fraction": 0.72
+              "start_fraction": 0.412,
+              "end_fraction": 0.588
             },
             {
               "kind": "increment",
@@ -985,7 +1138,19 @@
               ],
               "id": "s3_b1_4",
               "params": {},
-              "start_fraction": 0.72,
+              "start_fraction": 0.588,
+              "end_fraction": 0.764
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s3_b1_5",
+              "params": {
+                "expression": "30 = 30"
+              },
+              "start_fraction": 0.764,
               "end_fraction": 0.94
             }
           ],
@@ -996,6 +1161,7 @@
               ],
               "object_ids": [
                 "code",
+                "working",
                 "mid",
                 "target",
                 "numbers",
@@ -1006,7 +1172,8 @@
                 "s3_b1_1",
                 "s3_b1_2",
                 "s3_b1_3",
-                "s3_b1_4"
+                "s3_b1_4",
+                "s3_b1_5"
               ]
             }
           ],
@@ -1063,23 +1230,35 @@
           "narration_beat_id": "s3_b3",
           "actions": [
             {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b3_1",
+              "params": {
+                "active_lines": []
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
               "kind": "hide",
               "target_ids": [
                 "takeaway_s3"
               ],
-              "id": "s3_b3_1",
+              "id": "s3_b3_2",
               "params": {},
-              "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
             },
             {
               "kind": "appear",
               "target_ids": [
                 "s3_b3_line"
               ],
-              "id": "s3_b3_2",
+              "id": "s3_b3_3",
               "params": {},
-              "start_fraction": 0.5,
+              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -1094,11 +1273,12 @@
               "kind": "label",
               "action_ids": [
                 "s3_b3_1",
-                "s3_b3_2"
+                "s3_b3_2",
+                "s3_b3_3"
               ]
             }
           ],
-          "pause_after": 3.0,
+          "pause_after": 4.0,
           "min_seconds": 0.0
         },
         {
@@ -1139,7 +1319,8 @@
         "target",
         "mid",
         "slow",
-        "fast"
+        "fast",
+        "working"
       ],
       "closing_visible_ids": [
         "code",
@@ -1148,6 +1329,7 @@
         "mid",
         "slow",
         "fast",
+        "working",
         "s3_b3_line",
         "s3_b4_line"
       ],
@@ -1157,7 +1339,8 @@
         "target",
         "mid",
         "slow",
-        "fast"
+        "fast",
+        "working"
       ],
       "layout_ids": []
     }

@@ -529,7 +529,7 @@ def test_the_question_is_shown_and_the_check_gets_a_pause_and_an_answer():
     assert lines["s2_b5_line"].label == BRIEF["check_answer"] and lines["s2_b5_line"].payload["tick"] is True
     # a breath after every sentence, a longer one as a scene closes, and time to think
     # after the check question
-    assert [beat.pause_after for beat in second.beats] == [0.4, 0.4, 0.4, 3.0, 0.9]
+    assert [beat.pause_after for beat in second.beats] == [0.4, 0.4, 0.4, 4.0, 0.9]
     assert [beat.pause_after for beat in first.beats] == [0.4] * (len(first.beats) - 1) + [0.9]
     # A scene that ends on a question and its answer shows its takeaway first, on the beat before
     # the question, and takes it off as the question comes on: two lines under the picture, not three.
@@ -627,7 +627,7 @@ def test_the_taught_map_fixture_is_exactly_what_the_compiler_writes():
     compiled = plan_map_scenes(lesson, SKILL)
     assert saved.scenes == compiled
     assert craft_problems(lesson, compiled) == []
-    assert [beat.pause_after for beat in compiled[-1].beats] == [0.4, 0.4, 0.4, 3.0, 0.9]
+    assert [beat.pause_after for beat in compiled[-1].beats] == [0.4, 0.4, 0.4, 4.0, 0.9]
 
 
 @pytest.mark.unit

@@ -10,6 +10,40 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-12 — The reason is stated by a move, and a repair names every fault with the facts
+
+**Context.** After the first round of repairs an independent reviewer was given the prompt
+itself. Its verdict was that a model following it perfectly would still make lessons that show
+without explaining: "say why" was one line among forty, the beat budget of thirteen words
+rejected sentences long enough to carry a reason, and nothing in code required a reason at
+all. It also traced the earlier lessons' worst faults to the repair loop, which told the model
+"you expect 2, it reads 8" and accepted 8.
+
+**Decision.** The turning point became a move. The brief writes it as a reason, a `turn` beat
+shows and speaks it, a trace lesson without one is sent back, and the beat after it starts the
+better idea on a stage code has cleared. Beats are sized at fifteen words and each may carry a
+`why` the model writes before its sentence. A rejected lesson now gets all the faults of its
+moves at once, named by beat, with the numbers code works out from its trace, and is told to
+change those and nothing else; only the latest answer goes back with it. Bookkeeping a model
+got wrong in the live runs is done for it: a beat written flat, a fill that says "index", a
+count that names the table and not its counter.
+
+**Why not the alternative.** Checking sentences for reasons would mean reading language, and
+checking spoken numbers against the screen by matching words breaks on small numbers, which
+are everywhere on an array. A second model call that is given the computed table before it
+writes the sentences would remove most number faults, and may still be the right next step, but
+it doubles the calls and was not needed to see whether the reason gets said. A fixed
+scene-by-scene plot in the request was proposed by the reviewer and rejected: the owner has
+asked that lessons not be one template.
+
+**Consequence.** Lessons read differently: the reason is on screen and in the voice, and the
+steps after it say why they are allowed. The prompt asks more of the model, and the first live
+runs after it failed five tries three times running until the faults they exposed were fixed;
+four of five algorithm topics then planned, in two to five calls. Coin change did not: its
+rule needs the coin values as its steps back and the model wrote one step. Nothing yet checks
+that a sentence agrees with the picture, and the topic router is still a keyword match, which
+sent a table topic to the map playbook.
+
 ### 2026-10-12 — Pacing and a clean stage are code's job; "it planned" is not the test
 
 **Context.** Four lessons planned live for about a third of a cent each, and every number code

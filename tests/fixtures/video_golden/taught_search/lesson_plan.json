@@ -168,7 +168,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b2",
@@ -213,7 +214,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b3",
@@ -250,7 +252,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -264,43 +267,41 @@
       "beats": [
         {
           "id": "s2_b1",
-          "spoken_text": "Wipe the marks and start again, this time with the code on screen.",
+          "spoken_text": "Because the list is sorted, one look at the middle rules out half of it.",
           "claim_ids": [
             "s2_b1_c"
           ],
           "visual_anchors": [
-            "def find(items, target):",
-            "Sorted list"
+            "Because the list is sorted, one look at the middle rules out half of it."
           ],
           "claim_requirements": {
             "s2_b1_c": [
-              "state_change"
+              "label"
             ]
           },
           "move": {
-            "do": "clear",
-            "text": null,
+            "do": "turn",
+            "text": "Because the list is sorted, one look at the middle rules out half of it.",
             "pieces": [],
             "path": [],
             "meter": null,
             "value": null,
             "count": 1,
-            "lines": [
-              1
-            ],
+            "lines": [],
             "items": [],
             "pointer": null,
             "index": null,
             "against": null,
             "out_of": null,
-            "array": "numbers",
+            "array": null,
             "cells": [],
             "cell": null,
             "counter": null,
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b2",
@@ -340,7 +341,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b3",
@@ -381,7 +383,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b4",
@@ -427,7 +430,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -479,7 +483,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b2",
@@ -518,7 +523,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b3",
@@ -555,7 +561,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b4",
@@ -592,7 +599,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,

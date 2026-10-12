@@ -94,7 +94,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b2",
@@ -131,7 +132,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b3",
@@ -171,7 +173,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b4",
@@ -211,7 +214,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -225,16 +229,54 @@
       "beats": [
         {
           "id": "s2_b1",
-          "spoken_text": "You arrive at stair two either from stair one or from stair zero, so its ways are theirs added together.",
+          "spoken_text": "The ways to reach a stair are the ways to reach the two stairs below it, added together.",
           "claim_ids": [
             "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "The ways to reach a stair are the ways to reach the two stairs below it, added together."
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "turn",
+            "text": "The ways to reach a stair are the ways to reach the two stairs below it, added together.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "You arrive at stair two either from stair one or from stair zero, so its ways are theirs added together.",
+          "claim_ids": [
+            "s2_b2_c"
           ],
           "visual_anchors": [
             "table[i] = table[i - 1] + table[i - 2]",
             "Ways[2] = 1 + 1 = 2"
           ],
           "claim_requirements": {
-            "s2_b1_c": [
+            "s2_b2_c": [
               "state_change"
             ]
           },
@@ -261,20 +303,21 @@
             "tree": null,
             "depth": null,
             "expect": 2.0
-          }
+          },
+          "why": null
         },
         {
-          "id": "s2_b2",
+          "id": "s2_b3",
           "spoken_text": "Stair three is reached from stairs two and one: two plus one is three.",
           "claim_ids": [
-            "s2_b2_c"
+            "s2_b3_c"
           ],
           "visual_anchors": [
             "table[i] = table[i - 1] + table[i - 2]",
             "Ways[3] = 2 + 1 = 3"
           ],
           "claim_requirements": {
-            "s2_b2_c": [
+            "s2_b3_c": [
               "state_change"
             ]
           },
@@ -301,7 +344,8 @@
             "tree": null,
             "depth": null,
             "expect": 3.0
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -351,7 +395,8 @@
             "tree": null,
             "depth": null,
             "expect": 5.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b2",
@@ -391,7 +436,8 @@
             "tree": null,
             "depth": null,
             "expect": 8.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b3",
@@ -430,7 +476,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b4",
@@ -467,7 +514,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b5",
@@ -504,7 +552,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,

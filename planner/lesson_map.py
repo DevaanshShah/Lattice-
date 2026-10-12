@@ -13,7 +13,7 @@ import re
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import BeatMove, LessonMap, LessonPlan, LessonScene
 from core.visual_state import VisualState, closing_state
-from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, plain_id,
+from planner.lesson_shared import (LINES, apply_brief, carried, plain_id, say_the_line,
                                    stage_the_takeaway,
                                    compiled_beat, line_id, line_objects, story_shape, takeaway_id)
 from planner.lesson_shared import number as _number
@@ -93,7 +93,7 @@ def fill_map_lesson(data: dict) -> dict:
                 continue
             if isinstance(move.get("path"), list):
                 move["path"] = _along_the_arrows(move["path"], routes)
-            ask_the_question(beat, brief)
+            say_the_line(beat, brief)
             anchors = [labels[item] for item in _involved(move)
                        if isinstance(labels.get(item), str) and item != move.get("meter")][:3]
             if move.get("meter") in labels and isinstance(move.get("value"), (int, float)):

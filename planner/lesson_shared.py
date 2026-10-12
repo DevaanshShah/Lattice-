@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import re
 
-from core.schemas.lesson_plan import LessonPlan, LessonScene
+from core.schemas.lesson_plan import BeatMove, LessonPlan, LessonScene
 from core.visual_state import VisualState
 
-LINES = {"ask", "answer"}       # moves that show a line of text, not a change in the picture
-THINK_PAUSE = 3.0               # seconds a question is held before its answer
+LINES = {"ask", "answer", "turn"}    # moves that show a line of text, not a change in the picture
+_SAYS = {"ask": "question", "turn": "turning_point"}    # the part of the brief such a line states
+THINK_PAUSE = 4.0               # seconds a question is held before its answer
 BREATH = 0.4                    # silence after every sentence, so one does not run into the next
 SCENE_BREATH = 0.9              # and a longer one as a scene closes
 
@@ -44,11 +45,15 @@ def takeaway_beat(scene: LessonScene) -> int | None:
 
 
 def stage_the_takeaway(scene: LessonScene, position: int, actions: list[dict], visible: set[str]) -> None:
-    """Bring a scene's takeaway on at its beat, and take it off as the check question comes on."""
+    """Keep the lines under the picture to two. A question or a turning point takes the place of
+    the lines before it; an answer stays under its question; the takeaway comes on at its beat."""
     mine = takeaway_id(scene)
-    if scene.beats[position].move.do == "ask" and mine in visible:
-        actions.insert(0, {"kind": "hide", "target_ids": [mine], "params": {}})
-        visible.discard(mine)
+    if scene.beats[position].move.do in _SAYS:
+        earlier = [line for line in (*(line_id(beat) for beat in scene.beats[:position]
+                                       if beat.move.do in LINES), mine) if line in visible]
+        if earlier:
+            actions.insert(0, {"kind": "hide", "target_ids": earlier, "params": {}})
+            visible.difference_update(earlier)
     if takeaway_beat(scene) == position:
         actions.append({"kind": "appear", "target_ids": [mine], "params": {}})
         visible.add(mine)
@@ -59,11 +64,10 @@ def line_objects(scene: LessonScene) -> list[dict]:
     objects = []
     for beat in scene.beats:
         if beat.move is not None and beat.move.do in LINES:
-            asks = beat.move.do == "ask"
+            look = {"ask": {"tone": "white", "ask": True}, "turn": {"tone": "yellow", "idea": True},
+                    "answer": {"tone": "teal", "tick": True}}[beat.move.do]
             objects.append({"id": line_id(beat), "kind": "caption", "role": "audit",
-                            "label": beat.move.text,
-                            "payload": {"tone": "white", "ask": True} if asks
-                            else {"tone": "teal", "tick": True}})
+                            "label": beat.move.text, "payload": look})
     if takeaway_beat(scene) is not None:
         objects.append({"id": takeaway_id(scene), "kind": "caption", "role": "audit",
                         "label": scene.takeaway, "payload": {"tone": "teal", "tick": True}})
@@ -93,14 +97,23 @@ def apply_brief(data: dict) -> dict | None:
     return brief
 
 
-def ask_the_question(beat: dict, brief: dict | None) -> None:
-    """An ask with no text asks the lesson's own question, and what the beat speaks is the
-    question it shows: the viewer never hears one question while reading another."""
+def gather_the_move(beat: dict) -> None:
+    """A beat written flat, with its move's fields beside its sentence, is given its "move". Where
+    the fields sit is bookkeeping: a live lesson lost all five tries to it."""
+    if "do" in beat and not isinstance(beat.get("move"), dict):
+        beat["move"] = {key: beat.pop(key) for key in list(beat) if key in BeatMove.model_fields}
+
+
+def say_the_line(beat: dict, brief: dict | None) -> None:
+    """An ask with no text asks the lesson's own question, and a turn states its turning point.
+    What such a beat speaks is the line it shows: the viewer never hears one thing while reading
+    another, and the reason behind the idea is said in the words the brief settled on."""
     move = beat["move"]
-    if move.get("do") != "ask":
+    source = _SAYS.get(move.get("do"))
+    if source is None:
         return
-    if not move.get("text") and isinstance(brief, dict) and isinstance(brief.get("question"), str):
-        move["text"] = brief["question"]
+    if not move.get("text") and isinstance(brief, dict) and isinstance(brief.get(source), str):
+        move["text"] = brief[source]
     if isinstance(move.get("text"), str) and move["text"].strip():
         beat["spoken_text"] = move["text"]
 

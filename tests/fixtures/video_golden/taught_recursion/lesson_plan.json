@@ -126,7 +126,8 @@
             "tree": "calls",
             "depth": 1,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b2",
@@ -164,7 +165,8 @@
             "tree": "calls",
             "depth": 2,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b3",
@@ -202,7 +204,8 @@
             "tree": "calls",
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b4",
@@ -239,7 +242,8 @@
             "tree": "calls",
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b5",
@@ -276,7 +280,8 @@
             "tree": "calls",
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s1_b6",
@@ -313,7 +318,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -327,30 +333,28 @@
       "beats": [
         {
           "id": "s2_b1",
-          "spoken_text": "Clear the tree away, and keep only its cost in mind: fifteen calls.",
+          "spoken_text": "Write each answer down the first time, and every later request is a lookup.",
           "claim_ids": [
             "s2_b1_c"
           ],
           "visual_anchors": [
-            "Calls made by ways(5)"
+            "Write each answer down the first time, and every later request is a lookup."
           ],
           "claim_requirements": {
             "s2_b1_c": [
-              "state_change"
+              "label"
             ]
           },
           "move": {
-            "do": "remove",
-            "text": null,
+            "do": "turn",
+            "text": "Write each answer down the first time, and every later request is a lookup.",
             "pieces": [],
             "path": [],
             "meter": null,
             "value": null,
             "count": 1,
             "lines": [],
-            "items": [
-              "calls"
-            ],
+            "items": [],
             "pointer": null,
             "index": null,
             "against": null,
@@ -362,7 +366,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b2",
@@ -402,7 +407,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b3",
@@ -442,7 +448,8 @@
             "tree": null,
             "depth": null,
             "expect": 1.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b4",
@@ -482,17 +489,18 @@
             "tree": null,
             "depth": null,
             "expect": 2.0
-          }
+          },
+          "why": null
         },
         {
           "id": "s2_b5",
-          "spoken_text": "The same rule fills the rest, each from the two boxes before it: three, five, eight.",
+          "spoken_text": "The same rule fills the next two boxes, each from the two before it: three, then five.",
           "claim_ids": [
             "s2_b5_c"
           ],
           "visual_anchors": [
             "table[i] = table[i - 1] + table[i - 2]",
-            "Ways[5] = 5 + 3 = 8"
+            "Ways[4] = 3 + 2 = 5"
           ],
           "claim_requirements": {
             "s2_b5_c": [
@@ -518,8 +526,7 @@
             "array": "ways",
             "cells": [
               3,
-              4,
-              5
+              4
             ],
             "cell": null,
             "counter": null,
@@ -527,10 +534,51 @@
             "depth": null,
             "expect": [
               3.0,
-              5.0,
-              8.0
+              5.0
             ]
-          }
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b6",
+          "spoken_text": "The last box is filled the same way: five plus three is eight ways to climb the stairs.",
+          "claim_ids": [
+            "s2_b6_c"
+          ],
+          "visual_anchors": [
+            "table[i] = table[i - 1] + table[i - 2]",
+            "Ways[5] = 5 + 3 = 8"
+          ],
+          "claim_requirements": {
+            "s2_b6_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fill",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [
+              6
+            ],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "array": "ways",
+            "cells": [],
+            "cell": 5,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 8.0
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,
@@ -579,7 +627,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b2",
@@ -616,7 +665,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         },
         {
           "id": "s3_b3",
@@ -653,7 +703,8 @@
             "tree": null,
             "depth": null,
             "expect": null
-          }
+          },
+          "why": null
         }
       ],
       "bridge_to_next": null,

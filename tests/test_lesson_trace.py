@@ -40,8 +40,8 @@ def _as_written(name: str) -> dict:
     scenes[-1]["beats"] = scenes[-1]["beats"][:-2]
     for scene in scenes:
         for beat in scene["beats"]:
-            if beat["move"]["do"] == "ask":
-                beat["move"] = {"do": "ask"}
+            if beat["move"]["do"] in ("ask", "turn"):       # the brief's words: code puts them in
+                beat["move"] = {"do": beat["move"]["do"]}
     return {"brief": lesson["brief"], "trace": json.loads(json.dumps(lesson["trace"])), "scenes": scenes}
 
 
@@ -106,11 +106,15 @@ def test_checking_one_by_one_marks_every_cell_and_the_counter_counts_by_itself()
 
 @pytest.mark.unit
 def test_clear_wipes_the_marks_and_sends_the_pointer_away():
-    lesson = _saved("taught_search")
+    answer = _as_written("taught_search")
+    answer["scenes"][1]["beats"][0] = {
+        "spoken_text": "Wipe the marks and start again, this time with the code on screen.",
+        "move": {"do": "clear", "array": "numbers", "lines": [1]}}
+    lesson = _lesson(answer)
     first, second, _ = plan_trace_scenes(lesson, SKILL)
     assert _steps(second, 0) == [
         ("appear", ["code"], {}), ("set_state", ["code"], {"active_lines": [1]}),
-        ("set_state", ["numbers"], {"checked_results": {}}), ("hide", ["scan"], {})]
+        ("set_state", ["numbers"], {"checked_results": {}}), ("hide", ["scan", "working"], {})]
     assert lesson.scenes[1].beats[0].claim_requirements == {"s2_b1_c": ["state_change"]}
     # the pointer of the second attempt arrives already on its cell
     assert _steps(second, 1) == [("set_state", ["code"], {"active_lines": [4]}),
@@ -120,13 +124,75 @@ def test_clear_wipes_the_marks_and_sends_the_pointer_away():
 
 
 @pytest.mark.unit
+def test_the_turning_point_is_said_in_the_briefs_words_and_the_first_attempt_is_put_away_after_it():
+    """Reviewed on 2026-10-12: in four lessons of four the idea was shown and its reason never
+    said, and the brief's turning point was spoken in none. It is now a move, placed by code the
+    way the question is, and the beat after it starts the better idea on a clean stage."""
+    lesson = _saved("taught_search")
+    first, second, third = plan_trace_scenes(lesson, SKILL)
+    turn = lesson.scenes[1].beats[0]
+    assert turn.move.do == "turn" and turn.spoken_text == turn.move.text == lesson.brief.turning_point
+    line = {obj.id: obj for obj in second.objects}["s2_b1_line"]
+    assert (line.label, line.payload) == (lesson.brief.turning_point, {"tone": "yellow", "idea": True})
+    assert _steps(second, 0) == [("appear", ["s2_b1_line"], {})]       # said over the first attempt
+    assert _steps(second, 1) == [                                       # then the stage is cleared
+        ("set_state", ["numbers"], {"checked_results": {}}), ("hide", ["scan", "working"], {}),
+        ("appear", ["code"], {}), ("set_state", ["code"], {"active_lines": [4]}),
+        ("move", ["mid"], {"index": 3}), ("appear", ["mid"], {})]
+    end = closing_state(third, closing_state(second, closing_state(first)))
+    assert (end.payloads["slow"]["value"], end.payloads["fast"]["value"]) == (6, 2)    # both costs kept
+    # a tree leaves the same way, with no remove move, and its counter keeps the calls
+    tree, table, _ = plan_trace_scenes(_saved("taught_recursion"), SKILL)
+    assert _steps(table, 1)[0] == ("hide", ["calls"], {})
+    assert closing_state(table, closing_state(tree)).payloads["count"]["value"] == 15
+
+
+@pytest.mark.unit
+def test_a_lesson_that_never_says_why_is_sent_back_and_a_lesson_has_one_turning_point():
+    silent = _as_written("taught_search")
+    silent["scenes"][1]["beats"].pop(0)
+    client = _Scripted([silent, _as_written("taught_search")])
+    reasons = []
+    lesson_plan.generate("Why binary search needs so few checks", SKILL, client=client,
+                         schema_version=2, on_reject=reasons.append)
+    assert ("the lesson never says why the better way works; at the beat where the better idea "
+            'begins, use the move {"do":"turn"}' in reasons[0])
+    assert "'Because the list is sorted, one look at the middle rules out half of it.'" in reasons[0]
+    twice = _as_written("taught_search")
+    twice["scenes"][2]["beats"].insert(0, {"move": {"do": "turn"}})
+    with pytest.raises(ValidationError, match="a lesson has one turning point"):
+        _lesson(twice)
+    early = _as_written("taught_search")
+    early["scenes"][0]["beats"].insert(1, early["scenes"][1]["beats"].pop(0))
+    lesson = _lesson(early)
+    assert any("the turning point comes before the question it answers" in problem
+               for problem in craft_trace(lesson, plan_trace_scenes(lesson, SKILL)))
+
+
+@pytest.mark.unit
+def test_a_compare_says_how_the_two_numbers_compare_and_a_lit_line_goes_out_after_its_step():
+    """Reviewed on 2026-10-12: a red cross sat beside a lit line that was true (12 < 23), and a
+    line stayed lit through sentences that had nothing to do with it."""
+    lesson = _saved("taught_search")
+    first, second, third = plan_trace_scenes(lesson, SKILL)
+    assert ("set_state", ["working"], {"expression": "17 < 30"}) in _steps(second, 2)
+    assert ("set_state", ["working"], {"expression": "30 = 30"}) in _steps(third, 0)
+    said = [params["expression"] for _, target, params in _steps(first, 1)
+            if target == ["working"] and "expression" in params]
+    assert said == ["3 < 30", "8 < 30", "12 < 30", "17 < 30", "21 < 30", "30 = 30"]
+    # the check question is asked with no line of code lit
+    assert _steps(third, 2)[0] == ("set_state", ["code"], {"active_lines": []})
+
+
+
+@pytest.mark.unit
 def test_a_table_is_filled_by_code_from_its_rule():
     lesson = _saved("taught_stairs")
     first, second, third = plan_trace_scenes(lesson, SKILL)
     table = {obj.id: obj for obj in first.objects}["ways"]
     assert table.payload["items"] == [None] * 6                           # it starts empty
     # where the number comes from is shown first; then the number lands in its cell
-    assert _steps(second, 0) == [
+    assert _steps(second, 1) == [
         ("set_state", ["code"], {"active_lines": [6]}),
         ("set_state", ["ways"], {"lit_indices": [1, 0], "new_index": 2}),
         ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"}),
@@ -168,7 +234,8 @@ def test_filling_a_cell_fills_every_empty_cell_before_it_in_order():
     assert wrote[-2:] == [{"lit_indices": [4, 3], "new_index": 5}, {"items": [1, 1, 2, 3, 5, 8]}]
     assert lesson.scenes[0].beats[2].visual_anchors[-1] == "Ways[5] = 5 + 3 = 8"
     # the later fills name cells that are already full: they point, and write nothing
-    assert _steps(second, 0) == [
+    assert _steps(second, 1) == [
+        ("set_state", ["code"], {"active_lines": [6]}),
         ("set_state", ["ways"], {"lit_indices": [1, 0], "new_index": 2}),
         ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"})]
     end = closing_state(third, closing_state(second, closing_state(first)))
@@ -226,7 +293,7 @@ def test_a_trace_lesson_costs_one_call_and_a_weak_one_goes_back_with_the_reason(
     # the visual step then makes no call at all
     plan = browser_visual_plan.generate(lesson, SKILL, client=_Scripted([]), schema_version=2)
     validate(lesson, plan, SKILL)
-    assert story_shape(lesson) == "show ask fill fill | fill fill | fill fill run ask answer"
+    assert story_shape(lesson) == "show ask fill fill | turn fill fill | fill fill run ask answer"
 
 
 @pytest.mark.unit
@@ -347,13 +414,15 @@ def test_the_data_side_has_room_by_kind_and_a_trace_lesson_gets_more_shorter_bea
     with pytest.raises(ValidationError, match="room for at most 2 arrays"):
         LessonTrace.model_validate(trace)
     # An algorithm is not asked for in under ninety seconds, whatever length was picked: 252
-    # words at 13 words a beat is nineteen beats, two of which code adds.
+    # words at 15 words a beat (a sentence that carries its reason) is seventeen beats, two of
+    # which code adds. The recipe's older outline is not sent with it.
     client = _Scripted([_as_written("taught_search")] * 5)
     with pytest.raises(lesson_plan.LessonPlanError, match="write between 176 and 328"):
         lesson_plan.generate("Why binary search needs so few checks", SKILL, client=client,
                              schema_version=2, target_seconds=45)
     assert "is about 252 words, between 176 and 328" in client.asked[0][1]["content"]
-    assert "Write about 17 beats, in 5 scenes" in client.asked[0][1]["content"]
+    assert "Write about 15 beats, in 4 scenes" in client.asked[0][1]["content"]
+    assert "Lesson guidance" not in client.asked[0][1]["content"]
 
 
 @pytest.mark.unit
@@ -408,8 +477,8 @@ def test_the_tree_grows_by_level_and_its_counter_reads_the_calls_shown():
     assert _steps(first, 4) == [("set_state", ["calls"], {"marked": [2, 3]})]
     assert [beat.visual_anchors for beat in lesson.scenes[0].beats[2:5]] == [
         ["Calls made by ways(5)", "Calls: 15"], ["3 is worked out 2 times"], ["2 is worked out 3 times"]]
-    # the tree is lit once and leaves; its count stays for the comparison at the end
-    assert _steps(second, 0) == [("highlight", ["calls"], {}), ("hide", ["calls"], {})]
+    # the tree leaves after the turning point; its count stays for the comparison at the end
+    assert _steps(second, 1)[0] == ("hide", ["calls"], {})
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert "calls" not in end.visible and end.payloads["count"]["value"] == 15
     assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
@@ -520,7 +589,7 @@ def test_a_table_with_no_rule_holds_the_numbers_it_is_given():
                 beat["move"]["value"] = beat["move"].pop("expect")
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
-    assert _steps(second, 0)[1:] == [
+    assert _steps(second, 1)[1:] == [
         ("set_state", ["ways"], {"lit_indices": [], "new_index": 2}),
         ("set_state", ["working"], {"expression": "Ways[2] = 2"}),
         ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None]})]
@@ -559,13 +628,15 @@ def test_an_item_taken_off_screen_comes_back_the_way_the_lesson_left_it():
     """A live lesson removed its call counter with the tree and pointed at it two scenes later:
     the replay had forgotten it, and the counter came back reading 0."""
     answer = _as_written("taught_recursion")
-    answer["scenes"][1]["beats"][0]["move"]["items"] = ["calls", "count"]      # the counter leaves too
+    answer["scenes"][1]["beats"].insert(1, {                                   # the counter is taken off
+        "spoken_text": "Put the count of calls aside for now.", "move": {"do": "remove", "items": ["count"]}})
     answer["scenes"][2]["beats"].append({
         "spoken_text": "Fifteen calls, against six boxes.",
         "move": {"do": "count", "counter": "count", "expect": 15}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
-    assert _steps(third, 1)[:2] == [("set_state", ["count"], {"value": 15}), ("appear", ["count"], {})]
+    assert [step for step in _steps(third, 1) if step[1] == ["count"]] == [
+        ("set_state", ["count"], {"value": 15}), ("appear", ["count"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert end.payloads["count"]["value"] == 15 and "count" in end.visible
 
@@ -591,6 +662,11 @@ def test_clearing_an_array_that_has_no_marks_yet_still_sends_its_pointer_away():
         "spoken_text": "Start at the left.", "move": {"do": "look", "pointer": "scan", "index": 0}}
     lesson = _lesson(answer)
     _, second, _ = plan_trace_scenes(lesson, SKILL)                       # the validator accepts it
+    assert _steps(second, 1)[0] == ("hide", ["scan"], {})                 # put away after the turning point
+    answer["scenes"][1]["beats"][0] = {                                   # and by a clear move of its own
+        "spoken_text": "Start again on clean data.", "move": {"do": "clear", "array": "numbers", "lines": [1]}}
+    lesson = _lesson(answer)
+    _, second, _ = plan_trace_scenes(lesson, SKILL)
     assert ("hide", ["scan"], {}) in _steps(second, 0)
     assert [evidence.object_ids for evidence in second.beats[0].evidence] == [["code", "numbers"]]
 
@@ -758,7 +834,7 @@ def test_a_cell_number_outside_a_numbered_array_and_a_wrong_one_say_how_it_is_nu
     with pytest.raises(ValidationError, match="'ways' has cells 1 to 6; there is no cell 0"):
         _lesson(answer)
     answer = _numbered_from_one(_as_written("taught_stairs"), "ways")
-    answer["scenes"][1]["beats"][0]["move"]["expect"] = 3
+    answer["scenes"][1]["beats"][1]["move"]["expect"] = 3
     with pytest.raises(ValueError, match=r"you expect cell 3 of 'ways' to hold 3, but its rule gives "
                                          r"Ways\[3\] = 1 \+ 1 = 2.*counting cells from 1"):
         plan_trace_scenes(_lesson(answer), SKILL)
@@ -820,6 +896,17 @@ def test_a_run_of_fills_waits_until_the_rule_has_been_seen_to_work_once():
         "spoken_text": "The same rule fills the rest: five ways, then eight.",
         "move": {"do": "fill", "array": "ways", "cells": [4, 5], "expect": [5, 8], "lines": [6]}}]
     lesson = _lesson(answer)
+    # ... but the cell that answers the question is not one of a run
+    assert craft_trace(lesson, plan_trace_scenes(lesson, SKILL)) == [
+        "beat s3_b1 finishes 'ways' by filling 2 cells at once, so the cell that holds the answer is "
+        "rushed; give the last cell a fill of its own, with a sentence that says which earlier cells "
+        "it uses and why"]
+    answer["scenes"][2]["beats"][0:1] = [
+        {"spoken_text": "The same rule gives stair four: three plus two is five.",
+         "move": {"do": "fill", "array": "ways", "cell": 4, "expect": 5, "lines": [6]}},
+        {"spoken_text": "And the top stair uses the two below it: five plus three is eight.",
+         "move": {"do": "fill", "array": "ways", "cell": 5, "expect": 8, "lines": [6]}}]
+    lesson = _lesson(answer)
     assert craft_trace(lesson, plan_trace_scenes(lesson, SKILL)) == []
 
 
@@ -829,7 +916,7 @@ def test_every_sentence_gets_a_breath_and_the_steps_of_a_beat_get_the_time_they_
     whole table was filled in the 3.2 seconds it took to say so."""
     first, second, third = plan_trace_scenes(_saved("taught_coins"), SKILL)
     assert [beat.pause_after for beat in first.beats] == [0.4, 0.4, 0.4, 0.4, 0.9]
-    assert [beat.pause_after for beat in third.beats] == [0.4, 0.4, 0.4, 3.0, 0.9]     # time to think
+    assert [beat.pause_after for beat in third.beats] == [0.4, 0.4, 0.4, 4.0, 0.9]     # time to think
     # two cells worked out in one beat need twice the time of one; a line of code needs none
     assert [beat.min_seconds for beat in third.beats] == [3.6, 1.8, 0, 0, 0]
     assert [beat.min_seconds for beat in first.beats] == [0, 1.8, 1.8, 1.8, 0]         # each take
@@ -847,7 +934,7 @@ def test_a_closing_scene_shows_its_takeaway_and_then_gives_way_to_the_check_ques
     *_, third = plan_trace_scenes(lesson, SKILL)
     assert lesson.scenes[2].takeaway == "Eight ways, and no route was listed"
     assert _steps(third, 2)[-1] == ("appear", ["takeaway_s3"], {})
-    assert _steps(third, 3) == [("hide", ["takeaway_s3"], {}), ("appear", ["s3_b4_line"], {})]
+    assert _steps(third, 3)[-2:] == [("hide", ["takeaway_s3"], {}), ("appear", ["s3_b4_line"], {})]
     assert "takeaway_s3" not in third.closing_visible_ids      # two lines under the picture, not three
 
 
@@ -856,11 +943,11 @@ def test_what_a_finished_attempt_left_behind_goes_when_a_table_starts():
     """Reviewed on 2026-10-12: crossed-out coins, a pointer and a counter of the first attempt sat
     beside the table for thirty seconds, because the lesson never cleared them."""
     answer = _as_written("taught_coins")
-    answer["scenes"][1]["beats"].pop(0)                     # the lesson forgets its clear move
+    answer["scenes"][1]["beats"].pop(0)                     # no turning point and no clear move
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
-    assert ("hide", ["take", "left"], {}) not in _steps(second, 0)     # showing the table is not yet it
-    assert _steps(second, 1)[0] == ("hide", ["take", "left"], {})      # its first fill is
+    assert all(kind != "hide" for kind, _, _ in _steps(second, 0))     # showing the table is not yet it
+    assert _steps(second, 1)[0] == ("hide", ["take", "left", "working"], {})   # its first fill is
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert not {"take", "left"} & end.visible and "used" in end.visible     # the cost stays to compare
     # a lesson that comes back to the pointer keeps it
@@ -878,13 +965,15 @@ def test_a_count_puts_every_total_on_screen():
     from the screen twenty seconds earlier."""
     answer = _as_written("taught_recursion")
     answer["trace"]["data"].append({"id": "boxes", "kind": "counter", "label": "Boxes filled", "counts": "ways"})
-    answer["scenes"][1]["beats"][0]["move"]["items"] = ["calls", "count"]      # the call counter leaves too
+    answer["scenes"][1]["beats"].insert(1, {                                   # the call counter is taken off
+        "spoken_text": "Put the count of calls aside for now.", "move": {"do": "remove", "items": ["count"]}})
     answer["scenes"][2]["beats"].append({
         "spoken_text": "Six boxes, where plain recursion made fifteen calls.",
         "move": {"do": "count", "counter": "boxes", "expect": 6}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
-    assert _steps(third, 1)[:2] == [("set_state", ["count"], {"value": 15}), ("appear", ["count"], {})]
+    assert [step for step in _steps(third, 1) if step[1] == ["count"]] == [
+        ("set_state", ["count"], {"value": 15}), ("appear", ["count"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert {"count", "boxes"} <= end.visible
     assert (end.payloads["count"]["value"], end.payloads["boxes"]["value"]) == (15, 6)
@@ -901,10 +990,53 @@ def test_an_item_that_has_left_for_good_gives_up_its_room():
     first, second, _ = plan_trace_scenes(_saved("taught_recursion"), SKILL)
     state = opening_state(second, closing_state(first))
     holds_tree = lambda page: 'data-object-id=\\"calls\\"' in page
-    leaving = animation_html(second, second.beats[0], title="t", opening=state, duration=3.0)
-    assert holds_tree(leaving)                              # the beat in which the tree leaves
     from core.visual_state import apply_action
-    for action in second.beats[0].actions:
+    for action in second.beats[0].actions:                  # the turning point, said over the tree
         apply_action(state, action)
-    after = animation_html(second, second.beats[1], title="t", opening=state, duration=3.0)
+    leaving = animation_html(second, second.beats[1], title="t", opening=state, duration=3.0)
+    assert holds_tree(leaving)                              # the beat in which the tree leaves
+    for action in second.beats[1].actions:
+        apply_action(state, action)
+    after = animation_html(second, second.beats[2], title="t", opening=state, duration=3.0)
     assert not holds_tree(after) and 'data-object-id=\\"ways\\"' in after
+
+
+@pytest.mark.unit
+def test_a_repair_is_sent_with_the_facts_and_told_to_change_one_thing():
+    """Reviewed on 2026-10-12: in four lessons of four the worst fault was made or sealed by a
+    retry. A bare reason invited the model to change the checked number, or add a step so a count
+    came out, and leave the sentence wrong."""
+    wrong = _as_written("taught_recursion")
+    wrong["scenes"][1]["beats"][3]["move"]["expect"] = 3            # the table says 2
+    client = _Scripted([wrong, wrong, _as_written("taught_recursion")])
+    lesson_plan.generate("Why plain recursion repeats its work", SKILL, client=client, schema_version=2)
+    repair = client.asked[1][-1]["content"]
+    assert repair.startswith("That was invalid (beat s2_b4: you expect cell 2 of 'ways' to hold 3")
+    assert "Do not make this pass by changing the number alone" in repair
+    assert ("Change what this names and nothing else: return the whole plan with every other beat "
+            "exactly as it was" in repair)
+    assert ("Worked out from your trace: the tree 'calls' makes 15 calls in all, and 3 is worked out "
+            "2 times, 2 is worked out 3 times, 1 is worked out 5 times, 0 is worked out 3 times; in "
+            "the table 'ways' cell 0 holds 1, cell 1 holds 1, cell 2 holds 2, cell 3 holds 3, cell 4 "
+            "holds 5, cell 5 holds 8." in repair)
+    # only the latest answer goes back with it, not every earlier one
+    assert [message["role"] for message in client.asked[2]] == ["system", "user", "assistant", "user"]
+
+
+@pytest.mark.unit
+def test_bookkeeping_a_model_gets_wrong_is_done_for_it_and_a_cell_holds_what_fits():
+    answer = _as_written("taught_stairs")
+    fill = answer["scenes"][0]["beats"][2]["move"]
+    fill["index"] = fill.pop("cell")                            # the other moves say "index"
+    for scene in answer["scenes"]:                              # and every beat is written flat
+        scene["beats"] = [{**beat.pop("move"), **beat} for beat in scene["beats"]]
+    answer["scenes"][0]["beats"][0]["why"] = "the boxes must be named before they are filled"
+    lesson = _lesson(answer)
+    assert lesson.scenes[0].beats[2].move.cell == 0
+    assert lesson.scenes[0].beats[0].why.startswith("the boxes")       # kept, never shown or spoken
+    trace = _as_written("taught_search")["trace"]
+    trace["data"][0]["items"] = ["1+1+1+1", "1+1+2", "2+2"]            # a tiny case worked by hand
+    LessonTrace.model_validate(trace)
+    trace["data"][0]["items"] = ["one plus one", "two"]
+    with pytest.raises(ValidationError, match="does not fit in a cell; an item is at most seven"):
+        LessonTrace.model_validate(trace)

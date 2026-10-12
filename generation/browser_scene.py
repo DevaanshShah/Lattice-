@@ -57,6 +57,7 @@ _SEMANTIC_CSS = """
 .semantic-cell.is-lit{border-color:#fbbf24;box-shadow:0 0 0 3px #fbbf2444}
 .semantic-cell.is-new{border-color:#2dd4bf;background:#11302d;box-shadow:0 0 26px #2dd4bf66}
 .semantic-cell.is-pointed{border-color:var(--amber);background:#3c2d18;box-shadow:0 0 28px #edb34a55}
+.semantic-cell.is-long{font-size:22px}.compact .semantic-cell.is-long{font-size:18px}
 .semantic-index{font:500 15px/1 Segoe UI,system-ui,sans-serif;color:var(--muted);margin-top:11px}
 .semantic-pointer-label{height:26px;margin-bottom:10px;font:700 18px/1 Segoe UI,system-ui,sans-serif;color:var(--amber)}
 .semantic-check{position:absolute;top:5px;right:9px;font:800 21px/1 Segoe UI,system-ui,sans-serif}.semantic-check.is-match{color:var(--green)}.semantic-check.is-miss{color:var(--red)}
@@ -109,6 +110,8 @@ body:has(.semantic-stage){background:#0a0a0a}
 .panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:64px 56px;max-width:420px}
 .semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
 .semantic-caption-line.is-question{color:#f4f4f5;font-size:29px;line-height:1.3}
+.semantic-caption-line.is-idea{color:#fde68a;font-size:27px;line-height:1.3}
+.idea-mark{background:transparent;border:2px solid #fbbf24;color:#fbbf24;line-height:32px}
 .ask-mark{display:inline-block;width:36px;height:36px;line-height:36px;margin-right:14px;border-radius:50%;background:#fbbf24;color:#0a0a0a;font-weight:800;font-size:24px;vertical-align:2px}
 .semantic-meter{min-width:180px;color:var(--tone)}
 .meter-label{margin-bottom:8px;font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
@@ -309,6 +312,7 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                 dimmed = " is-discarded" if index in discarded else ""
                 dimmed += " is-empty" if item is None else ""
                 dimmed += " is-new" if index == written else " is-lit" if index in read else ""
+                dimmed += " is-long" if len(str(item)) > 3 and item is not None else ""    # a short string
                 pointer_label = " / ".join(
                     f'<span data-visual-key="{escape(pointer.id)}">{escape(pointer.label)}</span>'
                     for pointer in here)
@@ -381,8 +385,10 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
         elif obj.kind == "caption":
             tick = "✓ " if payload.get("tick") else ""
             # a question is the line the viewer is asked to think about: larger, with its own mark
-            asks = " is-question" if payload.get("ask") else ""
-            mark = '<span class="ask-mark">?</span>' if payload.get("ask") else ""
+            # the turning point is the line the lesson hinges on: marked as the idea
+            asks = " is-question" if payload.get("ask") else " is-idea" if payload.get("idea") else ""
+            mark = ('<span class="ask-mark">?</span>' if payload.get("ask") else
+                    '<span class="ask-mark idea-mark">!</span>' if payload.get("idea") else "")
             html = (f'<div class="semantic-object{flags} semantic-caption-line{asks}{tone}" {ident}>'
                     f'{mark}{tick}{label}</div>')
         elif obj.kind == "group" and any(holder == obj.id for holder in inside.values()):

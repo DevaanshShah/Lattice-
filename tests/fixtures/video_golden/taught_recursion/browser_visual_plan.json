@@ -614,6 +614,16 @@
           }
         },
         {
+          "id": "s2_b1_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Write each answer down the first time, and every later request is a lookup.",
+          "payload": {
+            "tone": "yellow",
+            "idea": true
+          }
+        },
+        {
           "id": "takeaway_s2",
           "kind": "caption",
           "role": "audit",
@@ -630,23 +640,13 @@
           "narration_beat_id": "s2_b1",
           "actions": [
             {
-              "kind": "highlight",
+              "kind": "appear",
               "target_ids": [
-                "calls"
+                "s2_b1_line"
               ],
               "id": "s2_b1_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.5
-            },
-            {
-              "kind": "hide",
-              "target_ids": [
-                "calls"
-              ],
-              "id": "s2_b1_2",
-              "params": {},
-              "start_fraction": 0.5,
               "end_fraction": 0.94
             }
           ],
@@ -656,12 +656,11 @@
                 "s2_b1_c"
               ],
               "object_ids": [
-                "calls"
+                "s2_b1_line"
               ],
-              "kind": "state_change",
+              "kind": "label",
               "action_ids": [
-                "s2_b1_1",
-                "s2_b1_2"
+                "s2_b1_1"
               ]
             }
           ],
@@ -672,80 +671,90 @@
           "narration_beat_id": "s2_b2",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "hide",
               "target_ids": [
-                "code"
+                "calls"
               ],
               "id": "s2_b2_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.1857
+              "end_fraction": 0.17
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b2_2",
+              "params": {},
+              "start_fraction": 0.17,
+              "end_fraction": 0.28
             },
             {
               "kind": "set_state",
               "target_ids": [
                 "code"
               ],
-              "id": "s2_b2_2",
+              "id": "s2_b2_3",
               "params": {
                 "active_lines": [
                   3
                 ]
               },
-              "start_fraction": 0.1857,
-              "end_fraction": 0.3114
+              "start_fraction": 0.28,
+              "end_fraction": 0.39
             },
             {
               "kind": "appear",
-              "target_ids": [
-                "ways"
-              ],
-              "id": "s2_b2_3",
-              "params": {},
-              "start_fraction": 0.3114,
-              "end_fraction": 0.4371
-            },
-            {
-              "kind": "set_state",
               "target_ids": [
                 "ways"
               ],
               "id": "s2_b2_4",
-              "params": {
-                "lit_indices": [],
-                "new_index": 0
-              },
-              "start_fraction": 0.4371,
-              "end_fraction": 0.5629
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "working"
-              ],
-              "id": "s2_b2_5",
-              "params": {
-                "expression": "Ways[0] = 1"
-              },
-              "start_fraction": 0.5629,
-              "end_fraction": 0.6886
-            },
-            {
-              "kind": "appear",
-              "target_ids": [
-                "working"
-              ],
-              "id": "s2_b2_6",
               "params": {},
-              "start_fraction": 0.6886,
-              "end_fraction": 0.8143
+              "start_fraction": 0.39,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
               "target_ids": [
                 "ways"
               ],
+              "id": "s2_b2_5",
+              "params": {
+                "lit_indices": [],
+                "new_index": 0
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.61
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b2_6",
+              "params": {
+                "expression": "Ways[0] = 1"
+              },
+              "start_fraction": 0.61,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "working"
+              ],
               "id": "s2_b2_7",
+              "params": {},
+              "start_fraction": 0.72,
+              "end_fraction": 0.83
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b2_8",
               "params": {
                 "items": [
                   1,
@@ -756,7 +765,7 @@
                   null
                 ]
               },
-              "start_fraction": 0.8143,
+              "start_fraction": 0.83,
               "end_fraction": 0.94
             }
           ],
@@ -778,7 +787,8 @@
                 "s2_b2_4",
                 "s2_b2_5",
                 "s2_b2_6",
-                "s2_b2_7"
+                "s2_b2_7",
+                "s2_b2_8"
               ]
             }
           ],
@@ -973,7 +983,7 @@
                 "new_index": 3
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.148
+              "end_fraction": 0.2067
             },
             {
               "kind": "set_state",
@@ -984,8 +994,8 @@
               "params": {
                 "expression": "Ways[3] = 2 + 1 = 3"
               },
-              "start_fraction": 0.148,
-              "end_fraction": 0.236
+              "start_fraction": 0.2067,
+              "end_fraction": 0.3533
             },
             {
               "kind": "set_state",
@@ -1003,8 +1013,8 @@
                   null
                 ]
               },
-              "start_fraction": 0.236,
-              "end_fraction": 0.324
+              "start_fraction": 0.3533,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
@@ -1019,8 +1029,8 @@
                 ],
                 "new_index": 4
               },
-              "start_fraction": 0.324,
-              "end_fraction": 0.412
+              "start_fraction": 0.5,
+              "end_fraction": 0.6467
             },
             {
               "kind": "set_state",
@@ -1031,8 +1041,8 @@
               "params": {
                 "expression": "Ways[4] = 3 + 2 = 5"
               },
-              "start_fraction": 0.412,
-              "end_fraction": 0.5
+              "start_fraction": 0.6467,
+              "end_fraction": 0.7933
             },
             {
               "kind": "set_state",
@@ -1050,64 +1060,7 @@
                   null
                 ]
               },
-              "start_fraction": 0.5,
-              "end_fraction": 0.588
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "ways"
-              ],
-              "id": "s2_b5_7",
-              "params": {
-                "lit_indices": [
-                  4,
-                  3
-                ],
-                "new_index": 5
-              },
-              "start_fraction": 0.588,
-              "end_fraction": 0.676
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "working"
-              ],
-              "id": "s2_b5_8",
-              "params": {
-                "expression": "Ways[5] = 5 + 3 = 8"
-              },
-              "start_fraction": 0.676,
-              "end_fraction": 0.764
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "ways"
-              ],
-              "id": "s2_b5_9",
-              "params": {
-                "items": [
-                  1,
-                  1,
-                  2,
-                  3,
-                  5,
-                  8
-                ]
-              },
-              "start_fraction": 0.764,
-              "end_fraction": 0.852
-            },
-            {
-              "kind": "appear",
-              "target_ids": [
-                "takeaway_s2"
-              ],
-              "id": "s2_b5_10",
-              "params": {},
-              "start_fraction": 0.852,
+              "start_fraction": 0.7933,
               "end_fraction": 0.94
             }
           ],
@@ -1128,16 +1081,95 @@
                 "s2_b5_3",
                 "s2_b5_4",
                 "s2_b5_5",
-                "s2_b5_6",
-                "s2_b5_7",
-                "s2_b5_8",
-                "s2_b5_9",
-                "s2_b5_10"
+                "s2_b5_6"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 3.6
+        },
+        {
+          "narration_beat_id": "s2_b6",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b6_1",
+              "params": {
+                "lit_indices": [
+                  4,
+                  3
+                ],
+                "new_index": 5
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b6_2",
+              "params": {
+                "expression": "Ways[5] = 5 + 3 = 8"
+              },
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b6_3",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  5,
+                  8
+                ]
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b6_4",
+              "params": {},
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b6_c"
+              ],
+              "object_ids": [
+                "code",
+                "ways",
+                "working"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b6_1",
+                "s2_b6_2",
+                "s2_b6_3",
+                "s2_b6_4"
               ]
             }
           ],
           "pause_after": 0.9,
-          "min_seconds": 5.4
+          "min_seconds": 1.8
         }
       ],
       "opening_visible_ids": [
@@ -1149,6 +1181,7 @@
         "count",
         "ways",
         "working",
+        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [
@@ -1390,23 +1423,35 @@
           "narration_beat_id": "s3_b2",
           "actions": [
             {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b2_1",
+              "params": {
+                "active_lines": []
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
               "kind": "hide",
               "target_ids": [
                 "takeaway_s3"
               ],
-              "id": "s3_b2_1",
+              "id": "s3_b2_2",
               "params": {},
-              "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
             },
             {
               "kind": "appear",
               "target_ids": [
                 "s3_b2_line"
               ],
-              "id": "s3_b2_2",
+              "id": "s3_b2_3",
               "params": {},
-              "start_fraction": 0.5,
+              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -1421,11 +1466,12 @@
               "kind": "label",
               "action_ids": [
                 "s3_b2_1",
-                "s3_b2_2"
+                "s3_b2_2",
+                "s3_b2_3"
               ]
             }
           ],
-          "pause_after": 3.0,
+          "pause_after": 4.0,
           "min_seconds": 0.0
         },
         {

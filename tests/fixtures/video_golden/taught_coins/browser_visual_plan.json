@@ -520,6 +520,16 @@
           }
         },
         {
+          "id": "s2_b1_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Because the last coin leaves a smaller amount, the fewest for an amount is one more than the fewest for that.",
+          "payload": {
+            "tone": "yellow",
+            "idea": true
+          }
+        },
+        {
           "id": "takeaway_s2",
           "kind": "caption",
           "role": "audit",
@@ -538,36 +548,11 @@
             {
               "kind": "appear",
               "target_ids": [
-                "code"
+                "s2_b1_line"
               ],
               "id": "s2_b1_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.3533
-            },
-            {
-              "kind": "set_state",
-              "target_ids": [
-                "code"
-              ],
-              "id": "s2_b1_2",
-              "params": {
-                "active_lines": [
-                  1
-                ]
-              },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
-            },
-            {
-              "kind": "hide",
-              "target_ids": [
-                "take",
-                "left"
-              ],
-              "id": "s2_b1_3",
-              "params": {},
-              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -577,14 +562,11 @@
                 "s2_b1_c"
               ],
               "object_ids": [
-                "code",
-                "coins"
+                "s2_b1_line"
               ],
               "kind": "label",
               "action_ids": [
-                "s2_b1_1",
-                "s2_b1_2",
-                "s2_b1_3"
+                "s2_b1_1"
               ]
             }
           ],
@@ -595,27 +577,49 @@
           "narration_beat_id": "s2_b2",
           "actions": [
             {
+              "kind": "hide",
+              "target_ids": [
+                "take",
+                "left",
+                "working"
+              ],
+              "id": "s2_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s2_b2_2",
+              "params": {},
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
               "kind": "set_state",
               "target_ids": [
                 "code"
               ],
-              "id": "s2_b2_1",
+              "id": "s2_b2_3",
               "params": {
                 "active_lines": [
                   2
                 ]
               },
-              "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
             },
             {
               "kind": "appear",
               "target_ids": [
                 "best"
               ],
-              "id": "s2_b2_2",
+              "id": "s2_b2_4",
               "params": {},
-              "start_fraction": 0.5,
+              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -631,7 +635,9 @@
               "kind": "label",
               "action_ids": [
                 "s2_b2_1",
-                "s2_b2_2"
+                "s2_b2_2",
+                "s2_b2_3",
+                "s2_b2_4"
               ]
             }
           ],
@@ -652,7 +658,7 @@
                 "new_index": 0
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.3533
+              "end_fraction": 0.28
             },
             {
               "kind": "set_state",
@@ -663,15 +669,25 @@
               "params": {
                 "expression": "Fewest[0] = 0"
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "working"
+              ],
+              "id": "s2_b3_3",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
             },
             {
               "kind": "set_state",
               "target_ids": [
                 "best"
               ],
-              "id": "s2_b3_3",
+              "id": "s2_b3_4",
               "params": {
                 "items": [
                   0,
@@ -683,7 +699,7 @@
                   null
                 ]
               },
-              "start_fraction": 0.6467,
+              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -701,7 +717,8 @@
               "action_ids": [
                 "s2_b3_1",
                 "s2_b3_2",
-                "s2_b3_3"
+                "s2_b3_3",
+                "s2_b3_4"
               ]
             }
           ],
@@ -982,6 +999,7 @@
         "used",
         "best",
         "working",
+        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [
@@ -1389,23 +1407,35 @@
           "narration_beat_id": "s3_b4",
           "actions": [
             {
+              "kind": "set_state",
+              "target_ids": [
+                "code"
+              ],
+              "id": "s3_b4_1",
+              "params": {
+                "active_lines": []
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.3533
+            },
+            {
               "kind": "hide",
               "target_ids": [
                 "takeaway_s3"
               ],
-              "id": "s3_b4_1",
+              "id": "s3_b4_2",
               "params": {},
-              "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
             },
             {
               "kind": "appear",
               "target_ids": [
                 "s3_b4_line"
               ],
-              "id": "s3_b4_2",
+              "id": "s3_b4_3",
               "params": {},
-              "start_fraction": 0.5,
+              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -1420,11 +1450,12 @@
               "kind": "label",
               "action_ids": [
                 "s3_b4_1",
-                "s3_b4_2"
+                "s3_b4_2",
+                "s3_b4_3"
               ]
             }
           ],
-          "pause_after": 3.0,
+          "pause_after": 4.0,
           "min_seconds": 0.0
         },
         {

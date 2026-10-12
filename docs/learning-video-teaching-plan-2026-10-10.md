@@ -166,6 +166,21 @@ show, and a retry can pass by changing the number and leaving the sentence; the 
 but its reason is not said; the code lit is not always the code being run; the layout resizes
 between scenes; sentences read as stage directions; the check question asks for recall.
 
+**2026-10-12, later: the input reviewed, round two, and a second live run.** An independent
+review of the prompt itself scored it 5 out of 10: reasons asked for once and enforced nowhere,
+a 13-word beat budget that rejects sentences which explain, tree-then-table teaching "do not
+recompute" where a beginner lacks "why is a cell built from earlier cells", a repair loop that
+invites changing the number, and examples taken from our own test topics. Round two answers
+it: a `turn` move that states the brief's turning point and after which code clears the first
+attempt; beats sized at fifteen words; a `why` written before each sentence; a table lesson
+that teaches the rule first, with its first attempt a hand list of cases; the answer cell in a
+fill of its own; a compare that writes how the numbers compare; repairs that carry every fault,
+the facts from the trace and one instruction. Live on `deepseek/deepseek-v4.1-flash` after it,
+five algorithm topics, two of them new: four planned (binary search 2 calls, Fibonacci 3,
+"number not in the list" 4, climbing stairs 5) and coin change failed after five; $0.075 in
+all, including three failed runs spent finding faults in the new prompt. A sixth topic,
+Tribonacci with a table, was routed by keyword to the map playbook: routing is still open.
+
 **Added late on 2026-10-11: the table rule, run live once per topic.** What held the gate open was
 the model keeping a table straight: which cells start filled, with what, and in which order the
 rest are worked out. That bookkeeping is now code's. The table states its rule once

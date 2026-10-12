@@ -10,22 +10,32 @@ checked against the same picture.
 """
 from __future__ import annotations
 
+from collections import Counter
+
 from core.call_tree import repeats, shown_to_depth
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import LessonPlan, LessonScene, LessonTrace, TableRule, TraceItem
 from core.visual_state import VisualState, closing_state
-from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, compiled_beat,
-                                   line_id, line_objects, number, plain_id, stage_the_takeaway)
+from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, gather_the_move,
+                                   line_id, line_objects, number, plain_id, say_the_line,
+                                   stage_the_takeaway)
 
 # The proof each move owes the viewer.
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
          "discard": "state_change", "fill": "state_change", "count": "state_change",
          "clear": "state_change", "grow": "state_change", "spot": "state_change",
-         "take": "state_change", "remove": "state_change", "ask": "label", "answer": "label"}
+         "take": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
+         "turn": "label"}
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
 _JOIN = {"sum": " + ", "min": ", ", "max": ", "}
 _COMBINE = {"sum": sum, "min": min, "max": max}
+# Said with every number that does not match the picture. Reviewed lessons showed what a bare
+# "you expect 2, it reads 8" invites: the number is changed to 8 and the sentence still says two.
+_NOT_THE_NUMBER = (" Do not make this pass by changing the number alone. If your number is what "
+                   "the lesson means to teach, the moves or the trace are wrong: change those. If "
+                   "the picture is right, change the number and every sentence that says it.")
+_TURNED = "#turned"     # in a lesson's memory: the turning point has just been stated
 _CLOSED = "#closed"     # in a lesson's memory: the counters whose attempt has ended (no id has a '#')
 _SPENT = "#spent"       # and, for each array, the values its takes have used up
 # The least time a viewer needs to follow one step. A beat lasts at least as long as its steps
@@ -70,9 +80,19 @@ def fill_trace_lesson(data: dict) -> dict:
     the state each move produces. A lesson without a trace is returned untouched."""
     if not isinstance(data.get("trace"), dict) or not isinstance(data.get("scenes"), list):
         return data
+    for scene in data["scenes"]:
+        for beat in (scene.get("beats") or []) if isinstance(scene, dict) else []:
+            if isinstance(beat, dict):
+                gather_the_move(beat)
     brief = apply_brief(data)
     _tidy_ids(data)
     _size_tables_to_fit(data)
+    # the counter of each counted item, for a count move that names the item and not its counter
+    entries = [item for item in data["trace"].get("data") or [] if isinstance(item, dict)]
+    counters = {item.get("id") for item in entries if item.get("kind") == "counter"}
+    counted_by = {item["counts"]: item["id"] for item in entries
+                  if item.get("kind") == "counter" and isinstance(item.get("counts"), str)
+                  and isinstance(item.get("id"), str) and item["counts"] not in counters}
     for scene_number, scene in enumerate(data["scenes"], 1):
         if not isinstance(scene, dict) or not isinstance(scene.get("beats"), list):
             continue
@@ -84,6 +104,11 @@ def fill_trace_lesson(data: dict) -> dict:
             if isinstance(move, dict) and isinstance(beat.get("lines"), list):
                 move.setdefault("lines", beat["lines"])     # written beside the move; it belongs in it
                 del beat["lines"]
+            if isinstance(move, dict) and move.get("do") == "count" and move.get("counter") in counted_by:
+                move["counter"] = counted_by[move["counter"]]   # the item was named, not its counter
+            if (isinstance(move, dict) and move.get("do") == "fill" and "cell" not in move
+                    and "cells" not in move and isinstance(move.get("index"), int)):
+                move["cell"] = move.pop("index")            # the other moves say "index" for a cell
             known = isinstance(move, dict) and move.get("do") in PROOF
             beat["id"] = f"{scene['id']}_b{beat_number}"
             claim = f"{beat['id']}_c"
@@ -92,7 +117,7 @@ def fill_trace_lesson(data: dict) -> dict:
             beat["claim_requirements"] = {claim: [PROOF[move["do"]] if known else "label"]}
             beat.setdefault("visual_anchors", [])
             if known:
-                ask_the_question(beat, brief)
+                say_the_line(beat, brief)
     return data
 
 
@@ -116,6 +141,29 @@ def _tidy_ids(data: dict) -> None:
             if isinstance(move.get("items"), list):
                 move["items"] = [rename(item) for item in move["items"]]
             move.update({key: rename(move[key]) for key in _NAMES if key in move})
+
+
+def trace_facts(data: dict) -> str:
+    """What code works out from a lesson's trace alone, for the model to repair against: every
+    table from its rule, cell by cell, and every tree's calls. A model with no room to reason
+    cannot work these out reliably, and each wrong guess costs a try."""
+    try:
+        trace = LessonTrace.model_validate(data.get("trace"))
+    except Exception:       # a trace that does not hold together has no facts yet
+        return ""
+    facts = []
+    for item in trace.data:
+        if item.rule is not None:
+            cells = ", ".join(f"cell {index + item.base} holds {value}"
+                              for index, (value, _) in enumerate(table_by_rule(item)))
+            facts.append(f"in the table {item.id!r} {cells}")
+        elif item.kind == "tree":
+            seen = Counter(call["value"] for call in item.calls)
+            again = ", ".join(f"{value} is worked out {times} times"
+                              for value, times in sorted(seen.items(), reverse=True) if times > 1)
+            facts.append(f"the tree {item.id!r} makes {len(item.calls)} calls in all"
+                         + (f", and {again}" if again else ""))
+    return "; ".join(facts)
 
 
 def _size_tables_to_fit(data: dict) -> None:
@@ -189,7 +237,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
     reading 0."""
     trace = lesson.trace
     items = {item.id: item for item in trace.data}
-    working = any(beat.move.do in {"fill", "take"} for each in lesson.scenes for beat in each.beats)
+    working = any(beat.move.do in {"fill", "take", "compare"}
+                  for each in lesson.scenes for beat in each.beats)
     objects = trace_objects(trace, scene, working)
     opening, visible, drawn = carried(objects, previous_state)      # what the replay holds
     memory = memory if memory is not None else {}
@@ -274,6 +323,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             leaving = [item.id for item in trace.data
                        if item.id in visible and (item.kind == "pointer" and item.on == array
                                                   or item.id in spent.get(array, ()))]
+            if WORKING in visible:      # the last sum or comparison of that attempt goes with it
+                leaving.append(WORKING)
             if leaving:
                 actions.append({"kind": "hide", "target_ids": leaving, "params": {}})
                 visible.difference_update(leaving)
@@ -282,6 +333,27 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                           and item.counts in items and items[item.counts].kind == "pointer"
                           and items[item.counts].on == array)
             return wiped
+
+        def leftover(array: str) -> bool:
+            """Whether an attempt has left anything on an array: a tick, a cross, a ruled-out
+            cell, a pointer, or a value its takes used up. A table that is only being filled
+            has not."""
+            return bool(payloads[array].get("checked_results") or payloads[array].get("discarded_indices")
+                        or spent.get(array)
+                        or any(item.kind == "pointer" and item.on == array and item.id in visible
+                               for item in trace.data))
+
+        if memory.pop(_TURNED, False):
+            # The beat after the turning point: the first attempt is put away, so the better idea
+            # starts on a clean stage. Its marks, its pointers and its tree leave; its counters
+            # keep their totals, which are what it cost.
+            for other in trace.data:
+                if other.kind == "array" and other.id in visible and leftover(other.id):
+                    retire(other.id)
+            trees = [item.id for item in trace.data if item.kind == "tree" and item.id in visible]
+            if trees:
+                actions.append({"kind": "hide", "target_ids": trees, "params": {}})
+                visible.difference_update(trees)
 
         if move.lines:          # the lines being explained are lit before what they do is shown
             show([CODE])
@@ -294,6 +366,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             actions.append({"kind": "appear", "target_ids": [line], "params": {}})
             visible.add(line)
             anchors, shown = [move.text], [line]
+            if move.do == "turn":
+                memory[_TURNED] = True
         elif move.do == "show":
             show(move.items)
             shown += move.items
@@ -319,6 +393,12 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                 payloads[array]["checked_results"] = results
                 drawn[array]["checked_results"] = dict(results)
                 tallies = counted(move.pointer)       # a counter tied to this pointer counts the check
+                if isinstance(cell, (int, float)) and isinstance(wanted, (int, float)):
+                    # how the two compare is written out: a cross alone does not say which way
+                    told = f"{number(cell)} {'<' if cell < wanted else '>' if cell > wanted else '='} {number(wanted)}"
+                    change(WORKING, {"expression": told})
+                    show([WORKING])
+                    shown.append(WORKING)
                 needs += _DWELL["compare"]
             anchors.append(f"{cell} {'✓' if outcome == 'match' else '✗'}")
             anchors += [f"{items[tally].label}: {payloads[tally]['value']}" for tally in tallies]
@@ -348,6 +428,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                 for other in trace.data:
                     hands = {item.id for item in trace.data if item.kind == "pointer" and item.on == other.id}
                     if (other.kind == "array" and other.id != move.array and other.id in visible
+                            and leftover(other.id)
                             and not ({other.id, *hands, *spent.get(other.id, ())} & later)):
                         retire(other.id)
             show([move.array])
@@ -373,8 +454,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                             f"beat {beat.id}: you expect cell {cell + base} of {move.array!r} to hold "
                             f"{number(hoped)}, but its rule gives {worked}. From the start values "
                             f"{[number(value) for value in rule.start]} the table comes to "
-                            f"{[value for value, _ in whole]}, counting cells from {base}. Change the "
-                            "rule's start values, or the numbers the lesson states, so they agree")
+                            f"{[value for value, _ in whole]}, counting cells from {base}."
+                            + _NOT_THE_NUMBER)
                 due = {cell for cell in range(max(named) + 1) if held[cell] is None}
                 jobs = [(cell, *whole[cell]) for cell in sorted(due | set(named))]
             fills = [item.id for item in trace.data if item.counts == move.array]
@@ -411,8 +492,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                                  f"{number(left)} is left in {move.out_of!r}; take a cell that fits")
             if number(move.expect) != after:
                 raise ValueError(f"beat {beat.id}: you expect {move.out_of!r} to read "
-                                 f"{number(move.expect)} after this take, but {worked}; make the "
-                                 "move and the narration agree")
+                                 f"{number(move.expect)} after this take, but {worked}."
+                                 + _NOT_THE_NUMBER)
             change(WORKING, {"expression": worked})     # the sum first, then what is left
             show([WORKING])
             changed = change(move.out_of, {"value": after})
@@ -480,7 +561,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                        "\"depth\") before stating the total" if items[tied].kind == "tree" else
                        f"it has counted {total} so far")
                 raise ValueError(f"beat {beat.id}: you expect {move.counter!r} to read "
-                                 f"{number(move.expect)}, but it reads {total}; {why}")
+                                 f"{number(move.expect)}, but it reads {total}; {why}." + _NOT_THE_NUMBER)
             anchors.append(f"{items[move.counter].label}: {payloads[move.counter]['value']}")
             shown.append(move.counter)
 
@@ -490,6 +571,10 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             if not on_screen:
                 raise ValueError(f"beat {beat.id}: the {move.do} move has nothing on screen to act on")
             actions.append({"kind": "highlight", "target_ids": on_screen, "params": {}})
+        if not move.lines and CODE in visible and payloads[CODE].get("active_lines"):
+            # a line stays lit only while its step is being said, never over a later sentence
+            actions.insert(0, {"kind": "set_state", "target_ids": [CODE], "params": {"active_lines": []}})
+            payloads[CODE]["active_lines"] = drawn[CODE]["active_lines"] = []
         if PROOF[move.do] == "state_change" and not changed:
             # A compare already made, or cells already ruled out, changes nothing: the sentence is
             # emphasis, and what it owes the viewer is the thing itself.
@@ -557,6 +642,23 @@ def _tree_beside_an_array(lesson: LessonPlan, scenes: list[BrowserScene]) -> tup
     return None
 
 
+def _the_answer_cell_shares_its_beat(lesson: LessonPlan) -> tuple[str, str, int] | None:
+    """The beat that writes the last cell of a table together with others: its id, the table and
+    how many cells it writes. The last cell is the answer the lesson was after."""
+    tables = {item.id: item for item in lesson.trace.data if item.rule is not None}
+    filled, final = dict.fromkeys(tables, 0), {}
+    for scene in lesson.scenes:
+        for beat in scene.beats:
+            table = tables.get(beat.move.array) if beat.move.do == "fill" else None
+            if table is None:
+                continue
+            upto = max(beat.move.cells or [beat.move.cell]) - table.base + 1
+            if upto > filled[table.id]:
+                final[table.id] = (beat.id, table.id, upto - filled[table.id])
+                filled[table.id] = upto
+    return next((entry for entry in final.values() if entry[2] > 1), None)
+
+
 def _run_before_the_rule_is_seen(lesson: LessonPlan) -> tuple[str, str, int] | None:
     """The first beat that works several cells of a table out at once when no beat before it has
     worked out a single one: its id, the table and how many cells. Cells that are given are not
@@ -588,12 +690,25 @@ def craft_trace(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
         problems.append("the first scene never puts the learner's question on screen; give one of "
                         'its beats the move {"do":"ask"}, with the question '
                         f"({lesson.brief.question!r}) as its sentence")
+    said = [beat.move.do for scene in lesson.scenes for beat in scene.beats]
+    if "turn" not in said:
+        problems.append("the lesson never says why the better way works; at the beat where the "
+                        'better idea begins, use the move {"do":"turn"}, which shows and speaks '
+                        f"the brief's turning point ({lesson.brief.turning_point!r})")
+    elif "ask" in said and said.index("turn") < said.index("ask"):
+        problems.append("the turning point comes before the question it answers; put the turn "
+                        "move after the ask move and after the naive attempt has been shown")
     moves = [beat.move for scene in lesson.scenes for beat in scene.beats if beat.move.do not in LINES]
     # An item no move uses is never brought on screen and takes no room, so it is no fault of the
     # lesson: a pointer declared and then not needed is simply not drawn.
     if lesson.trace.code is not None and not any(move.lines for move in moves):
         problems.append('the code is never lit; give the moves that carry it out their "lines", '
                         "or leave the code out")
+    last = _the_answer_cell_shares_its_beat(lesson)
+    if last:
+        problems.append(f"beat {last[0]} finishes {last[1]!r} by filling {last[2]} cells at once, so "
+                        "the cell that holds the answer is rushed; give the last cell a fill of "
+                        "its own, with a sentence that says which earlier cells it uses and why")
     rushed = _run_before_the_rule_is_seen(lesson)
     if rushed:
         problems.append(f"beat {rushed[0]} works out {rushed[2]} cells of {rushed[1]!r} in one "
