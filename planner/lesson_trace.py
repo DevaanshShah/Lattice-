@@ -14,18 +14,24 @@ from core.call_tree import repeats, shown_to_depth
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import LessonPlan, LessonScene, LessonTrace, TableRule, TraceItem
 from core.visual_state import VisualState, closing_state
-from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, closes_on_a_takeaway,
-                                   compiled_beat, line_id, line_objects, number, takeaway_id)
+from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, compiled_beat,
+                                   line_id, line_objects, number, plain_id, stage_the_takeaway)
 
 # The proof each move owes the viewer.
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
          "discard": "state_change", "fill": "state_change", "count": "state_change",
          "clear": "state_change", "grow": "state_change", "spot": "state_change",
-         "remove": "state_change", "ask": "label", "answer": "label"}
+         "take": "state_change", "remove": "state_change", "ask": "label", "answer": "label"}
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
 _JOIN = {"sum": " + ", "min": ", ", "max": ", "}
 _COMBINE = {"sum": sum, "min": min, "max": max}
+_CLOSED = "#closed"     # in a lesson's memory: the counters whose attempt has ended (no id has a '#')
+_SPENT = "#spent"       # and, for each array, the values its takes have used up
+# The least time a viewer needs to follow one step. A beat lasts at least as long as its steps
+# need: when the sentence is shorter, the picture goes on in silence.
+_DWELL = {"fill": 1.8, "point": 1.2, "take": 1.8, "compare": 0.9, "call": 0.3}
+_NAMES = ("pointer", "against", "out_of", "array", "counter", "tree")   # where a move names one item
 
 
 def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list[dict]:
@@ -39,6 +45,8 @@ def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list
     for item in trace.data:
         if item.kind == "array":
             payload, role = {"items": list(item.items) or [None] * item.size}, "input"
+            if item.base:       # the number its first cell goes by, when that is not 0
+                payload["first"] = item.base
         elif item.kind == "pointer":
             payload, role = {"target_id": item.on, "index": 0}, "operation"
         elif item.kind == "value":
@@ -63,6 +71,7 @@ def fill_trace_lesson(data: dict) -> dict:
     if not isinstance(data.get("trace"), dict) or not isinstance(data.get("scenes"), list):
         return data
     brief = apply_brief(data)
+    _tidy_ids(data)
     _size_tables_to_fit(data)
     for scene_number, scene in enumerate(data["scenes"], 1):
         if not isinstance(scene, dict) or not isinstance(scene.get("beats"), list):
@@ -83,8 +92,30 @@ def fill_trace_lesson(data: dict) -> dict:
             beat["claim_requirements"] = {claim: [PROOF[move["do"]] if known else "label"]}
             beat.setdefault("visual_anchors", [])
             if known:
-                ask_the_question(move, brief)
+                ask_the_question(beat, brief)
     return data
+
+
+def _tidy_ids(data: dict) -> None:
+    """Write every item id as a plain lower-case name, in the trace and in every move that uses
+    it. An id is only a handle, so 'callCount' is tidied, not sent back."""
+    entries = [item for item in data["trace"].get("data") or [] if isinstance(item, dict)]
+    if any(not isinstance(item.get("id"), str) for item in entries):
+        return                                      # not a usable trace: the schema reports it
+    names = {item["id"]: plain_id(item["id"], "item") for item in entries}
+    if len(set(names.values())) != len(names) or all(old == new for old, new in names.items()):
+        return                                      # nothing to tidy, or tidying would merge two ids
+    rename = lambda value: names.get(value, value) if isinstance(value, str) else value
+    for item in entries:
+        item.update({key: rename(item[key]) for key in ("id", "on", "counts") if key in item})
+    for scene in data["scenes"]:
+        for beat in (scene.get("beats") or []) if isinstance(scene, dict) else []:
+            move = beat.get("move") if isinstance(beat, dict) else None
+            if not isinstance(move, dict):
+                continue
+            if isinstance(move.get("items"), list):
+                move["items"] = [rename(item) for item in move["items"]]
+            move.update({key: rename(move[key]) for key in _NAMES if key in move})
 
 
 def _size_tables_to_fit(data: dict) -> None:
@@ -99,9 +130,10 @@ def _size_tables_to_fit(data: dict) -> None:
             if not isinstance(move, dict) or move.get("do") != "fill" or move.get("array") not in tables:
                 continue
             cells = [cell for cell in [move.get("cell"), *(move.get("cells") or [])] if isinstance(cell, int)]
-            if cells and 0 <= max(cells) < 12:      # twelve cells is what the frame holds
-                table = tables[move["array"]]
-                table["size"] = max(table["size"], max(cells) + 1)
+            table = tables[move["array"]]
+            needed = max(cells, default=-1) + 1 - (table["first"] if isinstance(table.get("first"), int) else 0)
+            if 0 < needed <= 12:                    # twelve cells is what the frame holds
+                table["size"] = max(table["size"], needed)
 
 
 def table_by_rule(item: TraceItem) -> list[tuple]:
@@ -115,6 +147,23 @@ def table_by_rule(item: TraceItem) -> list[tuple]:
                  _COMBINE[rule.op]([table[index][0] for index in reads]) + rule.plus)
         table.append((number(value), reads))
     return table
+
+
+def _named(move) -> set[str]:
+    """Every item a move names."""
+    return {*move.items, *(name for name in (move.pointer, move.against, move.out_of, move.array,
+                                             move.counter, move.tree) if name)}
+
+
+def _used_after(lesson: LessonPlan, scene: LessonScene, position: int) -> set[str]:
+    """Every item that some later beat of the lesson names."""
+    later, passed = set(), False
+    for each in lesson.scenes:
+        for index, beat in enumerate(each.beats):
+            if passed:
+                later |= _named(beat.move)
+            passed = passed or (each.id == scene.id and index == position)
+    return later
 
 
 def _worked_out(label: str, cell: int, rule: TableRule | None, values: list, result) -> str:
@@ -140,10 +189,12 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
     reading 0."""
     trace = lesson.trace
     items = {item.id: item for item in trace.data}
-    working = any(beat.move.do == "fill" for each in lesson.scenes for beat in each.beats)
+    working = any(beat.move.do in {"fill", "take"} for each in lesson.scenes for beat in each.beats)
     objects = trace_objects(trace, scene, working)
     opening, visible, drawn = carried(objects, previous_state)      # what the replay holds
     memory = memory if memory is not None else {}
+    closed: set[str] = memory.setdefault(_CLOSED, set())
+    spent: dict[str, set[str]] = memory.setdefault(_SPENT, {})
     payloads = {obj_id: dict(memory.get(obj_id, held)) for obj_id, held in drawn.items()}
     rows = trace.code.source.split("\n") if trace.code else []
     beats = []
@@ -153,6 +204,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
         anchors: list[str] = []
         shown: list[str] = []
         changed = False         # whether something already on screen is visibly different afterwards
+        needs = 0.0             # the least time the steps of this beat take to follow
 
         def show(ids: list[str]) -> None:
             new = [item for item in dict.fromkeys(ids) if item not in visible]
@@ -191,6 +243,46 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             show([pointer])     # a hidden pointer is placed first, so it appears where it belongs
             return array
 
+        def at(array: str, cell: int | None) -> int | None:
+            """A cell's place in its array, from the number the lesson calls it by."""
+            return None if cell is None else cell - items[array].base
+
+        def counted(pointer: str) -> list[str]:
+            """Count one use of a pointer's cell on every counter tied to it. A counter whose
+            attempt has ended is not counted on: its total is what that attempt cost."""
+            tied = [item.id for item in trace.data if item.counts == pointer]
+            for counter in tied:
+                if counter in closed:
+                    total = payloads[counter]["value"]
+                    raise ValueError(
+                        f"beat {beat.id}: {counter!r} counted the {total} made before "
+                        f"{items[pointer].on!r} was cleared, and would now read {total + 1}. A "
+                        "second attempt needs its own pointer and its own counter, so the two "
+                        "totals can be compared: add a pointer to the trace's data, and a counter "
+                        'with "counts" set to that pointer')
+                bump(counter)
+            return tied
+
+        def retire(array: str) -> bool:
+            """End an attempt on an array: its marks are wiped, its pointers leave with whatever
+            their takes used up, and its counters keep their totals and count no further. Returns
+            whether the array itself looks different."""
+            wipe = {key: empty for key, empty in (("checked_results", {}), ("discarded_indices", []),
+                                                  ("lit_indices", []), ("new_index", None))
+                    if payloads[array].get(key) not in (None, {}, [])}
+            wiped = change(array, wipe) if wipe else False
+            leaving = [item.id for item in trace.data
+                       if item.id in visible and (item.kind == "pointer" and item.on == array
+                                                  or item.id in spent.get(array, ()))]
+            if leaving:
+                actions.append({"kind": "hide", "target_ids": leaving, "params": {}})
+                visible.difference_update(leaving)
+            closed.update(item.id for item in trace.data
+                          if item.kind == "counter" and payloads[item.id]["value"]
+                          and item.counts in items and items[item.counts].kind == "pointer"
+                          and items[item.counts].on == array)
+            return wiped
+
         if move.lines:          # the lines being explained are lit before what they do is shown
             show([CODE])
             change(CODE, {"active_lines": list(move.lines)})
@@ -207,15 +299,14 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             shown += move.items
             anchors += [items[name].label for name in move.items if name in items][:3]
         elif move.do == "look":
-            array = place(move.pointer, move.index)
-            cell = payloads[array]["items"][move.index]
+            array = place(move.pointer, at(items[move.pointer].on, move.index))
+            cell = payloads[array]["items"][payloads[move.pointer]["index"]]
             anchors.append(f"{items[move.pointer].label}: {cell}")
             shown += [move.pointer, array]
         elif move.do == "compare":
             # one cell, or several in turn: the pointer walks them and each gets its mark
-            tallies = [item.id for item in trace.data if item.counts == move.pointer]
             for stop in move.cells or [move.index]:
-                array = place(move.pointer, stop)
+                array = place(move.pointer, at(items[move.pointer].on, stop))
                 show([move.against])
                 index = payloads[move.pointer]["index"]
                 cell, wanted = payloads[array]["items"][index], payloads[move.against]["value"]
@@ -227,44 +318,46 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                 results[str(index)] = outcome
                 payloads[array]["checked_results"] = results
                 drawn[array]["checked_results"] = dict(results)
-                for tally in tallies:       # a counter tied to this pointer counts the check itself
-                    bump(tally)
+                tallies = counted(move.pointer)       # a counter tied to this pointer counts the check
+                needs += _DWELL["compare"]
             anchors.append(f"{cell} {'✓' if outcome == 'match' else '✗'}")
             anchors += [f"{items[tally].label}: {payloads[tally]['value']}" for tally in tallies]
             shown += [move.pointer, move.against, array, *tallies]
         elif move.do == "clear":
             # wipe the marks of one attempt, so the next starts on clean data
             show([move.array])
-            wipe = {key: empty for key, empty in (("checked_results", {}), ("discarded_indices", []),
-                                                  ("lit_indices", []), ("new_index", None))
-                    if payloads[move.array].get(key) not in (None, {}, [])}
-            if wipe:
-                changed = change(move.array, wipe)
-            resting = [item.id for item in trace.data
-                       if item.kind == "pointer" and item.on == move.array and item.id in visible]
-            if resting:     # the pointers leave; the claim is about the array, which may be unmarked
-                actions.append({"kind": "hide", "target_ids": resting, "params": {}})
-                visible.difference_update(resting)
+            changed = retire(move.array)    # the claim is about the array, which may be unmarked
             anchors.append(items[move.array].label)
             shown.append(move.array)        # the pointers have left; the array is what is shown
         elif move.do == "discard":
             show([move.array])
-            gone = sorted({*(payloads[move.array].get("discarded_indices") or []), *move.cells})
+            gone = sorted({*(payloads[move.array].get("discarded_indices") or []),
+                           *(at(move.array, cell) for cell in move.cells)})
             changed = change(move.array, {"discarded_indices": gone})
             cells = payloads[move.array]["items"]
             anchors.append("discard [" + ",".join(str(cells[index]) for index in gone) + "]")
             shown.append(move.array)
         elif move.do == "fill":
-            show([move.array])
             table, rule = items[move.array], items[move.array].rule
-            label, held = table.label, payloads[move.array]["items"]
-            named = move.cells or [move.cell]
+            label, held, base = table.label, payloads[move.array]["items"], table.base
+            if all(cell is None for cell in held):
+                # A table starts a new approach. What an earlier attempt left on another array
+                # (its marks, its pointer, the value it used up) goes, unless the lesson comes
+                # back to it: leftovers of the first idea must not sit beside the second.
+                later = _used_after(lesson, scene, position)
+                for other in trace.data:
+                    hands = {item.id for item in trace.data if item.kind == "pointer" and item.on == other.id}
+                    if (other.kind == "array" and other.id != move.array and other.id in visible
+                            and not ({other.id, *hands, *spent.get(other.id, ())} & later)):
+                        retire(other.id)
+            show([move.array])
+            named = [at(move.array, cell) for cell in move.cells or [move.cell]]
             if rule is None:        # a number the lesson gives, written where it says
-                if held[move.cell] is not None:
+                if held[named[0]] is not None:
                     raise ValueError(f"beat {beat.id}: cell {move.cell} of {move.array!r} already "
-                                     f"holds {held[move.cell]}; a table that is filled in starts "
+                                     f"holds {held[named[0]]}; a table that is filled in starts "
                                      'empty, so give the array "size" instead of "items"')
-                jobs = [(move.cell, number(move.value), [])]
+                jobs = [(named[0], number(move.value), [])]
             else:
                 # Code works the whole table out. What the lesson says a cell holds is checked
                 # against it, and every cell still empty up to the last one named is filled in
@@ -274,12 +367,13 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                 for cell, hoped in zip(named, said):
                     value, reads = whole[cell]
                     if number(hoped) != value:
-                        worked = _worked_out(label, cell, rule, [whole[index][0] for index in reads], value)
+                        worked = _worked_out(label, cell + base, rule,
+                                             [whole[index][0] for index in reads], value)
                         raise ValueError(
-                            f"beat {beat.id}: you expect cell {cell} of {move.array!r} to hold "
+                            f"beat {beat.id}: you expect cell {cell + base} of {move.array!r} to hold "
                             f"{number(hoped)}, but its rule gives {worked}. From the start values "
                             f"{[number(value) for value in rule.start]} the table comes to "
-                            f"{[value for value, _ in whole]}, counting cells from 0. Change the "
+                            f"{[value for value, _ in whole]}, counting cells from {base}. Change the "
                             "rule's start values, or the numbers the lesson states, so they agree")
                 due = {cell for cell in range(max(named) + 1) if held[cell] is None}
                 jobs = [(cell, *whole[cell]) for cell in sorted(due | set(named))]
@@ -287,21 +381,53 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             for target, value, reads in jobs:
                 cells = list(payloads[move.array]["items"])
                 again = cells[target] is not None       # filled before: pointed at, not written
-                worked = _worked_out(label, target, rule, [cells[index] for index in reads], value)
-                cells[target] = value
-                changed = change(move.array, {"items": cells, "lit_indices": reads,
-                                              "new_index": target}) or changed
-                for tally in [] if again else fills:    # a counter tied to this table counts the cell
-                    bump(tally)
+                worked = _worked_out(label, target + base, rule, [cells[index] for index in reads], value)
+                # where the number comes from is shown first; then the number lands in its cell
+                changed = change(move.array, {"lit_indices": reads, "new_index": target}) or changed
                 change(WORKING, {"expression": worked})
                 show([WORKING])
+                if not again:
+                    cells[target] = value
+                    changed = change(move.array, {"items": cells}) or changed
+                    for tally in fills:                 # a counter tied to this table counts the cell
+                        bump(tally)
+                needs += _DWELL["point" if again else "fill"]
             anchors.append(worked)
             shown += [move.array, WORKING, *fills]
+        elif move.do == "take":
+            # The number under the pointer comes out of a value: one step of an attempt that
+            # grabs things one at a time. Code does the sum, so what is left is always right.
+            array = place(move.pointer, at(items[move.pointer].on, move.index))
+            show([move.out_of])
+            cell = payloads[array]["items"][payloads[move.pointer]["index"]]
+            left = payloads[move.out_of]["value"]
+            if not isinstance(cell, (int, float)) or not isinstance(left, (int, float)):
+                raise ValueError(f"beat {beat.id}: a take works on numbers, and {cell!r} out of "
+                                 f"{left!r} is not a sum")
+            after = number(left - cell)
+            worked = f"{items[move.out_of].label} = {number(left)} - {number(cell)} = {after}"
+            if after < 0:
+                raise ValueError(f"beat {beat.id}: {number(cell)} does not fit, because only "
+                                 f"{number(left)} is left in {move.out_of!r}; take a cell that fits")
+            if number(move.expect) != after:
+                raise ValueError(f"beat {beat.id}: you expect {move.out_of!r} to read "
+                                 f"{number(move.expect)} after this take, but {worked}; make the "
+                                 "move and the narration agree")
+            change(WORKING, {"expression": worked})     # the sum first, then what is left
+            show([WORKING])
+            changed = change(move.out_of, {"value": after})
+            tallies = counted(move.pointer)       # a counter tied to this pointer counts the take
+            spent.setdefault(array, set()).add(move.out_of)
+            needs += _DWELL["take"]
+            anchors += [worked, f"{items[move.out_of].label}: {after}"]
+            anchors += [f"{items[each].label}: {payloads[each]['value']}" for each in tallies]
+            shown += [move.pointer, array, move.out_of, WORKING, *tallies]
         elif move.do == "grow":
             # reveal the calls down to a level (or all of them); a counter tied to the tree follows
             show([move.tree])
             reach = max(payloads[move.tree]["shown"],
                         shown_to_depth(payloads[move.tree]["nodes"], move.depth))
+            needs += _DWELL["call"] * (reach - payloads[move.tree]["shown"])
             changed = change(move.tree, {"shown": reach})
             tallies = [item.id for item in trace.data if item.counts == move.tree]
             for tally in tallies:
@@ -335,7 +461,10 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             anchors += [items[name].label for name in move.items if name in items][:2]
             shown += move.items
         elif move.do == "count":
-            show([move.counter])
+            # every total the lesson has counted comes on with it, so two costs are compared
+            # side by side and not from memory
+            show([move.counter, *(item.id for item in trace.data
+                                  if item.kind == "counter" and payloads[item.id]["value"])])
             if items[move.counter].counts is None:
                 bump(move.counter)
                 changed = True
@@ -355,9 +484,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             anchors.append(f"{items[move.counter].label}: {payloads[move.counter]['value']}")
             shown.append(move.counter)
 
-        if closes_on_a_takeaway(scene) and position == len(scene.beats) - 1:
-            actions.append({"kind": "appear", "target_ids": [takeaway_id(scene)], "params": {}})
-            visible.add(takeaway_id(scene))
+        stage_the_takeaway(scene, position, actions, visible)
         if not actions:     # nothing changes: still light up what the sentence is about
             on_screen = [name for name in shown if name in visible]
             if not on_screen:
@@ -371,7 +498,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             beat.claim_requirements = {claim: [PROOF[move.do]] for claim in beat.claim_ids}
         # the texts that must be readable while this is spoken, read off the state just produced
         beat.visual_anchors = list(dict.fromkeys(anchors))[:4]
-        beats.append(compiled_beat(scene, position, actions, list(dict.fromkeys(shown))))
+        beats.append(compiled_beat(scene, position, actions, list(dict.fromkeys(shown)), needs))
     memory.update({item.id: dict(payloads[item.id]) for item in trace.data})
     if working:
         memory[WORKING] = dict(payloads[WORKING])
@@ -430,6 +557,27 @@ def _tree_beside_an_array(lesson: LessonPlan, scenes: list[BrowserScene]) -> tup
     return None
 
 
+def _run_before_the_rule_is_seen(lesson: LessonPlan) -> tuple[str, str, int] | None:
+    """The first beat that works several cells of a table out at once when no beat before it has
+    worked out a single one: its id, the table and how many cells. Cells that are given are not
+    worked out, so the start of a table may be filled in one beat."""
+    tables = {item.id: item for item in lesson.trace.data if item.rule is not None}
+    filled, seen = dict.fromkeys(tables, 0), set()
+    for scene in lesson.scenes:
+        for beat in scene.beats:
+            table = tables.get(beat.move.array) if beat.move.do == "fill" else None
+            if table is None:
+                continue
+            upto = max(beat.move.cells or [beat.move.cell]) - table.base
+            worked = [cell for cell in range(filled[table.id], upto + 1) if cell >= len(table.rule.start)]
+            if len(worked) > 1 and table.id not in seen:
+                return beat.id, table.id, len(worked)
+            if worked:
+                seen.add(table.id)
+            filled[table.id] = max(filled[table.id], upto + 1)
+    return None
+
+
 def craft_trace(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
     """Where a newly planned trace lesson falls short as teaching, in words the lesson step can
     act on. These test craft, never a plot."""
@@ -446,6 +594,12 @@ def craft_trace(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
     if lesson.trace.code is not None and not any(move.lines for move in moves):
         problems.append('the code is never lit; give the moves that carry it out their "lines", '
                         "or leave the code out")
+    rushed = _run_before_the_rule_is_seen(lesson)
+    if rushed:
+        problems.append(f"beat {rushed[0]} works out {rushed[2]} cells of {rushed[1]!r} in one "
+                        "sentence, before the viewer has seen its rule work once; first give one "
+                        "worked-out cell a beat of its own, with a sentence that says where its "
+                        "number comes from, then finish the table")
     crowded = _tree_beside_an_array(lesson, scenes)
     if crowded:
         problems.append(f"beat {crowded[0]} has the tree {crowded[1]!r} and the array {crowded[2]!r} on "

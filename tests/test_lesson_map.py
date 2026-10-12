@@ -193,8 +193,9 @@ def test_the_requested_length_reaches_the_lesson_and_a_short_lesson_is_sent_back
             "which are added after your last beat. Write about 6 beats, in 2 scenes"
             in client.asked[0][1]["content"])
     assert "Use at most 4 scene(s)" in client.asked[0][1]["content"]
-    # eight two-word beats, plus the check question and answer that code adds
-    assert "the narration has 39 words" in client.asked[1][-1]["content"]
+    # two-word beats, the opening question as the brief words it (an ask beat speaks what it
+    # shows), plus the check question and answer that code adds
+    assert "the narration has 47 words" in client.asked[1][-1]["content"]
     assert sum(len(b.spoken_text.split()) for s in lesson.scenes for b in s.beats) == 152
 
 
@@ -526,14 +527,19 @@ def test_the_question_is_shown_and_the_check_gets_a_pause_and_an_answer():
     assert (answered.spoken_text, answered.move.do) == (BRIEF["check_answer"], "answer")
     assert lines["s2_b4_line"].label == BRIEF["check_question"]
     assert lines["s2_b5_line"].label == BRIEF["check_answer"] and lines["s2_b5_line"].payload["tick"] is True
-    # the picture holds after the check question, and nowhere else
-    assert [beat.pause_after for beat in second.beats] == [0, 0, 0, 1.6, 0]
-    assert all(beat.pause_after == 0 for beat in first.beats)
-    # a scene that ends on an answer shows no takeaway under it
+    # a breath after every sentence, a longer one as a scene closes, and time to think
+    # after the check question
+    assert [beat.pause_after for beat in second.beats] == [0.4, 0.4, 0.4, 3.0, 0.9]
+    assert [beat.pause_after for beat in first.beats] == [0.4] * (len(first.beats) - 1) + [0.9]
+    # A scene that ends on a question and its answer shows its takeaway first, on the beat before
+    # the question, and takes it off as the question comes on: two lines under the picture, not three.
     closing = _answer()
     closing["scenes"][1]["takeaway"] = "A copy shares the load"
     _, last = plan_map_scenes(_lesson(closing), SKILL)
-    assert "takeaway_s2" not in {obj.id for obj in last.objects}
+    steps = lambda beat: [(action.kind, action.target_ids) for action in last.beats[beat].actions]
+    assert steps(2)[-1] == ("appear", ["takeaway_s2"])
+    assert steps(3) == [("hide", ["takeaway_s2"]), ("appear", ["s2_b4_line"])]
+    assert "takeaway_s2" not in last.closing_visible_ids
 
 
 @pytest.mark.unit
@@ -621,7 +627,7 @@ def test_the_taught_map_fixture_is_exactly_what_the_compiler_writes():
     compiled = plan_map_scenes(lesson, SKILL)
     assert saved.scenes == compiled
     assert craft_problems(lesson, compiled) == []
-    assert [beat.pause_after for beat in compiled[-1].beats] == [0, 0, 0, 1.6, 0]
+    assert [beat.pause_after for beat in compiled[-1].beats] == [0.4, 0.4, 0.4, 3.0, 0.9]
 
 
 @pytest.mark.unit

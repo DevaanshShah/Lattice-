@@ -100,7 +100,7 @@ LINE_LENGTH = 110
 
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
 TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
-               "grow", "spot", "remove")
+               "grow", "spot", "take", "remove")
 LINE_MOVES = ("ask", "answer")        # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
@@ -112,6 +112,7 @@ _TAKES = {
     "ask": {"text"}, "answer": {"text"},
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
+    "take": {"pointer", "index", "out_of", "expect", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
     "fill": {"array", "cell", "cells", "value", "expect", "lines"},
     "count": {"counter", "expect", "lines"},
@@ -125,6 +126,8 @@ _NEEDS = {
     "run": "a run move needs the lines of code it lights",
     "look": "a look move needs a pointer and the index of the cell it points at",
     "compare": "a compare move needs a pointer and the value it is compared against",
+    "take": 'a take move needs a pointer, the value its cell is taken out of in "out_of", and '
+            'the number that is left afterwards in "expect"',
     "discard": "a discard move needs an array and the cells it rules out",
     "fill": "a fill move needs an array and the cell it fills",
     "count": "a count move needs a counter",
@@ -142,7 +145,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "grow", "spot", "ask", "answer"]
+                "grow", "spot", "take", "ask", "answer"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -156,6 +159,7 @@ class BeatMove(BaseModel):
     pointer: str | None = None
     index: int | None = Field(default=None, ge=0)
     against: str | None = None                        # the value a pointed cell is compared with
+    out_of: str | None = None                         # the value a pointed cell's number is taken out of
     array: str | None = None
     cells: list[int] = Field(default_factory=list)
     cell: int | None = Field(default=None, ge=0)
@@ -189,6 +193,7 @@ class BeatMove(BaseModel):
             "show": not self.items, "run": not self.lines,
             "look": self.pointer is None or self.index is None,
             "compare": self.pointer is None or self.against is None,
+            "take": self.pointer is None or self.out_of is None or self.expect is None,
             "discard": self.array is None or not self.cells,
             "fill": self.array is None or (self.cell is None and not self.cells),
             "count": self.counter is None, "clear": self.array is None,
@@ -211,8 +216,8 @@ class BeatMove(BaseModel):
                 raise ValueError('a fill move says what its cell comes to in "expect": one number '
                                  'for one "cell", a list with one number per cell for several '
                                  '"cells". It is checked against the table\'s rule')
-        if self.do == "count" and isinstance(self.expect, list):
-            raise ValueError('a count move expects one total, not a list')
+        if self.do in {"count", "take"} and isinstance(self.expect, list):
+            raise ValueError(f'a {self.do} move expects one number, not a list')
         if self.do == "compare" and self.cells and self.index is not None:
             raise ValueError('a compare move checks one cell ("index") or several in turn '
                              '("cells"), not both')
@@ -310,6 +315,9 @@ class TraceItem(BaseModel):
     items: list[int | float | str] = Field(default_factory=list, max_length=12)   # an array's values
     size: int | None = Field(default=None, ge=2, le=12)     # an array that starts empty, to be filled
     rule: TableRule | None = None                           # how an empty table's cells are worked out
+    # The number an array's first cell goes by, 0 unless given: with 1, its cells are numbered
+    # from 1 on screen, in the working and in the lesson's moves, for stair 1 or day 1.
+    first: int | None = Field(default=None, ge=0, le=1)
     on: str | None = None                                   # the array a pointer points into
     value: int | float | str | None = None                  # what a fixed value shows
     # a counter that goes up by itself: on every compare of this pointer, every call of this tree,
@@ -321,10 +329,10 @@ class TraceItem(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
-        mine = {"array": {"items", "size", "rule"}, "pointer": {"on"}, "value": {"value"},
+        mine = {"array": {"items", "size", "rule", "first"}, "pointer": {"on"}, "value": {"value"},
                 "counter": {"counts"}, "tree": {"start", "steps"}}
-        stray = sorted(name for name in ("items", "size", "rule", "on", "value", "counts", "start",
-                                         "steps")
+        stray = sorted(name for name in ("items", "size", "rule", "first", "on", "value", "counts",
+                                         "start", "steps")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:
             raise ValueError(f"trace item {self.id!r}: a {self.kind} has no {stray[0]}")
@@ -363,6 +371,11 @@ class TraceItem(BaseModel):
     @property
     def length(self) -> int:
         return len(self.items) or (self.size or 0)
+
+    @property
+    def base(self) -> int:
+        """The number of an array's first cell."""
+        return self.first or 0
 
 
 class LessonTrace(BaseModel):
@@ -516,8 +529,8 @@ class LessonPlan(BaseModel):
         rows = len(self.trace.code.source.split("\n")) if self.trace.code else 0
         for beat in beats:
             move, where = beat.move, f"beat {beat.id}"
-            named = [*move.items, *(name for name in (move.pointer, move.against, move.array,
-                                                      move.counter, move.tree) if name)]
+            named = [*move.items, *(name for name in (move.pointer, move.against, move.out_of,
+                                                      move.array, move.counter, move.tree) if name)]
             if move.pieces:
                 raise ValueError(f"{where}: a {move.do} move of a trace lesson names \"items\", "
                                  "not pieces")
@@ -531,16 +544,17 @@ class LessonPlan(BaseModel):
                                  f"{outside[0]}" if rows else
                                  f"{where}: the move lights lines of code, but the trace has no code")
             for name, wanted in ((move.pointer, "pointer"), (move.against, "value"),
-                                 (move.array, "array"), (move.counter, "counter"),
-                                 (move.tree, "tree")):
+                                 (move.out_of, "value"), (move.array, "array"),
+                                 (move.counter, "counter"), (move.tree, "tree")):
                 if name and items[name].kind != wanted:
                     raise ValueError(f"{where}: {name!r} is not {'an' if wanted == 'array' else 'a'} {wanted}")
             array = items[items[move.pointer].on] if move.pointer else items.get(move.array)
             cells = [*move.cells, *(cell for cell in (move.index, move.cell) if cell is not None)]
-            beyond = sorted(cell for cell in cells if array is not None and cell >= array.length)
+            beyond = sorted(cell for cell in cells if array is not None
+                            and not array.base <= cell < array.base + array.length)
             if beyond:
-                raise ValueError(f"{where}: {array.id!r} has cells 0 to {array.length - 1}; there "
-                                 f"is no cell {beyond[0]}")
+                raise ValueError(f"{where}: {array.id!r} has cells {array.base} to "
+                                 f"{array.base + array.length - 1}; there is no cell {beyond[0]}")
             if move.do == "count" and items[move.counter].counts and move.expect is None:
                 raise ValueError(f"{where}: {move.counter!r} counts by itself; say the total you "
                                  'expect it to read in "expect", and it is checked')

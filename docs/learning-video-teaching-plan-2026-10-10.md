@@ -149,6 +149,23 @@ battery once (cap $0.10).
 Code on the left, data on the right. The renderer already draws the code window with a moving
 highlight, an array, a pointer, tick and cross marks, discarded cells and a counter.
 
+**2026-10-12: reviewed independently, and the first round of repairs.** The four lessons of
+the live run were each given to a separate reviewer with the prompt, the plan, the rejected
+answers and two frames per beat (`out/phase4_review/independent_review_2026-10-12.md`). All four
+verdicts: a new learner understands partly, a teacher would not publish it, 3.5 to 4 out of 10.
+The numbers code works out were right in every lesson; the teaching was not. This gate cannot
+close on "the lesson planned": it needs a reviewed lesson a teacher would publish.
+
+Repaired in code since, with no live run yet: pacing (a breath after every sentence, three
+seconds to think, a least time for the steps of a beat, the working shown before its number),
+a clean stage (a finished attempt leaves nothing behind, every total on screen at a count, the
+closing takeaway shown, no room kept for what has left), a `take` move, a counter per attempt,
+cells that can be numbered from 1, and no algorithm lesson under ninety seconds. Still open
+from the review, in order of harm: a sentence can state a number or a step the screen does not
+show, and a retry can pass by changing the number and leaving the sentence; the idea is shown
+but its reason is not said; the code lit is not always the code being run; the layout resizes
+between scenes; sentences read as stage directions; the check question asks for recall.
+
 **Added late on 2026-10-11: the table rule, run live once per topic.** What held the gate open was
 the model keeping a table straight: which cells start filled, with what, and in which order the
 rest are worked out. That bookkeeping is now code's. The table states its rule once

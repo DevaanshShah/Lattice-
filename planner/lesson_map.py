@@ -13,7 +13,8 @@ import re
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import BeatMove, LessonMap, LessonPlan, LessonScene
 from core.visual_state import VisualState, closing_state
-from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, closes_on_a_takeaway,
+from planner.lesson_shared import (LINES, apply_brief, ask_the_question, carried, plain_id,
+                                   stage_the_takeaway,
                                    compiled_beat, line_id, line_objects, story_shape, takeaway_id)
 from planner.lesson_shared import number as _number
 
@@ -92,7 +93,7 @@ def fill_map_lesson(data: dict) -> dict:
                 continue
             if isinstance(move.get("path"), list):
                 move["path"] = _along_the_arrows(move["path"], routes)
-            ask_the_question(move, brief)
+            ask_the_question(beat, brief)
             anchors = [labels[item] for item in _involved(move)
                        if isinstance(labels.get(item), str) and item != move.get("meter")][:3]
             if move.get("meter") in labels and isinstance(move.get("value"), (int, float)):
@@ -112,8 +113,7 @@ def _tidy_ids(lesson_map: dict, scenes: list) -> None:
         old = piece.get("id")
         if not isinstance(old, str):
             return                                  # not a usable map: the schema reports it
-        new = re.sub(r"[^a-z0-9]+", "_", old.lower()).strip("_")[:24] or "piece"
-        names[old] = new if new[0].isalpha() else ("p_" + new)[:24]
+        names[old] = plain_id(old, "piece")
     if len(set(names.values())) != len(names) or all(old == new for old, new in names.items()):
         return                                      # nothing to tidy, or tidying would merge two ids
     rename = lambda value: names.get(value, value) if isinstance(value, str) else value
@@ -320,9 +320,7 @@ def compile_map_scene(lesson: LessonPlan, scene: LessonScene,
     beats = []
     for position, beat in enumerate(scene.beats):
         actions = _actions(beat.move, lesson.map, visible, payloads, line_id(beat))
-        if closes_on_a_takeaway(scene) and position == len(scene.beats) - 1:
-            actions.append({"kind": "appear", "target_ids": [takeaway_id(scene)], "params": {}})
-            visible.add(takeaway_id(scene))
+        stage_the_takeaway(scene, position, actions, visible)
         if not actions:
             raise ValueError(f"beat {beat.id}: the {beat.move.do} move has nothing on screen to "
                              "act on; introduce the piece first")

@@ -134,7 +134,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b2",
@@ -381,7 +382,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 5.4
         },
         {
           "narration_beat_id": "s1_b3",
@@ -422,7 +424,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [],
@@ -596,7 +599,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s2_b2",
@@ -656,7 +660,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s2_b3",
@@ -728,7 +733,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.9
         },
         {
           "narration_beat_id": "s2_b4",
@@ -793,7 +799,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [
@@ -916,6 +923,16 @@
             "tone": "teal",
             "tick": true
           }
+        },
+        {
+          "id": "takeaway_s3",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Two checks, where one by one took six",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
         }
       ],
       "relationships": [],
@@ -993,7 +1010,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.9
         },
         {
           "narration_beat_id": "s3_b2",
@@ -1010,6 +1028,16 @@
                 ]
               },
               "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s3"
+              ],
+              "id": "s3_b2_2",
+              "params": {},
+              "start_fraction": 0.5,
               "end_fraction": 0.94
             }
           ],
@@ -1023,23 +1051,35 @@
               ],
               "kind": "label",
               "action_ids": [
-                "s3_b2_1"
+                "s3_b2_1",
+                "s3_b2_2"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b3",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "hide",
               "target_ids": [
-                "s3_b3_line"
+                "takeaway_s3"
               ],
               "id": "s3_b3_1",
               "params": {},
               "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b3_line"
+              ],
+              "id": "s3_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
               "end_fraction": 0.94
             }
           ],
@@ -1053,11 +1093,13 @@
               ],
               "kind": "label",
               "action_ids": [
-                "s3_b3_1"
+                "s3_b3_1",
+                "s3_b3_2"
               ]
             }
           ],
-          "pause_after": 1.6
+          "pause_after": 3.0,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b4",
@@ -1087,7 +1129,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [

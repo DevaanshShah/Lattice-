@@ -54,6 +54,8 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     contract = f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
     if schema_version == 1:
         contract += f"\nRequired visual roles: {', '.join(skill.required_roles)}"
+    if playbook is not None and target_seconds:
+        target_seconds = max(target_seconds, playbook.shortest)
     # The length the user picked reaches the lesson itself, so nothing is cut off a finished one.
     words = round(target_seconds * WORDS_PER_SECOND) if target_seconds and schema_version == 2 else None
     low, high = ((round(words * (1 - LENGTH_TOLERANCE)), round(words * (1 + LENGTH_TOLERANCE)))

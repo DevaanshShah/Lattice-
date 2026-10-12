@@ -120,7 +120,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                         try:
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
                                 title=lesson_scene.title, opening=state,
-                                duration=audio.duration + visual_beat.pause_after,
+                                duration=audio.duration + visual_beat.hold(audio.duration),
                                 audio=audio.path, fps=fps, ball=ball)
                             attempt = 1
                         except BrowserLayoutError as exc:
@@ -130,7 +130,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                                          evidence={"geometry": exc.geometry})
                             captured = render_animated_beat(visual_scene, visual_beat, beat_clip,
                                 title=lesson_scene.title, opening=state,
-                                duration=audio.duration + visual_beat.pause_after,
+                                duration=audio.duration + visual_beat.hold(audio.duration),
                                 audio=audio.path, fps=fps, layout_mode="compact", ball=ball)
                             attempt = 2
                         ball = ball_after(visual_scene, visual_beat, ball)

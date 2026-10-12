@@ -132,7 +132,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b2",
@@ -177,7 +178,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b3",
@@ -252,7 +254,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b4",
@@ -293,7 +296,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [],
@@ -450,7 +454,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s2_b2",
@@ -482,7 +487,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s2_b3",
@@ -523,7 +529,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [
@@ -707,7 +714,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b2",
@@ -741,7 +749,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b3",
@@ -773,7 +782,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b4",
@@ -803,7 +813,8 @@
               ]
             }
           ],
-          "pause_after": 1.6
+          "pause_after": 3.0,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b5",
@@ -833,7 +844,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [

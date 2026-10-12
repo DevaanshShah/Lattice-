@@ -6,11 +6,15 @@ beat's steps, and the record of one compiled beat.
 """
 from __future__ import annotations
 
+import re
+
 from core.schemas.lesson_plan import LessonPlan, LessonScene
 from core.visual_state import VisualState
 
 LINES = {"ask", "answer"}       # moves that show a line of text, not a change in the picture
-THINK_PAUSE = 1.6               # seconds a question is held before its answer
+THINK_PAUSE = 3.0               # seconds a question is held before its answer
+BREATH = 0.4                    # silence after every sentence, so one does not run into the next
+SCENE_BREATH = 0.9              # and a longer one as a scene closes
 
 
 def number(value: float):
@@ -26,9 +30,28 @@ def line_id(beat) -> str:
     return f"{beat.id}_line"
 
 
-def closes_on_a_takeaway(scene: LessonScene) -> bool:
-    """A scene that gives an answer ends on that answer; a takeaway under it would be a third line."""
-    return bool(scene.takeaway) and not any(beat.move and beat.move.do == "answer" for beat in scene.beats)
+def takeaway_beat(scene: LessonScene) -> int | None:
+    """The beat on which a scene's takeaway appears: its last, or the one before the check question
+    when the scene ends on a question and its answer. There is room for two lines under the
+    picture, so the takeaway is shown first and gives way to the question."""
+    if not scene.takeaway:
+        return None
+    moves = [beat.move.do if beat.move is not None else None for beat in scene.beats]
+    if "answer" not in moves:
+        return len(moves) - 1
+    asked = moves.index("ask")
+    return asked - 1 if asked > 0 else None
+
+
+def stage_the_takeaway(scene: LessonScene, position: int, actions: list[dict], visible: set[str]) -> None:
+    """Bring a scene's takeaway on at its beat, and take it off as the check question comes on."""
+    mine = takeaway_id(scene)
+    if scene.beats[position].move.do == "ask" and mine in visible:
+        actions.insert(0, {"kind": "hide", "target_ids": [mine], "params": {}})
+        visible.discard(mine)
+    if takeaway_beat(scene) == position:
+        actions.append({"kind": "appear", "target_ids": [mine], "params": {}})
+        visible.add(mine)
 
 
 def line_objects(scene: LessonScene) -> list[dict]:
@@ -41,7 +64,7 @@ def line_objects(scene: LessonScene) -> list[dict]:
                             "label": beat.move.text,
                             "payload": {"tone": "white", "ask": True} if asks
                             else {"tone": "teal", "tick": True}})
-    if closes_on_a_takeaway(scene):
+    if takeaway_beat(scene) is not None:
         objects.append({"id": takeaway_id(scene), "kind": "caption", "role": "audit",
                         "label": scene.takeaway, "payload": {"tone": "teal", "tick": True}})
     return objects
@@ -70,11 +93,23 @@ def apply_brief(data: dict) -> dict | None:
     return brief
 
 
-def ask_the_question(move: dict, brief: dict | None) -> None:
-    """An ask with no text asks the lesson's own question."""
-    if (move.get("do") == "ask" and not move.get("text") and isinstance(brief, dict)
-            and isinstance(brief.get("question"), str)):
+def ask_the_question(beat: dict, brief: dict | None) -> None:
+    """An ask with no text asks the lesson's own question, and what the beat speaks is the
+    question it shows: the viewer never hears one question while reading another."""
+    move = beat["move"]
+    if move.get("do") != "ask":
+        return
+    if not move.get("text") and isinstance(brief, dict) and isinstance(brief.get("question"), str):
         move["text"] = brief["question"]
+    if isinstance(move.get("text"), str) and move["text"].strip():
+        beat["spoken_text"] = move["text"]
+
+
+def plain_id(old: str, fallback: str) -> str:
+    """An id as a plain lower-case name. An id is only a handle, so 'order-service', 'DB 1' and
+    'callCount' are tidied, not sent back."""
+    new = re.sub(r"[^a-z0-9]+", "_", old.lower()).strip("_")[:24] or fallback
+    return new if new[0].isalpha() else (fallback[0] + "_" + new)[:24]
 
 
 def carried(objects: list[dict], previous_state: VisualState | None) -> tuple[list[str], set[str], dict]:
@@ -88,9 +123,11 @@ def carried(objects: list[dict], previous_state: VisualState | None) -> tuple[li
     return opening, set(opening), payloads
 
 
-def compiled_beat(scene: LessonScene, position: int, actions: list[dict], shown: list[str]) -> dict:
-    """One beat of a compiled scene: its steps timed, its claim tied to what it shows, and a
-    pause after a question that the next beat answers."""
+def compiled_beat(scene: LessonScene, position: int, actions: list[dict], shown: list[str],
+                  seconds: float = 0.0) -> dict:
+    """One beat of a compiled scene: its steps timed, its claim tied to what it shows, a breath
+    after its sentence (longer after a question that the next beat answers, and as a scene
+    closes), and the least time its steps need, in `seconds`."""
     beat = scene.beats[position]
     for count, action in enumerate(actions):
         # steps share the beat evenly; each plays briskly at the start of its share and holds
@@ -102,8 +139,10 @@ def compiled_beat(scene: LessonScene, position: int, actions: list[dict], shown:
                 for claim, kinds in beat.claim_requirements.items() for kind in kinds]
     entry = {"narration_beat_id": beat.id, "actions": actions, "evidence": evidence}
     following = scene.beats[position + 1].move.do if position + 1 < len(scene.beats) else None
-    if beat.move.do == "ask" and following == "answer":
-        entry["pause_after"] = THINK_PAUSE      # the viewer gets a moment before the answer
+    entry["pause_after"] = (THINK_PAUSE if beat.move.do == "ask" and following == "answer"
+                            else SCENE_BREATH if following is None else BREATH)
+    if seconds:
+        entry["min_seconds"] = round(seconds, 2)
     return entry
 
 

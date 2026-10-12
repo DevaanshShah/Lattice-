@@ -10,6 +10,40 @@ handoff), `CLAUDE_CODE_HANDOFF.md` (the engineering brief this work answers).
 
 ---
 
+### 2026-10-12 — Pacing and a clean stage are code's job; "it planned" is not the test
+
+**Context.** Four lessons planned live for about a third of a cent each, and every number code
+worked out in them was right. The owner asked for an independent review of the teaching, not
+the frames. Four reviewers, one per lesson, each given the prompt, the plan and the frames and
+not our own list of faults, all returned the same verdict: a learner understands partly, and a
+teacher would not publish it. Common to all four: sentences running into each other at about
+200 words a minute, a table filled in three seconds, crossed-out coins and old pointers sitting
+beside the second attempt, a table drawn small beside the hole a removed tree left, and a
+closing takeaway that never appeared.
+
+**Decision.** Everything in that list that does not need the model's judgement is now done by
+code. A beat is followed by a breath, and lasts at least as long as its steps need to be
+followed. A fill shows where its number comes from before the number. When an attempt ends, its
+marks, pointers and used-up values leave; a count shows every total; a closing scene shows its
+takeaway and then gives way to the check question; an item that has left for good gives up its
+room. An algorithm lesson is not asked for in under ninety seconds. Three gaps in the menu that
+made lessons act things out wrongly were closed: a `take` move, a counter that belongs to one
+attempt, and cells that can be numbered from 1.
+
+**Why not the alternative.** Asking the model for these in the prompt had been tried: the
+prompt already said to clear the array, to give each attempt its own counter and to fill the
+first cells slowly, and three of four lessons did not. Rejecting a lesson for them costs a try,
+and the review showed that tries are not free: in all four lessons the worst fault was made or
+sealed by a retry. So what code can do without judging the teaching, it does without asking.
+
+**Consequence.** Lessons run longer than the length asked for, by the pauses and by the time
+steps need, and a picture can go on in silence after a short sentence. A lesson that never
+clears its first attempt is cleaned anyway, so a lesson cannot keep an old mark on screen by
+leaving it there; it has to use it again. Planning a lesson is no longer evidence that it is
+fit to publish: the test is a reviewed video. Not done by this change, and the larger half of
+the review: a sentence can still contradict the screen, and the reason behind the idea is still
+not said.
+
 ### 2026-10-11 — A table states its rule once, and code fills every cell
 
 **Context.** A fill move carried its own working: the cells it read, how to combine them, or a

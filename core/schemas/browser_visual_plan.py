@@ -103,6 +103,9 @@ class VisualBeat(BaseModel):
     # Seconds the picture holds in silence after the narration: time for a viewer to think about
     # a question before its answer is shown.
     pause_after: float = Field(default=0, ge=0, le=5, allow_inf_nan=False)
+    # The least time this beat's steps need to be followed. When the sentence is shorter, the
+    # picture goes on in silence: six cells are not filled in the three seconds it takes to say so.
+    min_seconds: float = Field(default=0, ge=0, le=30, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _ordered_cues(self) -> "VisualBeat":
@@ -114,6 +117,10 @@ class VisualBeat(BaseModel):
                 if current.start_fraction < previous.end_fraction:
                     raise ValueError("cue windows must be ordered and nonoverlapping")
         return self
+
+    def hold(self, audio_duration: float) -> float:
+        """Seconds the picture goes on after the narration of this beat has ended."""
+        return max(self.pause_after, self.min_seconds - audio_duration)
 
     def timeline(self, audio_duration: float) -> list[tuple[float, float]]:
         from math import isfinite

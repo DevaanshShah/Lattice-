@@ -117,8 +117,14 @@ and the renderer both use this replay, so they agree on what is on screen.
 
 The check question and its answer are not written by the model. `fill_map_lesson` appends them
 after the last beat, as an `ask` and an `answer` in the brief's own words, and the compiler
-holds the picture for 1.6 seconds between them (`pause_after`). A scene has at most one question
-and one answer. Piece ids written loosely are tidied by code wherever they are used.
+holds the picture for 3 seconds between them (`pause_after`). A scene has at most one question
+and one answer. Piece ids written loosely are tidied by code wherever they are used, and what an
+`ask` beat speaks is the question it shows.
+
+Pacing is code's job in both playbooks. Every beat is followed by 0.4 seconds of silence, and a
+scene's last beat by 0.9. A beat also carries the least time its steps need (`min_seconds`): 1.8
+seconds for each cell worked out or number taken, 0.9 for each cell checked, 0.3 for each call
+of a tree revealed. If the sentence is shorter than that, the picture goes on in silence.
 
 ### Playbooks
 
@@ -129,7 +135,7 @@ recipe's `board` names the playbook.
 | Playbook | For | Picture | Moves |
 |---|---|---|---|
 | `map` | systems and processes | icon pieces joined by arrows | introduce, send, trouble, fix, measure, point, remove |
-| `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, discard, fill, count, clear, grow, spot, remove |
+| `trace` | algorithms | code on the left, data on the right; the data can be arrays, a table to fill, or the tree of calls a recursion makes | show, run, look, compare, take, discard, fill, count, clear, grow, spot, remove |
 
 Both also take `ask` and `answer`. On a trace any move may light lines of the code, and code
 works out every result: a compare is decided by the values on screen, a table is worked out in
@@ -140,7 +146,17 @@ from its start, steps and stop (`core/call_tree.py`), and each beat's anchors ar
 state its move produced. Where code works a number out, the move also carries the number the
 lesson expects (`expect`), and a lesson whose number differs from the real one is sent back. A
 fill names only its cell and that number: every cell still empty before it is filled first, in
-order, so a lesson cannot fill a table out of order or read a cell that is still empty.
+order, so a lesson cannot fill a table out of order or read a cell that is still empty. A fill
+shows where its number comes from (the cells read, the working line) before the number lands.
+
+Three more things are code's on a trace. A `take` move takes the number under a pointer out of
+a value and shows the subtraction, for an attempt that grabs one thing at a time. A counter
+belongs to one attempt: after a `clear` it keeps its total and counts no further, and a lesson
+that goes on counting with it is sent back. And the stage is kept clean: when an attempt ends
+(a `clear`, or the first fill of a table) its marks, its pointers and the values its takes used
+up leave, unless a later beat uses them; a `count` puts every counted total on screen; an item
+that has left for good gives up its room, so what follows is not drawn small beside a hole. An
+array's cells are numbered from 0, or from 1 everywhere when it says `"first": 1`.
 
 ## 4. Visual step (stage 5)
 
@@ -156,7 +172,8 @@ order, so a lesson cannot fill a table out of order or read a cell that is still
   colour; a piece inside a panel brings its panel; a change that would change nothing is not
   written, and a beat left with no action lights up what the sentence is about;
 - action ids and even timing windows across the beat;
-- the takeaway caption as the last action of the scene;
+- the takeaway caption as the last action of the scene, or, in a scene that ends on the check
+  question and its answer, on the beat before the question, which takes its place;
 - one evidence record per beat, naming the pieces the move involves.
 
 **Lesson without a map: one model call per scene**, up to 3 attempts, prompt

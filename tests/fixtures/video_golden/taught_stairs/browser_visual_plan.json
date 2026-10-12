@@ -83,7 +83,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b2",
@@ -113,7 +114,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s1_b3",
@@ -126,7 +128,7 @@
               "id": "s1_b3_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.236
+              "end_fraction": 0.2067
             },
             {
               "kind": "set_state",
@@ -139,8 +141,8 @@
                   3
                 ]
               },
-              "start_fraction": 0.236,
-              "end_fraction": 0.412
+              "start_fraction": 0.2067,
+              "end_fraction": 0.3533
             },
             {
               "kind": "set_state",
@@ -149,19 +151,11 @@
               ],
               "id": "s1_b3_3",
               "params": {
-                "items": [
-                  1,
-                  null,
-                  null,
-                  null,
-                  null,
-                  null
-                ],
                 "lit_indices": [],
                 "new_index": 0
               },
-              "start_fraction": 0.412,
-              "end_fraction": 0.588
+              "start_fraction": 0.3533,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
@@ -172,8 +166,8 @@
               "params": {
                 "expression": "Ways[0] = 1"
               },
-              "start_fraction": 0.588,
-              "end_fraction": 0.764
+              "start_fraction": 0.5,
+              "end_fraction": 0.6467
             },
             {
               "kind": "appear",
@@ -182,7 +176,26 @@
               ],
               "id": "s1_b3_5",
               "params": {},
-              "start_fraction": 0.764,
+              "start_fraction": 0.6467,
+              "end_fraction": 0.7933
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s1_b3_6",
+              "params": {
+                "items": [
+                  1,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null
+                ]
+              },
+              "start_fraction": 0.7933,
               "end_fraction": 0.94
             }
           ],
@@ -202,11 +215,13 @@
                 "s1_b3_2",
                 "s1_b3_3",
                 "s1_b3_4",
-                "s1_b3_5"
+                "s1_b3_5",
+                "s1_b3_6"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 1.8
         },
         {
           "narration_beat_id": "s1_b4",
@@ -223,7 +238,7 @@
                 ]
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.3533
+              "end_fraction": 0.28
             },
             {
               "kind": "set_state",
@@ -232,19 +247,11 @@
               ],
               "id": "s1_b4_2",
               "params": {
-                "items": [
-                  1,
-                  1,
-                  null,
-                  null,
-                  null,
-                  null
-                ],
                 "lit_indices": [],
                 "new_index": 1
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
@@ -255,7 +262,26 @@
               "params": {
                 "expression": "Ways[1] = 1"
               },
-              "start_fraction": 0.6467,
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s1_b4_4",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  null,
+                  null,
+                  null,
+                  null
+                ]
+              },
+              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -273,11 +299,13 @@
               "action_ids": [
                 "s1_b4_1",
                 "s1_b4_2",
-                "s1_b4_3"
+                "s1_b4_3",
+                "s1_b4_4"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 1.8
         }
       ],
       "opening_visible_ids": [],
@@ -357,7 +385,7 @@
                 ]
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.3533
+              "end_fraction": 0.28
             },
             {
               "kind": "set_state",
@@ -366,22 +394,14 @@
               ],
               "id": "s2_b1_2",
               "params": {
-                "items": [
-                  1,
-                  1,
-                  2,
-                  null,
-                  null,
-                  null
-                ],
                 "lit_indices": [
                   1,
                   0
                 ],
                 "new_index": 2
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
             },
             {
               "kind": "set_state",
@@ -392,7 +412,26 @@
               "params": {
                 "expression": "Ways[2] = 1 + 1 = 2"
               },
-              "start_fraction": 0.6467,
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b1_4",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  null,
+                  null,
+                  null
+                ]
+              },
+              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -410,11 +449,13 @@
               "action_ids": [
                 "s2_b1_1",
                 "s2_b1_2",
-                "s2_b1_3"
+                "s2_b1_3",
+                "s2_b1_4"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 1.8
         },
         {
           "narration_beat_id": "s2_b2",
@@ -426,14 +467,6 @@
               ],
               "id": "s2_b2_1",
               "params": {
-                "items": [
-                  1,
-                  1,
-                  2,
-                  3,
-                  null,
-                  null
-                ],
                 "lit_indices": [
                   2,
                   1
@@ -441,7 +474,7 @@
                 "new_index": 3
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.3533
+              "end_fraction": 0.28
             },
             {
               "kind": "set_state",
@@ -452,17 +485,36 @@
               "params": {
                 "expression": "Ways[3] = 2 + 1 = 3"
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.6467
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s2_b2_3",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  null,
+                  null
+                ]
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
             },
             {
               "kind": "appear",
               "target_ids": [
                 "takeaway_s2"
               ],
-              "id": "s2_b2_3",
+              "id": "s2_b2_4",
               "params": {},
-              "start_fraction": 0.6467,
+              "start_fraction": 0.72,
               "end_fraction": 0.94
             }
           ],
@@ -480,11 +532,13 @@
               "action_ids": [
                 "s2_b2_1",
                 "s2_b2_2",
-                "s2_b2_3"
+                "s2_b2_3",
+                "s2_b2_4"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 1.8
         }
       ],
       "opening_visible_ids": [
@@ -563,6 +617,16 @@
             "tone": "teal",
             "tick": true
           }
+        },
+        {
+          "id": "takeaway_s3",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Eight ways, and no route was listed",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
         }
       ],
       "relationships": [],
@@ -577,14 +641,6 @@
               ],
               "id": "s3_b1_1",
               "params": {
-                "items": [
-                  1,
-                  1,
-                  2,
-                  3,
-                  5,
-                  null
-                ],
                 "lit_indices": [
                   3,
                   2
@@ -592,7 +648,7 @@
                 "new_index": 4
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "end_fraction": 0.3533
             },
             {
               "kind": "set_state",
@@ -603,7 +659,26 @@
               "params": {
                 "expression": "Ways[4] = 3 + 2 = 5"
               },
-              "start_fraction": 0.5,
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s3_b1_3",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  5,
+                  null
+                ]
+              },
+              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -620,11 +695,13 @@
               "kind": "state_change",
               "action_ids": [
                 "s3_b1_1",
-                "s3_b1_2"
+                "s3_b1_2",
+                "s3_b1_3"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 1.8
         },
         {
           "narration_beat_id": "s3_b2",
@@ -636,14 +713,6 @@
               ],
               "id": "s3_b2_1",
               "params": {
-                "items": [
-                  1,
-                  1,
-                  2,
-                  3,
-                  5,
-                  8
-                ],
                 "lit_indices": [
                   4,
                   3
@@ -651,7 +720,7 @@
                 "new_index": 5
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.5
+              "end_fraction": 0.3533
             },
             {
               "kind": "set_state",
@@ -662,7 +731,26 @@
               "params": {
                 "expression": "Ways[5] = 5 + 3 = 8"
               },
-              "start_fraction": 0.5,
+              "start_fraction": 0.3533,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "ways"
+              ],
+              "id": "s3_b2_3",
+              "params": {
+                "items": [
+                  1,
+                  1,
+                  2,
+                  3,
+                  5,
+                  8
+                ]
+              },
+              "start_fraction": 0.6467,
               "end_fraction": 0.94
             }
           ],
@@ -679,11 +767,13 @@
               "kind": "state_change",
               "action_ids": [
                 "s3_b2_1",
-                "s3_b2_2"
+                "s3_b2_2",
+                "s3_b2_3"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 1.8
         },
         {
           "narration_beat_id": "s3_b3",
@@ -700,6 +790,16 @@
                 ]
               },
               "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s3"
+              ],
+              "id": "s3_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
               "end_fraction": 0.94
             }
           ],
@@ -713,23 +813,35 @@
               ],
               "kind": "label",
               "action_ids": [
-                "s3_b3_1"
+                "s3_b3_1",
+                "s3_b3_2"
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.4,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b4",
           "actions": [
             {
-              "kind": "appear",
+              "kind": "hide",
               "target_ids": [
-                "s3_b4_line"
+                "takeaway_s3"
               ],
               "id": "s3_b4_1",
               "params": {},
               "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b4_line"
+              ],
+              "id": "s3_b4_2",
+              "params": {},
+              "start_fraction": 0.5,
               "end_fraction": 0.94
             }
           ],
@@ -743,11 +855,13 @@
               ],
               "kind": "label",
               "action_ids": [
-                "s3_b4_1"
+                "s3_b4_1",
+                "s3_b4_2"
               ]
             }
           ],
-          "pause_after": 1.6
+          "pause_after": 3.0,
+          "min_seconds": 0.0
         },
         {
           "narration_beat_id": "s3_b5",
@@ -777,7 +891,8 @@
               ]
             }
           ],
-          "pause_after": 0.0
+          "pause_after": 0.9,
+          "min_seconds": 0.0
         }
       ],
       "opening_visible_ids": [

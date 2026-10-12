@@ -33,6 +33,7 @@
         ],
         "size": null,
         "rule": null,
+        "first": null,
         "on": null,
         "value": null,
         "counts": null,
@@ -47,6 +48,7 @@
         "items": [],
         "size": null,
         "rule": null,
+        "first": null,
         "on": "coins",
         "value": null,
         "counts": null,
@@ -55,15 +57,31 @@
         "stop": 1
       },
       {
-        "id": "amount",
+        "id": "left",
         "kind": "value",
-        "label": "Amount",
+        "label": "Left to make",
         "items": [],
         "size": null,
         "rule": null,
+        "first": null,
         "on": null,
         "value": 6,
         "counts": null,
+        "start": null,
+        "steps": [],
+        "stop": 1
+      },
+      {
+        "id": "used",
+        "kind": "counter",
+        "label": "Coins used",
+        "items": [],
+        "size": null,
+        "rule": null,
+        "first": null,
+        "on": null,
+        "value": null,
+        "counts": "take",
         "start": null,
         "steps": [],
         "stop": 1
@@ -86,6 +104,7 @@
           "op": "min",
           "plus": 1.0
         },
+        "first": null,
         "on": null,
         "value": null,
         "counts": null,
@@ -110,7 +129,7 @@
           ],
           "visual_anchors": [
             "Coins",
-            "Amount"
+            "Left to make"
           ],
           "claim_requirements": {
             "s1_b1_c": [
@@ -128,11 +147,12 @@
             "lines": [],
             "items": [
               "coins",
-              "amount"
+              "left"
             ],
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -149,15 +169,17 @@
             "s1_b2_c"
           ],
           "visual_anchors": [
-            "take: 4"
+            "Left to make = 6 - 4 = 2",
+            "Left to make: 2",
+            "Coins used: 1"
           ],
           "claim_requirements": {
             "s1_b2_c": [
-              "value"
+              "state_change"
             ]
           },
           "move": {
-            "do": "look",
+            "do": "take",
             "text": null,
             "pieces": [],
             "path": [],
@@ -169,31 +191,34 @@
             "pointer": "take",
             "index": 2,
             "against": null,
+            "out_of": "left",
             "array": null,
             "cells": [],
             "cell": null,
             "counter": null,
             "tree": null,
             "depth": null,
-            "expect": null
+            "expect": 2.0
           }
         },
         {
           "id": "s1_b3",
-          "spoken_text": "Now only the one fits, and it takes two of them. Four, one, one: three coins.",
+          "spoken_text": "Now only the one fits, so take it. One is still left.",
           "claim_ids": [
             "s1_b3_c"
           ],
           "visual_anchors": [
-            "take: 1"
+            "Left to make = 2 - 1 = 1",
+            "Left to make: 1",
+            "Coins used: 2"
           ],
           "claim_requirements": {
             "s1_b3_c": [
-              "value"
+              "state_change"
             ]
           },
           "move": {
-            "do": "look",
+            "do": "take",
             "text": null,
             "pieces": [],
             "path": [],
@@ -205,26 +230,66 @@
             "pointer": "take",
             "index": 0,
             "against": null,
+            "out_of": "left",
             "array": null,
             "cells": [],
             "cell": null,
             "counter": null,
             "tree": null,
             "depth": null,
-            "expect": null
+            "expect": 1.0
           }
         },
         {
           "id": "s1_b4",
-          "spoken_text": "Is taking the biggest coin first always the fewest coins?",
+          "spoken_text": "Take another one and six is made: four, one, one. Three coins.",
           "claim_ids": [
             "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "Left to make = 1 - 1 = 0",
+            "Left to make: 0",
+            "Coins used: 3"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "take",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": "take",
+            "index": null,
+            "against": null,
+            "out_of": "left",
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": 0.0
+          }
+        },
+        {
+          "id": "s1_b5",
+          "spoken_text": "Is taking the biggest coin first always the fewest coins?",
+          "claim_ids": [
+            "s1_b5_c"
           ],
           "visual_anchors": [
             "Is taking the biggest coin first always the fewest coins?"
           ],
           "claim_requirements": {
-            "s1_b4_c": [
+            "s1_b5_c": [
               "label"
             ]
           },
@@ -241,6 +306,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -290,6 +356,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "coins",
             "cells": [],
             "cell": null,
@@ -331,6 +398,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -370,6 +438,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [],
             "cell": 0,
@@ -409,6 +478,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [],
             "cell": 1,
@@ -448,6 +518,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [],
             "cell": 2,
@@ -489,6 +560,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [],
             "cell": 3,
@@ -538,6 +610,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [
               4,
@@ -585,6 +658,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": "best",
             "cells": [],
             "cell": 6,
@@ -623,6 +697,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -659,6 +734,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -695,6 +771,7 @@
             "pointer": null,
             "index": null,
             "against": null,
+            "out_of": null,
             "array": null,
             "cells": [],
             "cell": null,
@@ -706,7 +783,7 @@
         }
       ],
       "bridge_to_next": null,
-      "takeaway": null
+      "takeaway": "The table finds two coins; biggest first took three"
     }
   ]
 }

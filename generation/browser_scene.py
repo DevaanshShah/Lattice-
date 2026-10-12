@@ -236,13 +236,16 @@ def _column_width(obj) -> float:
     return 2 if obj.kind == "group" and obj.payload.get("members") else 1.5
 
 
+_REVEALS = {"appear", "connect", "expand", "branch", "activate", "transform"}   # actions that bring an object on
+
+
 def _shown_in_scene(scene: BrowserScene) -> set[str]:
     """Every object this scene puts on screen at some point. Each one keeps a fixed place for the
     whole scene, so nothing jumps when another object appears."""
     shown = set(scene.opening_visible_ids)
     for beat in scene.beats:
         for action in beat.actions:
-            if action.kind in {"appear", "connect", "expand", "branch", "activate", "transform"}:
+            if action.kind in _REVEALS:
                 shown.update(action.target_ids)
     return shown
 
@@ -259,14 +262,17 @@ def _label_lines(label: str) -> list[str]:
 
 
 def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | None = None,
-                   current: set[str] | None = None) -> str:
+                   current: set[str] | None = None, room: set[str] | None = None) -> str:
     """The stage for one moment of a scene. `active` is what the beat has touched so far and
-    `current` what the latest action touches; in a flow the first dims the rest and the second glows."""
+    `current` what the latest action touches; in a flow the first dims the rest and the second glows.
+    `room` is what is still to be seen from this beat on: outside a flow, an item that has left
+    for good gives up its place, so what follows it is not drawn small beside a hole."""
     objects = {obj.id: obj for obj in scene.objects}
     containers = _containers(scene)
-    slots = _shown_in_scene(scene) | state.visible | set(scene.layout_ids)
-    placed = [obj.id for obj in scene.objects if obj.kind != "pointer" and obj.id in slots]
     layers = _flow_layers(scene)
+    held = _shown_in_scene(scene) if room is None or layers else room
+    slots = held | state.visible | set(scene.layout_ids)
+    placed = [obj.id for obj in scene.objects if obj.kind != "pointer" and obj.id in slots]
     # A flow is pieces joined by arrows. An array or chart is the subject of every step even when
     # the action names its pointer or counter, so such a scene is never dimmed or lit as "steps".
     flow = bool(layers) and not any(objects[obj_id].kind in {"array", "chart"} for obj_id in placed)
@@ -293,6 +299,7 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
             discarded = set(payload.get("discarded_indices", []))
             # a table being filled: empty cells, the cells a value is read from, the cell just written
             read, written = set(payload.get("lit_indices") or []), payload.get("new_index")
+            first = payload.get("first") or 0       # the number the first cell goes by
             cells = []
             for index, item in enumerate(payload["items"]):
                 here = [pointer for pointer in pointers
@@ -313,7 +320,7 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                              f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}" '
                              f'data-visual-key="{escape(obj.id)}:cell:{index}">'
                              f'{"" if item is None else escape(str(item))}{marker}'
-                             f'<span class="semantic-index">{index}</span></div></div>')
+                             f'<span class="semantic-index">{index + first}</span></div></div>')
             html = (f'<section class="semantic-object{flags} semantic-array" {ident}>'
                     f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
                     f'{"".join(cells)}</div></section>')
@@ -729,7 +736,12 @@ def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
                    ball: list[str] | None = None) -> str:
     windows = beat.timeline(duration)
     state = deepcopy(opening)
-    snapshots = [_semantic_html(scene, state)]
+    # what holds a place during this beat: what is on screen as it opens, and what this beat or a
+    # later one of the scene brings on. The same for every moment of the beat, so nothing jumps.
+    ahead = scene.beats[next((index for index, each in enumerate(scene.beats) if each is beat), 0):]
+    room = set(opening.visible) | {target for each in ahead for action in each.actions
+                                   if action.kind in _REVEALS for target in action.target_ids}
+    snapshots = [_semantic_html(scene, state, room=room)]
     active: set[str] = set()
     rest = [ball]   # where the ball sits at each snapshot: it stays on the piece it last reached
     for action in beat.actions:
@@ -737,7 +749,7 @@ def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
         # an object being cleared away is not the step in progress
         current = set() if action.kind in {"hide", "deactivate"} else set(action.target_ids)
         active.update(current)
-        snapshots.append(_semantic_html(scene, state, active, current))
+        snapshots.append(_semantic_html(scene, state, active, current, room))
         ball = _ball_step(scene, action, ball)
         rest.append(ball)
     data = json.dumps({"snapshots": snapshots, "windows": windows, "rest": rest,
