@@ -56,6 +56,8 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
                                 labels.append("discard right")
                         for index, outcome in payload.get("checked_results", {}).items():
                             labels.append(f"{items[int(index)]} {'✓' if outcome == 'match' else '✗'}")
+                        labels.extend(f"{group['label']}: {len(group['cells'])}"
+                                      for group in payload.get("groups") or [])
                     elif obj.kind == "pointer":
                         target = view.payloads[payload["target_id"]]
                         labels.append(f"{obj.label}: {target['items'][payload['index']]}")

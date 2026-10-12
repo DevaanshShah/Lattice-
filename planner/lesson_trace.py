@@ -24,7 +24,7 @@ from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, g
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
          "discard": "state_change", "fill": "state_change", "count": "state_change",
          "clear": "state_change", "grow": "state_change", "spot": "state_change",
-         "take": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
+         "take": "state_change", "group": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
          "turn": "label"}
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
@@ -317,7 +317,8 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             their takes used up, and its counters keep their totals and count no further. Returns
             whether the array itself looks different."""
             wipe = {key: empty for key, empty in (("checked_results", {}), ("discarded_indices", []),
-                                                  ("lit_indices", []), ("new_index", None))
+                                                  ("lit_indices", []), ("new_index", None),
+                                                  ("groups", []))
                     if payloads[array].get(key) not in (None, {}, [])}
             wiped = change(array, wipe) if wipe else False
             leaving = [item.id for item in trace.data
@@ -339,6 +340,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             cell, a pointer, or a value its takes used up. A table that is only being filled
             has not."""
             return bool(payloads[array].get("checked_results") or payloads[array].get("discarded_indices")
+                        or payloads[array].get("groups")
                         or spent.get(array)
                         or any(item.kind == "pointer" and item.on == array and item.id in visible
                                for item in trace.data))
@@ -409,6 +411,17 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             changed = retire(move.array)    # the claim is about the array, which may be unmarked
             anchors.append(items[move.array].label)
             shown.append(move.array)        # the pointers have left; the array is what is shown
+        elif move.do == "group":
+            # some cells belong together: they take one colour, and their name and how many they
+            # are is written under the array. An insight is shown this way, not only said.
+            show([move.array])
+            cells = sorted({at(move.array, cell) for cell in move.cells})
+            groups = [group for group in payloads[move.array].get("groups") or []
+                      if group["label"] != move.text] + [{"label": move.text, "cells": cells}]
+            changed = change(move.array, {"groups": groups})
+            anchors.append(f"{move.text}: {len(cells)}")
+            shown.append(move.array)
+            needs += _DWELL["point"]
         elif move.do == "discard":
             show([move.array])
             gone = sorted({*(payloads[move.array].get("discarded_indices") or []),

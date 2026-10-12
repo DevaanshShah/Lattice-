@@ -57,6 +57,10 @@ _SEMANTIC_CSS = """
 .semantic-cell.is-lit{border-color:#fbbf24;box-shadow:0 0 0 3px #fbbf2444}
 .semantic-cell.is-new{border-color:#2dd4bf;background:#11302d;box-shadow:0 0 26px #2dd4bf66}
 .semantic-cell.is-pointed{border-color:var(--amber);background:#3c2d18;box-shadow:0 0 28px #edb34a55}
+.semantic-cell.in-group{border-width:3px}.semantic-cell.group-0{border-color:#2dd4bf;background:#0f2f2c}
+.semantic-cell.group-1{border-color:#f472b6;background:#33172a}.semantic-cell.group-2{border-color:#a78bfa;background:#221a3a}
+.group-legend{display:flex;gap:28px;justify-content:center;margin-top:12px;font:650 22px/1.2 Segoe UI,system-ui,sans-serif}
+.group-name.group-0{color:#2dd4bf}.group-name.group-1{color:#f472b6}.group-name.group-2{color:#a78bfa}
 .semantic-cell.is-long{font-size:22px}.compact .semantic-cell.is-long{font-size:18px}
 .semantic-index{font:500 15px/1 Segoe UI,system-ui,sans-serif;color:var(--muted);margin-top:11px}
 .semantic-pointer-label{height:26px;margin-bottom:10px;font:700 18px/1 Segoe UI,system-ui,sans-serif;color:var(--amber)}
@@ -303,6 +307,9 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
             # a table being filled: empty cells, the cells a value is read from, the cell just written
             read, written = set(payload.get("lit_indices") or []), payload.get("new_index")
             first = payload.get("first") or 0       # the number the first cell goes by
+            # cells marked as belonging together: one colour a group, named under the array
+            groups = payload.get("groups") or []
+            member = {cell: number for number, group in enumerate(groups) for cell in group["cells"]}
             cells = []
             for index, item in enumerate(payload["items"]):
                 here = [pointer for pointer in pointers
@@ -313,6 +320,7 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                 dimmed += " is-empty" if item is None else ""
                 dimmed += " is-new" if index == written else " is-lit" if index in read else ""
                 dimmed += " is-long" if len(str(item)) > 3 and item is not None else ""    # a short string
+                dimmed += f" in-group group-{member[index] % 3}" if index in member else ""
                 pointer_label = " / ".join(
                     f'<span data-visual-key="{escape(pointer.id)}">{escape(pointer.label)}</span>'
                     for pointer in here)
@@ -325,9 +333,13 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                              f'data-visual-key="{escape(obj.id)}:cell:{index}">'
                              f'{"" if item is None else escape(str(item))}{marker}'
                              f'<span class="semantic-index">{index + first}</span></div></div>')
+            legend = "".join(
+                f'<span class="group-name group-{number % 3}" data-visual-key="{escape(obj.id)}:group:{number}">'
+                f'{escape(group["label"])}: {len(group["cells"])}</span>' for number, group in enumerate(groups))
             html = (f'<section class="semantic-object{flags} semantic-array" {ident}>'
                     f'<div class="semantic-caption">{label}</div><div class="semantic-cells">'
-                    f'{"".join(cells)}</div></section>')
+                    f'{"".join(cells)}</div>'
+                    + (f'<div class="group-legend">{legend}</div>' if legend else "") + '</section>')
         elif obj.kind in {"counter", "metric", "value"}:
             raw = payload.get("value")
             value = escape(str(raw if raw is not None else "?"))

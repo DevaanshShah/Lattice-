@@ -10,7 +10,7 @@ from core.schemas.browser_visual_plan import BrowserScene, VisualAction
 
 FIELD_KINDS = {"message", "node", "document", "card", "gate", "tool", "group"}
 # Payload keys the renderer draws for each semantic kind; FIELD_KINDS draw their scalar fields.
-_DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results", "lit_indices", "new_index"),
+_DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results", "lit_indices", "new_index", "groups"),
                "pointer": ("target_id", "index"), "counter": ("value",), "metric": ("value",),
                "value": ("value",), "formula": ("expression",), "code": ("source", "active_lines"),
                "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id", "count"),

@@ -1040,3 +1040,44 @@ def test_bookkeeping_a_model_gets_wrong_is_done_for_it_and_a_cell_holds_what_fit
     trace["data"][0]["items"] = ["one plus one", "two"]
     with pytest.raises(ValidationError, match="does not fit in a cell; an item is at most seven"):
         LessonTrace.model_validate(trace)
+
+
+def _stairs_with_its_routes() -> dict:
+    """The stairs lesson with every route up five stairs listed, and split after the turning
+    point into the routes that end in a one-step and the routes that end in a two-step."""
+    answer = _as_written("taught_stairs")
+    answer["trace"]["data"].insert(0, {"id": "routes", "kind": "array", "label": "Routes up 5 stairs",
+                                       "items": ["11111", "1112", "1121", "1211", "2111", "122", "212", "221"]})
+    answer["scenes"][0]["beats"].insert(0, {
+        "spoken_text": "Each box is one route up five stairs, written as its steps.",
+        "move": {"do": "show", "items": ["routes"]}})
+    answer["scenes"][1]["beats"][1:1] = [
+        {"spoken_text": "Five of the routes finish with a single step, so each is a route up four stairs.",
+         "move": {"do": "group", "array": "routes", "cells": [0, 2, 3, 4, 7], "text": "end in a 1-step"}},
+        {"spoken_text": "The other three finish with a double step, so each is a route up three stairs.",
+         "move": {"do": "group", "array": "routes", "cells": [1, 5, 6], "text": "end in a 2-step"}}]
+    return answer
+
+
+@pytest.mark.unit
+def test_a_group_move_shows_which_cases_belong_together():
+    """Reviewed on 2026-10-12: "because the last step is 1 or 2" was said and never shown, with
+    the list of routes on screen the whole time. Grouping the list is how the reason is seen."""
+    from generation.browser_scene import _semantic_html
+
+    lesson = _lesson(_stairs_with_its_routes())
+    first, second, third = plan_trace_scenes(lesson, SKILL)
+    assert _steps(second, 1) == [("set_state", ["routes"], {
+        "groups": [{"label": "end in a 1-step", "cells": [0, 2, 3, 4, 7]}]})]
+    assert lesson.scenes[1].beats[1].visual_anchors == ["end in a 1-step: 5"]
+    assert lesson.scenes[1].beats[2].visual_anchors == ["end in a 2-step: 3"]
+    assert lesson.scenes[1].beats[1].claim_requirements == {"s2_b2_c": ["state_change"]}
+    state = closing_state(second, closing_state(first))
+    html = _semantic_html(second, state)
+    assert "end in a 1-step: 5" in html and "end in a 2-step: 3" in html
+    assert html.count("in-group group-0") == 5 and html.count("in-group group-1") == 3
+    assert craft_trace(lesson, [first, second, third]) == []
+    nameless = _stairs_with_its_routes()
+    nameless["scenes"][1]["beats"][1]["move"].pop("text")
+    with pytest.raises(ValidationError, match="a group move needs an array, the cells that belong together"):
+        _lesson(nameless)

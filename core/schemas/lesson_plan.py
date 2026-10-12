@@ -100,7 +100,7 @@ LINE_LENGTH = 110
 
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
 TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
-               "grow", "spot", "take", "remove")
+               "grow", "spot", "take", "group", "remove")
 LINE_MOVES = ("ask", "answer", "turn")    # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
@@ -113,6 +113,7 @@ _TAKES = {
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "take": {"pointer", "index", "out_of", "expect", "lines"},
+    "group": {"array", "cells", "text", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
     "fill": {"array", "cell", "cells", "value", "expect", "lines"},
     "count": {"counter", "expect", "lines"},
@@ -128,6 +129,8 @@ _NEEDS = {
            "is on screen, use a show move naming the items it is about",
     "look": "a look move needs a pointer and the index of the cell it points at",
     "compare": "a compare move needs a pointer and the value it is compared against",
+    "group": 'a group move needs an array, the cells that belong together, and a name for them '
+             'of at most 24 characters in "text"',
     "take": 'a take move needs a pointer, the value its cell is taken out of in "out_of", and '
             'the number that is left afterwards in "expect"',
     "discard": "a discard move needs an array and the cells it rules out",
@@ -147,7 +150,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "grow", "spot", "take", "ask", "answer", "turn"]
+                "grow", "spot", "take", "group", "ask", "answer", "turn"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -196,6 +199,8 @@ class BeatMove(BaseModel):
             "look": self.pointer is None or self.index is None,
             "compare": self.pointer is None or self.against is None,
             "take": self.pointer is None or self.out_of is None or self.expect is None,
+            "group": (self.array is None or not self.cells or not self.text
+                      or len(self.text or "") > 24),
             "discard": self.array is None or not self.cells,
             "fill": self.array is None or (self.cell is None and not self.cells),
             "count": self.counter is None, "clear": self.array is None,
