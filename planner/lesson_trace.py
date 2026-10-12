@@ -10,6 +10,7 @@ checked against the same picture.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from core.call_tree import repeats, shown_to_depth
@@ -36,6 +37,7 @@ _NOT_THE_NUMBER = (" Do not make this pass by changing the number alone. If your
                    "the lesson means to teach, the moves or the trace are wrong: change those. If "
                    "the picture is right, change the number and every sentence that says it.")
 _TURNED = "#turned"     # in a lesson's memory: the turning point has just been stated
+_SLOT = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)(?:\[(\d+)\])?\}")   # {checks} or {ways[5]} in a sentence
 _CLOSED = "#closed"     # in a lesson's memory: the counters whose attempt has ended (no id has a '#')
 _SPENT = "#spent"       # and, for each array, the values its takes have used up
 # The least time a viewer needs to follow one step. A beat lasts at least as long as its steps
@@ -138,6 +140,10 @@ def _tidy_ids(data: dict) -> None:
             move = beat.get("move") if isinstance(beat, dict) else None
             if not isinstance(move, dict):
                 continue
+            if isinstance(beat.get("spoken_text"), str):       # and where a sentence names an item
+                beat["spoken_text"] = _SLOT.sub(
+                    lambda slot: slot.group(0).replace(slot.group(1), rename(slot.group(1)), 1),
+                    beat["spoken_text"])
             if isinstance(move.get("items"), list):
                 move["items"] = [rename(item) for item in move["items"]]
             move.update({key: rename(move[key]) for key in _NAMES if key in move})
@@ -588,6 +594,37 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             # a line stays lit only while its step is being said, never over a later sentence
             actions.insert(0, {"kind": "set_state", "target_ids": [CODE], "params": {"active_lines": []}})
             payloads[CODE]["active_lines"] = drawn[CODE]["active_lines"] = []
+        def held(slot: re.Match) -> str:
+            """What a sentence's {id} or {id[n]} stands for, read off the picture as this beat
+            leaves it: the voice says the number the screen shows, whatever the lesson believed."""
+            name, cell = slot.group(1), slot.group(2)
+            item = items.get(name)
+            if item is None:
+                raise ValueError(f"beat {beat.id}: the sentence names {{{name}}}, which is not an "
+                                 f"item of the trace; its items are {sorted(items)}")
+            if item.kind == "array":
+                if cell is None:
+                    raise ValueError(f"beat {beat.id}: say which cell of {name!r} is meant, as "
+                                     f"{{{name}[{item.base}]}}")
+                place = int(cell) - item.base
+                value = payloads[name]["items"][place] if 0 <= place < item.length else None
+                if value is None:
+                    raise ValueError(f"beat {beat.id}: the sentence says {{{name}[{cell}]}}, but "
+                                     f"that cell holds nothing yet at this point")
+                return str(value)
+            if item.kind == "pointer":
+                return str(payloads[item.on]["items"][payloads[name]["index"]])
+            if item.kind == "tree":
+                return str(payloads[name]["shown"])
+            return str(number(payloads[name]["value"]) if isinstance(payloads[name]["value"], (int, float))
+                       else payloads[name]["value"])
+
+        beat.spoken_text = _SLOT.sub(held, beat.spoken_text)
+        if move.do == "count" and items[move.counter].counts and scene.beats[position] is beat \
+                and str(payloads[move.counter]["value"]) not in re.findall(r"\d+", beat.spoken_text):
+            raise ValueError(f"beat {beat.id}: this count beat does not say the total it points at. "
+                             f"Write the number as {{{move.counter}}} in the sentence, and code "
+                             "says what the counter reads")
         if PROOF[move.do] == "state_change" and not changed:
             # A compare already made, or cells already ruled out, changes nothing: the sentence is
             # emphasis, and what it owes the viewer is the thing itself.

@@ -249,7 +249,7 @@ def test_a_cell_pointed_at_again_is_not_counted_twice():
     answer["scenes"][2]["beats"] += [
         {"spoken_text": "Look again at stair three: two plus one.",
          "move": {"do": "fill", "array": "ways", "cell": 3, "expect": 3, "lines": [6]}},
-        {"spoken_text": "Six boxes, each filled once.",
+        {"spoken_text": "{boxes} boxes, each filled once.",
          "move": {"do": "count", "counter": "boxes", "expect": 6}}]
     lesson = _lesson(answer)
     plan_trace_scenes(lesson, SKILL)
@@ -429,7 +429,7 @@ def test_the_data_side_has_room_by_kind_and_a_trace_lesson_gets_more_shorter_bea
 def test_a_counter_that_counts_by_itself_is_not_bumped_by_hand():
     answer = _as_written("taught_search")
     answer["scenes"][0]["beats"].insert(2, {
-        "spoken_text": "That took six checks.", "move": {"do": "count", "counter": "slow", "expect": 6}})
+        "spoken_text": "That took {slow} checks.", "move": {"do": "count", "counter": "slow", "expect": 6}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
     assert _steps(first, 2) == [("highlight", ["slow"], {})]              # it points at the count
@@ -631,7 +631,7 @@ def test_an_item_taken_off_screen_comes_back_the_way_the_lesson_left_it():
     answer["scenes"][1]["beats"].insert(1, {                                   # the counter is taken off
         "spoken_text": "Put the count of calls aside for now.", "move": {"do": "remove", "items": ["count"]}})
     answer["scenes"][2]["beats"].append({
-        "spoken_text": "Fifteen calls, against six boxes.",
+        "spoken_text": "{count} calls, against six boxes.",
         "move": {"do": "count", "counter": "count", "expect": 15}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
@@ -646,7 +646,7 @@ def test_a_counter_can_count_the_cells_of_a_table_as_they_are_filled():
     answer = _as_written("taught_stairs")
     answer["trace"]["data"].append({"id": "boxes", "kind": "counter", "label": "Boxes filled", "counts": "ways"})
     answer["scenes"][2]["beats"].append({
-        "spoken_text": "Six boxes, each filled once.",
+        "spoken_text": "{boxes} boxes, each filled once.",
         "move": {"do": "count", "counter": "boxes", "expect": 6}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
@@ -858,7 +858,7 @@ def test_item_ids_are_tidied_not_sent_back():
             if move.get("items") == ["calls"]:
                 move["items"] = ["Call-Tree"]
     answer["scenes"][2]["beats"].append({
-        "spoken_text": "Fifteen calls, against six boxes.",
+        "spoken_text": "{callCount} calls, against six boxes.",
         "move": {"do": "count", "counter": "callCount", "expect": 15}})
     lesson = _lesson(answer)
     assert [item.id for item in lesson.trace.data] == ["call_tree", "callcount", "ways"]
@@ -968,7 +968,7 @@ def test_a_count_puts_every_total_on_screen():
     answer["scenes"][1]["beats"].insert(1, {                                   # the call counter is taken off
         "spoken_text": "Put the count of calls aside for now.", "move": {"do": "remove", "items": ["count"]}})
     answer["scenes"][2]["beats"].append({
-        "spoken_text": "Six boxes, where plain recursion made fifteen calls.",
+        "spoken_text": "{boxes} boxes, where plain recursion made {count} calls.",
         "move": {"do": "count", "counter": "boxes", "expect": 6}})
     lesson = _lesson(answer)
     first, second, third = plan_trace_scenes(lesson, SKILL)
@@ -1081,3 +1081,35 @@ def test_a_group_move_shows_which_cases_belong_together():
     nameless["scenes"][1]["beats"][1]["move"].pop("text")
     with pytest.raises(ValidationError, match="a group move needs an array, the cells that belong together"):
         _lesson(nameless)
+
+
+@pytest.mark.unit
+def test_a_number_in_a_sentence_is_read_off_the_picture():
+    """Reviewed on 2026-10-12: the screen read "checks: 8" while the voice said two. A sentence
+    now names what it means, and code says the number, so the voice cannot disagree with the screen."""
+    answer = _as_written("taught_search")
+    answer["scenes"][2]["beats"][1]["spoken_text"] = (
+        "Found in {fast} checks, where one by one took {slow}; the last cell checked held {mid}.")
+    lesson = _lesson(answer)
+    plan_trace_scenes(lesson, SKILL)
+    assert lesson.scenes[2].beats[1].spoken_text == (
+        "Found in 2 checks, where one by one took 6; the last cell checked held 30.")
+    table = _as_written("taught_stairs")
+    table["scenes"][2]["beats"][1]["spoken_text"] = "The top stair holds {ways[5]}: {ways[4]} plus {ways[3]}."
+    lesson = _lesson(table)
+    plan_trace_scenes(lesson, SKILL)
+    assert lesson.scenes[2].beats[1].spoken_text == "The top stair holds 8: 5 plus 3."
+    early = _as_written("taught_stairs")
+    early["scenes"][0]["beats"][0]["spoken_text"] = "The top box will hold {ways[5]}."
+    with pytest.raises(ValueError, match=r"says \{ways\[5\]\}, but that cell holds nothing yet"):
+        plan_trace_scenes(_lesson(early), SKILL)
+    unknown = _as_written("taught_search")
+    unknown["scenes"][2]["beats"][1]["spoken_text"] = "Found in {total} checks."
+    with pytest.raises(ValueError, match=r"names \{total\}, which is not an item of the trace"):
+        plan_trace_scenes(_lesson(unknown), SKILL)
+    silent = _as_written("taught_search")
+    silent["scenes"][2]["beats"].append({
+        "spoken_text": "Binary search needed far fewer checks.",
+        "move": {"do": "count", "counter": "fast", "expect": 2}})
+    with pytest.raises(ValueError, match=r"does not say the total it points at. Write the number as \{fast\}"):
+        plan_trace_scenes(_lesson(silent), SKILL)
