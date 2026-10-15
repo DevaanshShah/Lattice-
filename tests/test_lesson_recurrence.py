@@ -28,11 +28,9 @@ CONCEPT = {
         "table": {"label": "Ways", "unit": "stairs", "first": 0, "size": 6, "start": [1, 1],
                   "back": [1, 2], "op": "sum", "plus": 0},
         "cases": {"label": "Routes up 5 stairs",
-                  "items": ["1+1+1+1+1", "1+1+1+2", "1+1+2+1", "1+2+1+1", "2+1+1+1", "1+2+2", "2+1+2", "2+2+1"],
-                  "groups": [{"name": "end in a 1-step", "ends": "+1",
-                              "smaller": ["1+1+1+1", "1+1+2", "1+2+1", "2+1+1", "2+2"]},
-                             {"name": "end in a 2-step", "ends": "+2",
-                              "smaller": ["1+1+1", "1+2", "2+1"]}]},
+                  "parts": {"1": 1, "2": 2}, "join": "+", "total": 5, "forbid": [],
+                  "groups": [{"name": "end in a 1-step", "ends": "+1"},
+                             {"name": "end in a 2-step", "ends": "+2"}]},
         "name": "dynamic programming",
     },
 }
@@ -72,12 +70,11 @@ def test_code_builds_the_whole_run_and_no_model_writes_a_move():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("change, message", [
-    (lambda c: c["spec"]["cases"]["items"].pop(), "holds 8, but 7 cases are listed"),
-    (lambda c: c["spec"]["table"].update(start=[1, 2]), r"holds 13, but 8 cases are listed.*fix its \"start\""),
+    (lambda c: c["spec"]["cases"].update(total=4), r"the problem has 5 cases .* holds 8"),
+    (lambda c: c["spec"]["table"].update(start=[1, 2]), r"the problem has 8 cases .* holds 13.*Fix the table's \"start\""),
     (lambda c: c["spec"]["cases"]["groups"][0].update(ends="2"), "must end like exactly one group"),
-    (lambda c: c["spec"]["cases"]["items"].__setitem__(7, "2+1+2"),
-     r"hold \[5, 3\], so the groups have \[3, 5\] cases; yours have \[4, 4\]"),
-    (lambda c: c["spec"]["cases"]["items"].__setitem__(0, "one+one+one"), "does not fit in a box"),
+    (lambda c: c["spec"]["cases"].update(parts={"1": 1, "2": 1}), "more than 12 cases"),
+    (lambda c: c["spec"]["cases"].update(parts={"one": 1, "2": 2}), "does not fit in a box"),
     (lambda c: c["brief"].update(turning_point="Because " + "every route ends in one step " * 5),
      "brief.turning_point is shown on screen"),
 ])
@@ -266,12 +263,21 @@ def test_a_split_that_does_not_leave_the_smaller_cases_is_sent_back():
         "spec": {"table": {"label": "Count", "unit": "letters", "first": 0, "size": 5, "start": [1, 2],
                            "back": [1, 2], "op": "sum", "plus": 0},
                  "cases": {"label": "Strings of length 4",
-                           "items": ["0000", "0001", "0010", "0100", "0101", "1000", "1001", "1010"],
-                           "groups": [{"name": "end in 0", "ends": "0",
-                                       "smaller": ["000", "001", "010", "100", "101"]},
-                                      {"name": "end in 1", "ends": "1", "smaller": ["00", "01", "10"]}]},
+                           "parts": {"0": 1, "1": 1}, "join": "", "total": 4, "forbid": ["11"],
+                           "groups": [{"name": "end in 0", "ends": "0"},
+                                      {"name": "end in 1", "ends": "1"}]},
                  "name": "dynamic programming"}}
-    with pytest.raises(ValidationError, match=r"taking '1' off the cases of 'end in 1' leaves \['000', '010', '100'\]"):
+    with pytest.raises(ValidationError, match=r"taking '1' off the cases of 'end in 1' leaves "
+                                              r"\['000', '010', '100'\], but the cases of size 3 are"):
         ConceptSpec.model_validate(strings)
     strings["spec"]["cases"]["groups"][1].update(name="end in 01", ends="01")
-    ConceptSpec.model_validate(strings)
+    concept = ConceptSpec.model_validate(strings)
+    # code listed every case; the model never wrote one
+    assert concept.spec.cases.items == ["0000", "0001", "0010", "0100", "0101", "1000", "1001", "1010"]
+
+
+@pytest.mark.unit
+def test_parts_written_as_a_list_are_read_as_the_mapping_they_mean():
+    concept = copy.deepcopy(CONCEPT)
+    concept["spec"]["cases"]["parts"] = [{"name": "1", "size": 1}, {"name": "2", "size": 2}]
+    assert ConceptSpec.model_validate(concept).spec.cases.parts == {"1": 1, "2": 2}

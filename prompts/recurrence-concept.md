@@ -21,11 +21,13 @@ You are a teacher designing a short learning video about a problem that is solve
               "op": "sum", "min" or "max",
               "plus": a constant added after it, 0 unless needed},
     "cases": {"label": one to three words, such as "Routes up 5 stairs",
-              "items": every case of the problem's instance, each written in at most nine characters with no spaces, such as "1+1+1+2"; there are exactly as many as the answer,
-              "groups": the cases split by the last choice made, one group for each cell the answer is worked out from: [{"name": at most 24 characters, such as "end in a 1-step", "ends": the characters every case of this group ends with and no other case does, such as "+1",
-                          "smaller": every case of the smaller problem this group is built from, written the same way, such as every route up 4 stairs; taking "ends" off each case of the group leaves exactly these}]},
+              "parts": the choices a case is made of, each written as a short text with the size it uses up, such as {"1": 1, "2": 2} for steps of one or two stairs, or {"0": 1, "1": 1} for the letters of a string,
+              "join": the character written between parts, such as "+", or "" to write them side by side,
+              "total": the size every case adds up to, such as 5 stairs or 4 letters,
+              "forbid": patterns no case may contain, such as ["11"], or [],
+              "groups": the cases split by how they end, one group for each cell the answer is worked out from: [{"name": at most 24 characters, such as "end in a 1-step", "ends": the characters every case of this group ends with, such as "+1"; taking them off must leave exactly every case of a smaller size}]},
     "name": the usual name of the technique
   }
 }
 
-Write every case in the same way, so that its last characters show its last choice: "1+1+2" ends in "+2". Code finds each group's cases from "ends". Work the instance through before you write. The table's last cell must be the answer. The number of cases must equal that answer, and each group must have exactly as many cases as the earlier cell it stands for: that is what lets the viewer see why the rule is true. Keep the instance small: an answer of at most 12.
+Code lists every case from "parts", "join", "total" and "forbid", and finds each group's cases from "ends". Choose each ending so that taking it off a case leaves a case of a smaller size: when a 1 must follow a 0, a case ending in 1 really ends in "01". Work the instance through before you write. The table's last cell must be the answer. The number of cases must equal that answer, and each group must have exactly as many cases as the earlier cell it stands for: that is what lets the viewer see why the rule is true. Keep the instance small: an answer of at most 12.

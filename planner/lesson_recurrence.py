@@ -60,17 +60,78 @@ class CaseGroup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=24)
     ends: str = Field(..., min_length=1, max_length=9)
-    # every case of the smaller problem this group is built from: taking `ends` off each case of
-    # the group must leave exactly these, which is what makes the split a reason and not a sort
-    smaller: list[str] = Field(..., min_length=1, max_length=12)
     cells: list[int] = Field(default_factory=list)      # worked out from `ends`, never given
 
 
 class CasesSpec(BaseModel):
+    """How the cases of the problem are made, from which code lists every one of them: a case
+    is a sequence of parts whose sizes add up to `total`, written with `join` between the parts,
+    containing none of `forbid`."""
     model_config = ConfigDict(extra="forbid")
     label: str = Field(..., min_length=1, max_length=22)
-    items: list[str] = Field(..., min_length=2, max_length=12)
+    parts: dict[str, int] = Field(..., min_length=1, max_length=4)     # how a part is written: its size
+    join: str = Field(default="", max_length=1)
+    total: int = Field(..., ge=1, le=12)
+    forbid: list[str] = Field(default_factory=list, max_length=3)
     groups: list[CaseGroup] = Field(..., min_length=2, max_length=3)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _parts_as_a_list(cls, data):
+        """Parts written as a list of {"name" or "text", "size"} are read as the mapping they mean:
+        a live run lost all its tries to this form."""
+        parts = data.get("parts") if isinstance(data, dict) else None
+        if isinstance(parts, list) and all(isinstance(part, dict) for part in parts):
+            data = {**data, "parts": {str(part.get("name", part.get("text", part.get("part")))): part.get("size")
+                                      for part in parts}}
+        return data
+
+    @model_validator(mode="after")
+    def _parts_are_written_plainly(self) -> "CasesSpec":
+        if any(size < 1 for size in self.parts.values()) or any(not text for text in self.parts):
+            raise ValueError("each part is written as some characters and has a size of at least 1")
+        return self
+
+    def listed(self, total: int | None = None) -> list[str]:
+        """Every case of the given size (the problem's own size unless given), in order."""
+        total = self.total if total is None else total
+        found: list[str] = []
+
+        def build(sofar: list[str], left: int) -> None:
+            if len(found) > 64:
+                return
+            if left == 0:
+                text = self.join.join(sofar)
+                if not any(pattern in text for pattern in self.forbid):
+                    found.append(text)
+                return
+            for part, size in self.parts.items():
+                if size <= left:
+                    build(sofar + [part], left - size)
+        build([], total)
+        return found
+
+    def size_of(self, ending: str) -> int | None:
+        """How much of the total an ending stands for, read part by part: '+1' is one, '01' is
+        two. None when the ending is not made of whole parts."""
+        text = ending[len(self.join):] if self.join and ending.startswith(self.join) else ending
+        pieces = text.split(self.join) if self.join else None
+        if pieces is None:
+            pieces, rest = [], text
+            while rest:
+                part = next((part for part in sorted(self.parts, key=len, reverse=True)
+                             if rest.startswith(part)), None)
+                if part is None:
+                    return None
+                pieces.append(part)
+                rest = rest[len(part):]
+        if not pieces or any(piece not in self.parts for piece in pieces):
+            return None
+        return sum(self.parts[piece] for piece in pieces)
+
+    @property
+    def items(self) -> list[str]:
+        return self.listed()
 
 
 class TeachingSpec(BaseModel):
@@ -101,21 +162,22 @@ class ConceptSpec(BaseModel):
         answer, reads = whole[-1]
         last = table.first + table.size - 1
         facts = ", ".join(f"cell {index + table.first} holds {value}" for index, (value, _) in enumerate(whole))
-        wide = [item for item in cases.items if len(item) > 9 or " " in item]
+        items = cases.items
+        if len(items) > 12:
+            raise ValueError(f"the problem has more than 12 cases, too many to show; make "
+                             f"\"total\" smaller")
+        wide = [item for item in items if len(item) > 9]
         if wide:
-            raise ValueError(f"the case {wide[0]!r} does not fit in a box: at most nine characters, no spaces")
-        if len(cases.items) != answer:
-            # A live run answered "exactly 5" by cutting cases, then the table, three times over.
-            # Listed cases are concrete and easy to check; a table's start is where slips happen.
-            raise ValueError(f"the table's last cell, cell {last}, holds {answer}, but {len(cases.items)} "
-                             f"cases are listed. The table comes to: {facts}. Check the cases first: if "
-                             f"all {len(cases.items)} are right and none is missing, the table is wrong, "
-                             "so fix its \"start\" (the simply known first cells, counted from cell "
-                             f"{table.first}) so that its last cell holds {len(cases.items)}; keep the "
-                             "instance the same size")
+            raise ValueError(f"the case {wide[0]!r} does not fit in a box: at most nine characters; "
+                             "make \"total\" smaller or the parts shorter")
+        if len(items) != answer:
+            raise ValueError(f"the problem has {len(items)} cases ({', '.join(items)}), but the table's "
+                             f"last cell, cell {last}, holds {answer}. The table comes to: {facts}. Fix "
+                             f"the table's \"start\" (the simply known first cells, counted from cell "
+                             f"{table.first}) or its size so that its last cell holds {len(items)}")
         for group in cases.groups:
-            group.cells = [index for index, item in enumerate(cases.items) if item.endswith(group.ends)]
-        for index, item in enumerate(cases.items):
+            group.cells = [index for index, item in enumerate(items) if item.endswith(group.ends)]
+        for index, item in enumerate(items):
             homes = [group.ends for group in cases.groups if index in group.cells]
             if len(homes) != 1:
                 raise ValueError(f"the case {item!r} ends like {homes or 'none'} of the groups; every "
@@ -123,20 +185,23 @@ class ConceptSpec(BaseModel):
         wanted = sorted(whole[index][0] for index in reads)
         if any(not group.cells for group in cases.groups):
             raise ValueError("a group has no case that ends that way")
+        for group in cases.groups:
+            size = cases.size_of(group.ends)
+            left = sorted(items[cell][:len(items[cell]) - len(group.ends)] for cell in group.cells)
+            smaller = sorted(cases.listed(cases.total - size)) if size is not None else None
+            if size is None or left != smaller:
+                raise ValueError(
+                    f"taking '{group.ends}' off the cases of '{group.name}' leaves {left}"
+                    + (f", but the cases of size {cases.total - size} are {smaller}" if size is not None
+                       else ", which is not made of whole parts")
+                    + ". Choose each group's ending so that taking it off leaves exactly every case "
+                    "of a smaller size, such as '01' and not '1' when a 1 must follow a 0")
         if sorted(len(group.cells) for group in cases.groups) != wanted:
             raise ValueError(
                 f"cell {last} is worked out from cells {[index + table.first for index in reads]}, "
                 f"which hold {[whole[index][0] for index in reads]}, so the groups have {wanted} "
-                f"cases; yours have {sorted(len(group.cells) for group in cases.groups)}. Either a "
-                "case is missing or wrong, or the groups are not split by the last choice made")
-        for group in cases.groups:
-            left = sorted(cases.items[cell][:-len(group.ends)] for cell in group.cells)
-            if left != sorted(group.smaller):
-                raise ValueError(
-                    f"taking '{group.ends}' off the cases of '{group.name}' leaves {left}, but its "
-                    f"smaller problem's cases are {sorted(group.smaller)}. Each group must be the "
-                    "smaller problem's cases with one ending added: choose the ending so that what "
-                    "is left is exactly a smaller case, such as '01' and not '1' when a 1 must follow a 0")
+                f"cases; yours have {sorted(len(group.cells) for group in cases.groups)}. The table's "
+                "rule does not match how the cases split")
         return self
 
 
@@ -161,7 +226,7 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
     trace = {"data": [
         # two cases are shown as examples and the rest held back, so the answer is not on
         # screen before the question is asked
-        {"id": "cases", "kind": "array", "label": cases.label, "items": list(cases.items),
+        {"id": "cases", "kind": "array", "label": cases.label, "items": cases.items,
          "shown_at_first": 2, "numbered": False},
         {"id": "table", "kind": "array", "label": table.label, "size": table.size, "first": base,
          "rule": {"start": table.start, "back": table.back, "op": table.op, "plus": table.plus}}]}
