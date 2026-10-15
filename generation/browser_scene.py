@@ -346,7 +346,9 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                              f'{pointer_label}</div><div class="semantic-cell{pointed}{dimmed}" '
                              f'data-visual-key="{escape(obj.id)}:cell:{index}">'
                              f'{"?" if index in veiled else "" if item is None else _peeled(item, peel.get(index))}{marker}'
-                             f'<span class="semantic-index">{index + first}</span></div></div>')
+                             + ("" if payload.get("unnumbered") else
+                                f'<span class="semantic-index">{index + first}</span>')
+                             + '</div></div>')
             legend = "".join(
                 f'<span class="group-name group-{number % 3}" data-visual-key="{escape(obj.id)}:group:{number}">'
                 f'{escape(group["label"])}: {len(group["cells"])}</span>' for number, group in enumerate(groups))

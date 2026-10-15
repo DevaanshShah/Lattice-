@@ -61,6 +61,8 @@ def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list
                 payload["first"] = item.base
             if item.shown_at_first is not None and item.shown_at_first < item.length:
                 payload["veiled"] = list(range(item.shown_at_first, item.length))
+            if item.numbered is False:
+                payload["unnumbered"] = True
         elif item.kind == "pointer":
             payload, role = {"target_id": item.on, "index": 0}, "operation"
         elif item.kind == "value":

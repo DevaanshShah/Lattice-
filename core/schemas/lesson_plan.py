@@ -337,6 +337,7 @@ class TraceItem(BaseModel):
     # How many of an array's first cells are on show at the start; the rest are drawn as "?"
     # until a reveal move, so the answer is not on screen before the question is asked.
     shown_at_first: int | None = Field(default=None, ge=1)
+    numbered: bool | None = None        # False: a list whose positions mean nothing shows no numbers
     on: str | None = None                                   # the array a pointer points into
     value: int | float | str | None = None                  # what a fixed value shows
     # a counter that goes up by itself: on every compare of this pointer, every call of this tree,
@@ -348,10 +349,10 @@ class TraceItem(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
-        mine = {"array": {"items", "size", "rule", "first", "shown_at_first"}, "pointer": {"on"},
+        mine = {"array": {"items", "size", "rule", "first", "shown_at_first", "numbered"}, "pointer": {"on"},
                 "value": {"value"},
                 "counter": {"counts"}, "tree": {"start", "steps"}}
-        stray = sorted(name for name in ("items", "size", "rule", "first", "shown_at_first", "on",
+        stray = sorted(name for name in ("items", "size", "rule", "first", "shown_at_first", "numbered", "on",
                                          "value", "counts", "start", "steps")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:

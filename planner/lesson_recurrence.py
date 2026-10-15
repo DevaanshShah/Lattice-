@@ -120,6 +120,16 @@ class ConceptSpec(BaseModel):
         return self
 
 
+def bigger_instance(table: TableSpec, steps: int = 15) -> tuple[int, int] | None:
+    """The same rule run on a bigger instance: how big, and what its last cell holds. Only for a
+    table that counts cases (a sum), where that number is how many cases a list would need."""
+    if table.op != "sum" or table.plus:
+        return None
+    longer = table.model_copy(update={"size": table.size + steps})
+    values = longer.values()
+    return table.first + longer.size - 1, int(values[-1][0])
+
+
 def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
     """The whole lesson as code decides it: the trace, and every step in order with what it
     shows and what its sentence has to explain. Returns the lesson as a model would have
@@ -132,7 +142,7 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
         # two cases are shown as examples and the rest held back, so the answer is not on
         # screen before the question is asked
         {"id": "cases", "kind": "array", "label": cases.label, "items": list(cases.items),
-         "shown_at_first": 2},
+         "shown_at_first": 2, "numbered": False},
         {"id": "table", "kind": "array", "label": table.label, "size": table.size, "first": base,
          "rule": {"start": table.start, "back": table.back, "op": table.op, "plus": table.plus}}]}
 
@@ -194,11 +204,25 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
          + f". It matches the {len(cases.items)} cases listed at the start.",
          f"This is the answer to the question. Say which boxes it uses, that the answer is "
          f"{held(last)}, and that it matches the {len(cases.items)} cases listed by hand.")
-    step(3, {"do": "show", "items": ["table"]}, "the finished table, lit",
-         f"Say what was done: each answer was written down once and later answers were built from "
-         f"earlier ones, and that this is called {concept.spec.name}. Then say the table needs one "
-         f"more box for one more of the {unit}, while the list of cases keeps multiplying. Give no "
-         "numbers for that.")
+    big = bigger_instance(table)
+    if big is not None:
+        size, cases_there = big
+        trace["data"] += [
+            {"id": "list_cost", "kind": "value", "label": f"Cases for {size} {unit}"[:22], "value": cases_there},
+            {"id": "table_cost", "kind": "value", "label": f"Boxes for {size} {unit}"[:22],
+             "value": size - table.first + 1}]
+        step(3, {"do": "show", "items": ["list_cost", "table_cost"]},
+             f"two numbers come on: listing every case for {size} {unit} means {cases_there} cases; "
+             f"the table needs {size - table.first + 1} boxes",
+             f"Say what was done: each answer was written down once and later answers were built "
+             f"from earlier ones, which is called {concept.spec.name}. Then compare the two numbers "
+             f"shown: {cases_there} cases to list against {size - table.first + 1} boxes to fill.")
+    else:
+        step(3, {"do": "show", "items": ["table"]}, "the finished table, lit",
+             f"Say what was done: each answer was written down once and later answers were built from "
+             f"earlier ones, and that this is called {concept.spec.name}. Then say the table needs one "
+             f"more box for one more of the {unit}, while the list of cases keeps multiplying. Give no "
+             "numbers for that.")
 
     scenes = []
     for number_of, title in enumerate(("The problem", "The reason", "The table", "The answer")):

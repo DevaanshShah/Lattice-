@@ -231,3 +231,22 @@ def test_the_reason_is_shown_not_only_said():
     for scene in scenes[2:]:
         state = closing_state(scene, state)
     assert state.payloads["table"]["tints"] == {"4": 0, "3": 1}      # box 4 = 5 routes, box 3 = 3 routes
+
+
+@pytest.mark.unit
+def test_the_cost_of_listing_is_shown_on_a_bigger_instance_and_cases_carry_no_numbers():
+    """Reviewed on 2026-10-15: listing 8 routes was quick, so its cost was only claimed; and the
+    routes' position numbers clashed with the table's stair numbers below them."""
+    from planner.lesson_recurrence import bigger_instance
+
+    concept = ConceptSpec.model_validate(CONCEPT)
+    assert bigger_instance(concept.spec.table) == (20, 10946)      # routes up 20 stairs, worked out
+    lesson, steps = build_run(concept)
+    costs = {item["id"]: item for item in lesson["trace"]["data"] if item["kind"] == "value"}
+    assert (costs["list_cost"]["label"], costs["list_cost"]["value"]) == ("Cases for 20 stairs", 10946)
+    assert (costs["table_cost"]["label"], costs["table_cost"]["value"]) == ("Boxes for 20 stairs", 21)
+    assert "10946 cases to list against 21 boxes" in steps[-1]["the sentence must"]
+    cases = next(item for item in lesson["trace"]["data"] if item["id"] == "cases")
+    assert cases["numbered"] is False
+    fewest = concept.spec.table.model_copy(update={"op": "min", "plus": 1})
+    assert bigger_instance(fewest) is None                          # not a count of cases
