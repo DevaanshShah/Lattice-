@@ -136,3 +136,74 @@ def test_the_cases_are_held_back_until_the_question_has_been_asked():
     assert html.count("is-veiled") == 6 and "1+1+2+1" not in html
     assert (first.beats[2].actions[0].kind, first.beats[2].actions[0].params) == ("set_state", {"veiled": []})
     assert "1+1+2+1" in _semantic_html(first, closing_state(first))
+
+
+class _Jev:
+    """A stand-in for Jev's answers: each request is recorded and answered from a function."""
+    def __init__(self, answer):
+        self.answer, self.requests = answer, []
+
+    def __call__(self, request, timeout):
+        body = json.loads(request.data.decode("utf-8"))
+        self.requests.append(body)
+        answers = {name: {"noul": self.answer(name, body)} for name in body["questions"]}
+        reply = json.dumps({"answers": answers}).encode("utf-8")
+        return type("Reply", (), {"__enter__": lambda s: s, "__exit__": lambda s, *a: False,
+                                  "read": lambda s: reply})()
+
+
+@pytest.fixture
+def jev(monkeypatch):
+    from core.config import settings
+    from planner import jev_gates
+    monkeypatch.setattr(settings, "jev_enabled", True)
+    monkeypatch.setattr(settings, "jev_api_key", "test")
+
+    def install(answer):
+        judge = _Jev(answer)
+        monkeypatch.setattr(jev_gates, "urlopen", judge)
+        return judge
+    return install
+
+
+@pytest.mark.unit
+def test_a_sentence_judged_weak_is_rewritten_once(jev, monkeypatch):
+    """Measured on 2026-10-15 against known-bad copies of real sentences, Jev caught most wrong
+    numbers and removed reasons. A sentence it judges weak goes back once to be rewritten."""
+    from planner import jev_gates
+    steps = len(build_run(ConceptSpec.model_validate(CONCEPT))[1])
+    first, second = _narration(steps), _narration(steps)
+    second["sentences"][4] = "Rewritten with its reason."
+    jev(lambda name, body: 0.1 if name == "supported_5" and
+        not any("Rewritten" in step["sentence"] for step in body["state"]["steps"]) else 0.9)
+    client = _Scripted([CONCEPT, first, second])
+    plan = lesson_recurrence.generate("Counting the ways to climb stairs", SKILL, client=client)
+    assert "Rewrite only these: sentence(s) [5] say something their step does not show" in client.asked[2][-1]["content"]
+    assert plan.scenes[1].beats[1].spoken_text == "Rewritten with its reason."
+
+
+@pytest.mark.unit
+def test_the_judge_never_stops_a_lesson(jev, monkeypatch):
+    from planner import jev_gates
+    jev(lambda name, body: 0.1 if name.startswith("supported") else 0.9)      # every sentence weak, twice
+    steps = len(build_run(ConceptSpec.model_validate(CONCEPT))[1])
+    client = _Scripted([CONCEPT, _narration(steps), _narration(steps)])
+    plan = lesson_recurrence.generate("Counting the ways to climb stairs", SKILL, client=client)
+    assert len(client.asked) == 3 and plan.scenes[0].beats[0].spoken_text == "Sentence 1 explains its step."
+
+
+@pytest.mark.unit
+def test_an_instance_that_is_not_the_topics_goes_back(jev, monkeypatch):
+    from planner import jev_gates
+    seen = {"asked": 0}
+
+    def answer(name, body):
+        if name == "same":
+            seen["asked"] += 1
+            return 0.05 if seen["asked"] == 1 else 0.95
+        return 0.9
+    jev(answer)
+    steps = len(build_run(ConceptSpec.model_validate(CONCEPT))[1])
+    client = _Scripted([CONCEPT, CONCEPT, _narration(steps)])
+    lesson_recurrence.generate("Counting the ways to climb 7 stairs", SKILL, client=client)
+    assert "not the one the topic asks about" in client.asked[1][-1]["content"]

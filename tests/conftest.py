@@ -24,3 +24,11 @@ def isolate_out_dir(tmp_path_factory):
     settings.out_dir = tmp_path_factory.mktemp("lattice-out")
     yield
     settings.out_dir = original
+
+
+@pytest.fixture(autouse=True)
+def jev_stays_offline(monkeypatch):
+    """A developer's `.env` may switch Jev on with a real key. Tests never call it: one that
+    wants a Jev answer switches it on itself and supplies the answer."""
+    from core.config import settings
+    monkeypatch.setattr(settings, "jev_enabled", False)

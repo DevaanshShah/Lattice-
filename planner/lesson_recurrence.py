@@ -21,13 +21,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from core.llm import LLMClient, get_client
 from core.schemas.lesson_plan import LessonBrief, LessonPlan, TableRule
 from core.textutil import extract_json
-from planner import lesson_trace
+from planner import jev_gates, lesson_trace
 from planner.lesson_plan import JSON_ONLY, PLAN_EXTRA, TRANSPORT_ATTEMPTS, LessonPlanError
 from planner.lesson_shared import number
 from planner.product_recipe import Recipe
 from prompts.loader import load
 
 ATTEMPTS = 3        # tries for each of the two model steps; each is small and says what was wrong
+SAME_INSTANCE = 0.3     # below this, the judge is taken to say the instance is not the topic's
 
 
 class TableSpec(BaseModel):
@@ -223,9 +224,19 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None) -> L
     import json
 
     client = client or get_client()
+    def described(answer: dict) -> ConceptSpec:
+        concept = ConceptSpec.model_validate(answer)
+        # Whether the worked instance is the one the topic asks about is a judgement code cannot
+        # make; Jev is asked once, and a clear no goes back like any other fault.
+        same = jev_gates.instance_matches_topic(topic, concept.brief.problem)
+        if same is not None and same < SAME_INSTANCE:
+            raise ValueError("the instance in brief.problem is not the one the topic asks about; "
+                             "use the topic's own numbers")
+        return concept
+
     concept = _ask(client, [{"role": "system", "content": load("recurrence-concept")},
                             {"role": "user", "content": f"Topic: {topic}\n\nReturn the JSON now."}],
-                   ConceptSpec.model_validate)
+                   described)
     lesson, shown = build_run(concept)
 
     def narrated(answer: dict) -> dict:
@@ -248,6 +259,23 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None) -> L
         {"role": "user", "content": f"The teaching: {json.dumps(concept.brief.model_dump(), ensure_ascii=False)}\n\n"
                                     f"The steps:\n{json.dumps(shown, ensure_ascii=False, indent=1)}\n\n"
                                     "Return the JSON now."}], narrated)
+    # Each sentence is judged against its step: does it say only what the step shows, and does it
+    # give the reason the step asks for. Weak ones are rewritten once. The judge is right most of
+    # the time, not always, so a second weak verdict never stops the lesson.
+    faults = jev_gates.weak_sentences(jev_gates.judge_narration(shown, told["sentences"]))
+    if faults:
+        asked = [
+            {"role": "system", "content": load("recurrence-narration")},
+            {"role": "user", "content": f"The teaching: {json.dumps(concept.brief.model_dump(), ensure_ascii=False)}\n\n"
+                                        f"The steps:\n{json.dumps(shown, ensure_ascii=False, indent=1)}\n\n"
+                                        "Return the JSON now."},
+            {"role": "assistant", "content": json.dumps(told, ensure_ascii=False)},
+            {"role": "user", "content": f"Rewrite only these: {faults}. Keep every other sentence "
+                                        "exactly as it was and return the whole JSON again."}]
+        try:
+            told = _ask(client, asked, narrated, attempts=1)
+        except LessonPlanError:
+            pass                    # the first narration stands
     sentences = iter(told["sentences"])
     for scene, written in zip(lesson["scenes"], told["scenes"]):
         scene["title"] = str(written.get("title") or scene["title"])[:60]
