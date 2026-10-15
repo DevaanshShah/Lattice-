@@ -12,6 +12,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.config import settings
+from planner.jev_router import RouteDecision, route as jev_route
+
 _RECIPES_PATH = Path(__file__).resolve().parent.parent / "prompts" / "product_video_recipes.json"
 FALLBACK_ID = "workflow_explainer"
 
@@ -40,6 +43,32 @@ def load_recipes() -> dict[str, Recipe]:
             for rid, r in data.items()}
 
 
+def _keyword_pick(topic: str, recipes: dict[str, Recipe]) -> Recipe:
+    """The established offline route, kept as the fallback for every Jev outcome."""
+    low = topic.lower()
+    best_id, best_score = FALLBACK_ID, 0
+    for rid, recipe in recipes.items():
+        score = sum(1 for kw in recipe.keywords if kw.lower() in low)
+        if score > best_score:
+            best_id, best_score = rid, score
+    return recipes[best_id]
+
+
+def _jev_pick(topic: str, recipes: dict[str, Recipe]) -> Recipe | None:
+    if not settings.jev_enabled or not settings.jev_api_key:
+        return None
+    criteria = {
+        recipe_id: f"{recipe.board} board: {recipe.outline_guidance}"
+        for recipe_id, recipe in recipes.items()
+    }
+    decision: RouteDecision | None = jev_route(
+        topic, criteria, api_key=settings.jev_api_key, base_url=settings.jev_base_url,
+        model=settings.jev_model, timeout=settings.jev_timeout_s)
+    if decision is None or decision.confidence < settings.jev_min_confidence:
+        return None
+    return recipes.get(decision.recipe_id)
+
+
 def pick_recipe(topic: str, requested: str, *, recipes: dict[str, Recipe] | None = None) -> Recipe:
     """`requested` is "auto" or a recipe id — this is never called for the "no
     --recipe at all" case, which skips recipe selection entirely upstream.
@@ -55,10 +84,4 @@ def pick_recipe(topic: str, requested: str, *, recipes: dict[str, Recipe] | None
             raise ValueError(f"unknown recipe id: {requested!r} (known: {sorted(recipes)})")
         return recipes[requested]
 
-    low = topic.lower()
-    best_id, best_score = FALLBACK_ID, 0
-    for rid, recipe in recipes.items():
-        score = sum(1 for kw in recipe.keywords if kw.lower() in low)
-        if score > best_score:
-            best_id, best_score = rid, score
-    return recipes[best_id]
+    return _jev_pick(topic, recipes) or _keyword_pick(topic, recipes)

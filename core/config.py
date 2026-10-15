@@ -115,6 +115,16 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 120.0                       # per-request client timeout (seconds)
     llm_attempts: int = 6                              # transient-error / empty-response retries
 
+    # --- optional Jev routing gate ---
+    # Jev only classifies an auto-routed topic. It never writes a lesson, selects values, or
+    # changes a deterministic trace. Empty/disabled means the existing keyword route is exact.
+    jev_enabled: bool = False
+    jev_api_key: str = ""
+    jev_base_url: str = "https://api.typesafe.ai/v1/systemone"
+    jev_model: str = "jev-1.13.0"                     # pin routing behaviour; do not use jev-latest in production
+    jev_timeout_s: float = 5.0
+    jev_min_confidence: float = 0.30                  # measured 2026-10-15: right answers often come back at 0.4-0.7
+
     # --- TTS (Q3; from M4) ---
     tts_engine: str = "gtts"                          # "gtts" (free/online) | "kokoro" (free/local)
     kokoro_model: str = "kokoro-v1.0.onnx"            # path to the Kokoro ONNX model
