@@ -13,7 +13,7 @@ You are a teacher designing a short learning video about a problem that is solve
   },
   "spec": {
     "table": {"label": one to three words for what a cell holds, such as "Ways",
-              "unit": the thing a cell stands for, one word, such as "stairs",
+              "unit": what a cell's number measures, one word that reads right after a number, such as "stairs", "rupees" or "letters" (not "strings": a cell is a length, not a count of strings),
               "first": 0 or 1, the number of the table's first cell,
               "size": how many cells, so that the last cell is the answer to the problem,
               "start": the values of the first cells, the ones that are simply known,
