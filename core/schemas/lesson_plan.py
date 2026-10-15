@@ -100,7 +100,7 @@ LINE_LENGTH = 110
 
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
 TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
-               "grow", "spot", "take", "group", "remove")
+               "grow", "spot", "take", "group", "reveal", "remove")
 LINE_MOVES = ("ask", "answer", "turn")    # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
@@ -114,6 +114,7 @@ _TAKES = {
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "take": {"pointer", "index", "out_of", "expect", "lines"},
     "group": {"array", "cells", "text", "lines"},
+    "reveal": {"array", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
     "fill": {"array", "cell", "cells", "value", "expect", "lines"},
     "count": {"counter", "expect", "lines"},
@@ -150,7 +151,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "grow", "spot", "take", "group", "ask", "answer", "turn"]
+                "grow", "spot", "take", "group", "reveal", "ask", "answer", "turn"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -199,6 +200,7 @@ class BeatMove(BaseModel):
             "look": self.pointer is None or self.index is None,
             "compare": self.pointer is None or self.against is None,
             "take": self.pointer is None or self.out_of is None or self.expect is None,
+            "reveal": self.array is None,
             "group": (self.array is None or not self.cells or not self.text
                       or len(self.text or "") > 24),
             "discard": self.array is None or not self.cells,
@@ -330,6 +332,9 @@ class TraceItem(BaseModel):
     # The number an array's first cell goes by, 0 unless given: with 1, its cells are numbered
     # from 1 on screen, in the working and in the lesson's moves, for stair 1 or day 1.
     first: int | None = Field(default=None, ge=0, le=1)
+    # How many of an array's first cells are on show at the start; the rest are drawn as "?"
+    # until a reveal move, so the answer is not on screen before the question is asked.
+    shown_at_first: int | None = Field(default=None, ge=1)
     on: str | None = None                                   # the array a pointer points into
     value: int | float | str | None = None                  # what a fixed value shows
     # a counter that goes up by itself: on every compare of this pointer, every call of this tree,
@@ -341,10 +346,11 @@ class TraceItem(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
-        mine = {"array": {"items", "size", "rule", "first"}, "pointer": {"on"}, "value": {"value"},
+        mine = {"array": {"items", "size", "rule", "first", "shown_at_first"}, "pointer": {"on"},
+                "value": {"value"},
                 "counter": {"counts"}, "tree": {"start", "steps"}}
-        stray = sorted(name for name in ("items", "size", "rule", "first", "on", "value", "counts",
-                                         "start", "steps")
+        stray = sorted(name for name in ("items", "size", "rule", "first", "shown_at_first", "on",
+                                         "value", "counts", "start", "steps")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:
             raise ValueError(f"trace item {self.id!r}: a {self.kind} has no {stray[0]}")
@@ -353,10 +359,10 @@ class TraceItem(BaseModel):
                              "starts empty and is filled")
         if self.kind == "array" and self.items and len(self.items) < 2:
             raise ValueError(f"trace array {self.id!r} needs at least two items")
-        wide = [item for item in self.items if len(str(item)) > 7]
+        wide = [item for item in self.items if len(str(item)) > 9]
         if wide:
             raise ValueError(f"trace array {self.id!r}: {wide[0]!r} does not fit in a cell; an "
-                             "item is at most seven characters")
+                             "item is at most nine characters")
         if self.rule is not None and self.items:
             raise ValueError(f'trace array {self.id!r} has a rule, so it starts empty and is filled '
                              'in: give it "size", not "items"')

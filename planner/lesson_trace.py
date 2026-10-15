@@ -25,7 +25,7 @@ from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, g
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
          "discard": "state_change", "fill": "state_change", "count": "state_change",
          "clear": "state_change", "grow": "state_change", "spot": "state_change",
-         "take": "state_change", "group": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
+         "take": "state_change", "group": "state_change", "reveal": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
          "turn": "label"}
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
@@ -59,6 +59,8 @@ def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list
             payload, role = {"items": list(item.items) or [None] * item.size}, "input"
             if item.base:       # the number its first cell goes by, when that is not 0
                 payload["first"] = item.base
+            if item.shown_at_first is not None and item.shown_at_first < item.length:
+                payload["veiled"] = list(range(item.shown_at_first, item.length))
         elif item.kind == "pointer":
             payload, role = {"target_id": item.on, "index": 0}, "operation"
         elif item.kind == "value":
@@ -346,7 +348,6 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             cell, a pointer, or a value its takes used up. A table that is only being filled
             has not."""
             return bool(payloads[array].get("checked_results") or payloads[array].get("discarded_indices")
-                        or payloads[array].get("groups")
                         or spent.get(array)
                         or any(item.kind == "pointer" and item.on == array and item.id in visible
                                for item in trace.data))
@@ -417,6 +418,13 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             changed = retire(move.array)    # the claim is about the array, which may be unmarked
             anchors.append(items[move.array].label)
             shown.append(move.array)        # the pointers have left; the array is what is shown
+        elif move.do == "reveal":
+            # the cells held back come on: what the lesson kept for after its question
+            show([move.array])
+            changed = change(move.array, {"veiled": []})
+            anchors.append(items[move.array].label)
+            shown.append(move.array)
+            needs += _DWELL["point"]
         elif move.do == "group":
             # some cells belong together: they take one colour, and their name and how many they
             # are is written under the array. An insight is shown this way, not only said.

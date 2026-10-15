@@ -1035,10 +1035,10 @@ def test_bookkeeping_a_model_gets_wrong_is_done_for_it_and_a_cell_holds_what_fit
     assert lesson.scenes[0].beats[2].move.cell == 0
     assert lesson.scenes[0].beats[0].why.startswith("the boxes")       # kept, never shown or spoken
     trace = _as_written("taught_search")["trace"]
-    trace["data"][0]["items"] = ["1+1+1+1", "1+1+2", "2+2"]            # a tiny case worked by hand
+    trace["data"][0]["items"] = ["1+1+1+1+1", "1+1+2", "2+2"]          # a case worked by hand: nine fit
     LessonTrace.model_validate(trace)
     trace["data"][0]["items"] = ["one plus one", "two"]
-    with pytest.raises(ValidationError, match="does not fit in a cell; an item is at most seven"):
+    with pytest.raises(ValidationError, match="does not fit in a cell; an item is at most nine"):
         LessonTrace.model_validate(trace)
 
 
