@@ -19,7 +19,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from core.llm import LLMClient, get_client
-from core.schemas.lesson_plan import LessonBrief, LessonPlan, TableRule
+from core.schemas.lesson_plan import LINE_LENGTH, LessonBrief, LessonPlan, TableRule
 from core.textutil import extract_json
 from planner import jev_gates, lesson_trace
 from planner.lesson_plan import JSON_ONLY, PLAN_EXTRA, TRANSPORT_ATTEMPTS, LessonPlanError
@@ -60,6 +60,9 @@ class CaseGroup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=24)
     ends: str = Field(..., min_length=1, max_length=9)
+    # every case of the smaller problem this group is built from: taking `ends` off each case of
+    # the group must leave exactly these, which is what makes the split a reason and not a sort
+    smaller: list[str] = Field(..., min_length=1, max_length=12)
     cells: list[int] = Field(default_factory=list)      # worked out from `ends`, never given
 
 
@@ -87,6 +90,10 @@ class ConceptSpec(BaseModel):
     @model_validator(mode="after")
     def _the_cases_show_the_rule(self) -> "ConceptSpec":
         table, cases = self.spec.table, self.spec.cases
+        if len(self.brief.turning_point) > LINE_LENGTH:
+            # it is shown under the picture; found here, it is repaired with the rest of the brief
+            raise ValueError(f"brief.turning_point is shown on screen: at most {LINE_LENGTH} characters, "
+                             f"not {len(self.brief.turning_point)}; say it in fewer words")
         if len(table.start) >= table.size:
             raise ValueError("every cell of the table is given: make the table long enough for the "
                              "rule to work at least one cell out")
@@ -122,6 +129,14 @@ class ConceptSpec(BaseModel):
                 f"which hold {[whole[index][0] for index in reads]}, so the groups have {wanted} "
                 f"cases; yours have {sorted(len(group.cells) for group in cases.groups)}. Either a "
                 "case is missing or wrong, or the groups are not split by the last choice made")
+        for group in cases.groups:
+            left = sorted(cases.items[cell][:-len(group.ends)] for cell in group.cells)
+            if left != sorted(group.smaller):
+                raise ValueError(
+                    f"taking '{group.ends}' off the cases of '{group.name}' leaves {left}, but its "
+                    f"smaller problem's cases are {sorted(group.smaller)}. Each group must be the "
+                    "smaller problem's cases with one ending added: choose the ending so that what "
+                    "is left is exactly a smaller case, such as '01' and not '1' when a 1 must follow a 0")
         return self
 
 

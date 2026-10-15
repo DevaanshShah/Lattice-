@@ -29,8 +29,10 @@ CONCEPT = {
                   "back": [1, 2], "op": "sum", "plus": 0},
         "cases": {"label": "Routes up 5 stairs",
                   "items": ["1+1+1+1+1", "1+1+1+2", "1+1+2+1", "1+2+1+1", "2+1+1+1", "1+2+2", "2+1+2", "2+2+1"],
-                  "groups": [{"name": "end in a 1-step", "ends": "+1"},
-                             {"name": "end in a 2-step", "ends": "+2"}]},
+                  "groups": [{"name": "end in a 1-step", "ends": "+1",
+                              "smaller": ["1+1+1+1", "1+1+2", "1+2+1", "2+1+1", "2+2"]},
+                             {"name": "end in a 2-step", "ends": "+2",
+                              "smaller": ["1+1+1", "1+2", "2+1"]}]},
         "name": "dynamic programming",
     },
 }
@@ -76,6 +78,8 @@ def test_code_builds_the_whole_run_and_no_model_writes_a_move():
     (lambda c: c["spec"]["cases"]["items"].__setitem__(7, "2+1+2"),
      r"hold \[5, 3\], so the groups have \[3, 5\] cases; yours have \[4, 4\]"),
     (lambda c: c["spec"]["cases"]["items"].__setitem__(0, "one+one+one"), "does not fit in a box"),
+    (lambda c: c["brief"].update(turning_point="Because " + "every route ends in one step " * 5),
+     "brief.turning_point is shown on screen"),
 ])
 def test_the_description_of_the_table_is_checked_against_itself(change, message):
     """What made single-call lessons fail was numbers a model could not check. Here the table's
@@ -250,3 +254,24 @@ def test_the_cost_of_listing_is_shown_on_a_bigger_instance_and_cases_carry_no_nu
     assert cases["numbered"] is False
     fewest = concept.spec.table.model_copy(update={"op": "min", "plus": 1})
     assert bigger_instance(fewest) is None                          # not a count of cases
+
+
+@pytest.mark.unit
+def test_a_split_that_does_not_leave_the_smaller_cases_is_sent_back():
+    """Reviewed on 2026-10-15: binary strings with no two 1s next to each other were split into
+    "ends in 0" and "ends in 1". The sizes matched the table by coincidence; taking the 1 off left
+    000, 010 and 100, which are not the strings of length 2. The honest split is "ends in 01"."""
+    strings = {
+        "brief": {**CONCEPT["brief"]},
+        "spec": {"table": {"label": "Count", "unit": "letters", "first": 0, "size": 5, "start": [1, 2],
+                           "back": [1, 2], "op": "sum", "plus": 0},
+                 "cases": {"label": "Strings of length 4",
+                           "items": ["0000", "0001", "0010", "0100", "0101", "1000", "1001", "1010"],
+                           "groups": [{"name": "end in 0", "ends": "0",
+                                       "smaller": ["000", "001", "010", "100", "101"]},
+                                      {"name": "end in 1", "ends": "1", "smaller": ["00", "01", "10"]}]},
+                 "name": "dynamic programming"}}
+    with pytest.raises(ValidationError, match=r"taking '1' off the cases of 'end in 1' leaves \['000', '010', '100'\]"):
+        ConceptSpec.model_validate(strings)
+    strings["spec"]["cases"]["groups"][1].update(name="end in 01", ends="01")
+    ConceptSpec.model_validate(strings)

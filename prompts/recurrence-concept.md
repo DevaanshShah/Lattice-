@@ -22,7 +22,8 @@ You are a teacher designing a short learning video about a problem that is solve
               "plus": a constant added after it, 0 unless needed},
     "cases": {"label": one to three words, such as "Routes up 5 stairs",
               "items": every case of the problem's instance, each written in at most nine characters with no spaces, such as "1+1+1+2"; there are exactly as many as the answer,
-              "groups": the cases split by the last choice made, one group for each cell the answer is worked out from: [{"name": at most 24 characters, such as "end in a 1-step", "ends": the characters every case of this group ends with and no other case does, such as "+1"}]},
+              "groups": the cases split by the last choice made, one group for each cell the answer is worked out from: [{"name": at most 24 characters, such as "end in a 1-step", "ends": the characters every case of this group ends with and no other case does, such as "+1",
+                          "smaller": every case of the smaller problem this group is built from, written the same way, such as every route up 4 stairs; taking "ends" off each case of the group leaves exactly these}]},
     "name": the usual name of the technique
   }
 }
