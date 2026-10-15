@@ -430,8 +430,9 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             # are is written under the array. An insight is shown this way, not only said.
             show([move.array])
             cells = sorted({at(move.array, cell) for cell in move.cells})
-            groups = [group for group in payloads[move.array].get("groups") or []
-                      if group["label"] != move.text] + [{"label": move.text, "cells": cells}]
+            group = {"label": move.text, "cells": cells, **({"ends": move.ends} if move.ends else {})}
+            groups = [each for each in payloads[move.array].get("groups") or []
+                      if each["label"] != move.text] + [group]
             changed = change(move.array, {"groups": groups})
             anchors.append(f"{move.text}: {len(cells)}")
             shown.append(move.array)
@@ -492,6 +493,16 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
                 worked = _worked_out(label, target + base, rule, [cells[index] for index in reads], value)
                 # where the number comes from is shown first; then the number lands in its cell
                 changed = change(move.array, {"lit_indices": reads, "new_index": target}) or changed
+                if move.match and not again and target == jobs[-1][0]:
+                    # each cell read takes the colour of the group of cases it stands for
+                    colour = {group["label"]: number for name in payloads
+                              for number, group in enumerate(payloads[name].get("groups") or [])}
+                    unknown = [name for name in move.match if name not in colour]
+                    if unknown or len(move.match) != len(reads):
+                        raise ValueError(f"beat {beat.id}: \"match\" names one group for each of the "
+                                         f"{len(reads)} cells this fill reads; groups shown so far are "
+                                         f"{sorted(colour)}")
+                    change(move.array, {"tints": {str(cell): colour[name] for cell, name in zip(reads, move.match)}})
                 change(WORKING, {"expression": worked})
                 show([WORKING])
                 if not again:

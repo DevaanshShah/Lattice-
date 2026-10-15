@@ -113,10 +113,10 @@ _TAKES = {
     "show": {"items", "lines"}, "run": {"lines"}, "look": {"pointer", "index", "lines"},
     "compare": {"pointer", "index", "cells", "against", "lines"},
     "take": {"pointer", "index", "out_of", "expect", "lines"},
-    "group": {"array", "cells", "text", "lines"},
+    "group": {"array", "cells", "text", "ends", "lines"},
     "reveal": {"array", "lines"},
     "discard": {"array", "cells", "lines"}, "clear": {"array", "lines"},
-    "fill": {"array", "cell", "cells", "value", "expect", "lines"},
+    "fill": {"array", "cell", "cells", "value", "expect", "match", "lines"},
     "count": {"counter", "expect", "lines"},
 }
 _NEEDS = {
@@ -166,6 +166,8 @@ class BeatMove(BaseModel):
     index: int | None = Field(default=None, ge=0)
     against: str | None = None                        # the value a pointed cell is compared with
     out_of: str | None = None                         # the value a pointed cell's number is taken out of
+    ends: str | None = Field(default=None, max_length=9)   # how a group's cases end: struck through on screen
+    match: list[str] = Field(default_factory=list)    # for each cell a fill reads, the group it stands for
     array: str | None = None
     cells: list[int] = Field(default_factory=list)
     cell: int | None = Field(default=None, ge=0)

@@ -207,3 +207,27 @@ def test_an_instance_that_is_not_the_topics_goes_back(jev, monkeypatch):
     client = _Scripted([CONCEPT, CONCEPT, _narration(steps)])
     lesson_recurrence.generate("Counting the ways to climb 7 stairs", SKILL, client=client)
     assert "not the one the topic asks about" in client.asked[1][-1]["content"]
+
+
+@pytest.mark.unit
+def test_the_reason_is_shown_not_only_said():
+    """Reviewed on 2026-10-15: "removing the last step leaves a route up 4 stairs" was said and
+    nothing on screen did it, and the groups were never tied to the table. Now each case of a group
+    is drawn with its last step struck through, and the cells the answer adds take the colours of
+    the groups they stand for."""
+    from core.visual_state import closing_state
+    from generation.browser_scene import _semantic_html
+    from planner.lesson_trace import plan_trace_scenes
+
+    steps = len(build_run(ConceptSpec.model_validate(CONCEPT))[1])
+    plan = lesson_recurrence.generate("stairs", SKILL, client=_Scripted([CONCEPT, _narration(steps)]))
+    scenes = plan_trace_scenes(plan, SKILL)
+    state = None
+    for scene in scenes[:2]:
+        state = closing_state(scene, state)
+    grouped = _semantic_html(scenes[1], state)
+    assert '1+1+2<s class="peel">+1</s>' in grouped and '1+2<s class="peel">+2</s>' in grouped
+    assert plan.scenes[3].beats[1].move.match == ["end in a 1-step", "end in a 2-step"]
+    for scene in scenes[2:]:
+        state = closing_state(scene, state)
+    assert state.payloads["table"]["tints"] == {"4": 0, "3": 1}      # box 4 = 5 routes, box 3 = 3 routes

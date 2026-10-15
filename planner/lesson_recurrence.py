@@ -157,9 +157,11 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
          f"{len(cases.items)}. Say why that cannot be trusted as the number of {unit} grows.")
     step(1, {"do": "turn"}, f"the turning point on screen: {brief.turning_point}", "said by code")
     for group in cases.groups:
-        step(1, {"do": "group", "array": "cases", "cells": list(group.cells), "text": group.name},
-             f"{len(group.cells)} of the boxes take one colour, named '{group.name}': "
-             f"{', '.join(cases.items[cell] for cell in group.cells)}",
+        step(1, {"do": "group", "array": "cases", "cells": list(group.cells), "text": group.name,
+                 "ends": group.ends},
+             f"{len(group.cells)} of the boxes take one colour, named '{group.name}', and the last "
+             f"part '{group.ends}' of each is struck through, leaving: "
+             f"{', '.join(cases.items[cell][:-len(group.ends)] for cell in group.cells)}",
              f"Say what these {len(group.cells)} cases have in common, and why that makes each of "
              f"them a case of a smaller problem, of which there are {len(group.cells)}.")
     known = [cell + base for cell in range(given)]
@@ -174,14 +176,22 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
          f"box {given + base} is filled from the boxes it reads: {working(given)}",
          "Give the rule in words on this one box: which boxes it reads, and why adding them is right.")
     middle = list(range(given + 1, last))
+    # which group of cases each cell the answer reads stands for: the group of the same size
+    sizes = {group.name: len(group.cells) for group in cases.groups}
+    matched = []
+    for cell in whole[last][1]:
+        name = next(name for name, size in sizes.items() if size == held(cell) and name not in matched)
+        matched.append(name)
     if middle:
         step(3, {"do": "fill", "array": "table", "cells": [cell + base for cell in middle],
                  "expect": [held(cell) for cell in middle]},
              "the next boxes are filled the same way: " + "; ".join(working(cell) for cell in middle),
              "Say the same rule carries on, and read out the numbers it gives.")
-    step(3, {"do": "fill", "array": "table", "cell": last + base, "expect": held(last)},
-         f"the last box is filled: {working(last)}. It matches the {len(cases.items)} cases listed "
-         "at the start.",
+    step(3, {"do": "fill", "array": "table", "cell": last + base, "expect": held(last), "match": matched},
+         f"the last box is filled: {working(last)}. The boxes it reads take the colours of the "
+         f"groups they stand for: " + ", ".join(f"box {cell + base} ({held(cell)}) = '{name}'"
+                                                for cell, name in zip(whole[last][1], matched))
+         + f". It matches the {len(cases.items)} cases listed at the start.",
          f"This is the answer to the question. Say which boxes it uses, that the answer is "
          f"{held(last)}, and that it matches the {len(cases.items)} cases listed by hand.")
     step(3, {"do": "show", "items": ["table"]}, "the finished table, lit",
