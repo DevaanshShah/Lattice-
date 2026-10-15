@@ -314,3 +314,9 @@ Needs Docker Desktop + `lattice-render:0.1` image + `.env` with `LATTICE_LLM_API
 - Also: a `reveal` move and `shown_at_first` hold cases back until after the question; group colours stay through the table fill; a hand-listed case may be nine characters.
 - Jev topic routing (`planner/jev_router.py`, written in another session on 2026-10-12, now enabled in `.env`): on 15 fixed topics keyword routing was right 6 times, Jev 13 when its answer is taken; its confidence runs low on right answers, so the cut-off is 0.30. Calls take about 0.3 s; it falls back to keywords on any failure.
 - Jev as a sentence judge, measured offline on four lessons with known-bad copies: "says only what the step shows" at a 0.4 cut-off catches 65% of bad sentences and flags 6% of good ones; "gives the reason" at 0.3 catches 83% and flags 15%. Being built in a worktree as a soft gate (one rewrite, never blocks).
+
+### 2026-10-15 — Staged table lessons: the reason shown, the cost shown, cases listed by code; handoff written
+
+- Commits `649fb5f`, `ee36d7f`, `c963242`, `23d1024`, `6644206`, `4a89de8` (see `docs/handoff-2026-10-15.md` for the list). The staged planner now: strikes the last step off each grouped case and colours the table cells the answer reads in their group's colours; shows the cost of listing on a bigger case worked out by code ("Cases for 20 stairs: 10946" against 21 boxes); refuses a split whose ending does not leave exactly the smaller problem's cases; and lists every case itself from the model's description of the parts, the join, the total and any forbidden pattern.
+- Live after it: all five table topics planned (binary strings, domino tilings, stairs, steps of 1 to 3, coins), 4 to 6 calls, under half a cent each. Reviews of the staged videos: 5 to 6 out of 10, best 6 (stairs).
+- Next step and the rules that bite: `docs/handoff-2026-10-15.md`.
