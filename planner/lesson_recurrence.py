@@ -98,9 +98,14 @@ class ConceptSpec(BaseModel):
         if wide:
             raise ValueError(f"the case {wide[0]!r} does not fit in a box: at most nine characters, no spaces")
         if len(cases.items) != answer:
+            # A live run answered "exactly 5" by cutting cases, then the table, three times over.
+            # Listed cases are concrete and easy to check; a table's start is where slips happen.
             raise ValueError(f"the table's last cell, cell {last}, holds {answer}, but {len(cases.items)} "
-                             f"cases are listed; the cases are every case of the instance, so there "
-                             f"are exactly {answer}. The table comes to: {facts}")
+                             f"cases are listed. The table comes to: {facts}. Check the cases first: if "
+                             f"all {len(cases.items)} are right and none is missing, the table is wrong, "
+                             "so fix its \"start\" (the simply known first cells, counted from cell "
+                             f"{table.first}) so that its last cell holds {len(cases.items)}; keep the "
+                             "instance the same size")
         for group in cases.groups:
             group.cells = [index for index, item in enumerate(cases.items) if item.endswith(group.ends)]
         for index, item in enumerate(cases.items):

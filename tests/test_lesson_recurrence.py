@@ -71,7 +71,7 @@ def test_code_builds_the_whole_run_and_no_model_writes_a_move():
 @pytest.mark.unit
 @pytest.mark.parametrize("change, message", [
     (lambda c: c["spec"]["cases"]["items"].pop(), "holds 8, but 7 cases are listed"),
-    (lambda c: c["spec"]["table"].update(start=[1, 2]), "holds 13, but 8 cases are listed"),
+    (lambda c: c["spec"]["table"].update(start=[1, 2]), r"holds 13, but 8 cases are listed.*fix its \"start\""),
     (lambda c: c["spec"]["cases"]["groups"][0].update(ends="2"), "must end like exactly one group"),
     (lambda c: c["spec"]["cases"]["items"].__setitem__(7, "2+1+2"),
      r"hold \[5, 3\], so the groups have \[3, 5\] cases; yours have \[4, 4\]"),
