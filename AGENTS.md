@@ -1,3 +1,11 @@
+## Start here
+
+Before any work, read `docs/handoff-2026-10-15.md` (where the project stands, what has been
+measured, the next step and the rules that bite), then the last entries of `MEMORY.md` (the
+project log, newest at the bottom) and `DECISIONS.md` (why things are the way they are). The
+scripts for planning, rendering and reviewing a lesson by hand are in `scripts/lesson_lab/`
+(see its README). Commits carry the owner's name only: no AI trailer or attribution.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
