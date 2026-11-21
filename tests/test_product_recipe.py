@@ -8,7 +8,7 @@ from planner import product_recipe
 def test_recipes_load_and_validate():
     recipes = product_recipe.load_recipes()
     expected_ids = {"algorithm_explainer", "architecture_explainer", "workflow_explainer", "funnel_explainer",
-                    "metric_story", "before_after"}
+                    "metric_story", "before_after", "table_explainer"}
     assert set(recipes) == expected_ids
     for recipe in recipes.values():
         assert recipe.keywords and recipe.outline_guidance and recipe.scene_guidance

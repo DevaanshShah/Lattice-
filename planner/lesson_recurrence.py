@@ -70,6 +70,9 @@ class CasesSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     label: str = Field(..., min_length=1, max_length=22)
     parts: dict[str, int] = Field(..., min_length=1, max_length=4)     # how a part is written: its size
+    # what each part stands for in the real problem ("H": "two flat dominoes"): code uses the
+    # parts only by their sizes, so without this the narration cannot say what a case is
+    means: dict[str, str] = Field(..., min_length=1, max_length=4)
     join: str = Field(default="", max_length=1)
     total: int = Field(..., ge=1, le=12)
     forbid: list[str] = Field(default_factory=list, max_length=3)
@@ -78,19 +81,52 @@ class CasesSpec(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _parts_as_a_list(cls, data):
-        """Parts written as a list of {"name" or "text", "size"} are read as the mapping they mean:
-        a live run lost all its tries to this form."""
+        """Parts written as a list of {"name" or "text", "size", "means"} are read as the mappings
+        they mean: a live run lost all its tries to this form."""
         parts = data.get("parts") if isinstance(data, dict) else None
         if isinstance(parts, list) and all(isinstance(part, dict) for part in parts):
-            data = {**data, "parts": {str(part.get("name", part.get("text", part.get("part")))): part.get("size")
-                                      for part in parts}}
+            named = [(str(part.get("name", part.get("text", part.get("part")))), part) for part in parts]
+            data = {**data, "parts": {name: part.get("size") for name, part in named}}
+            if "means" not in data and all("means" in part for _, part in named):
+                data["means"] = {name: part["means"] for name, part in named}
         return data
 
     @model_validator(mode="after")
     def _parts_are_written_plainly(self) -> "CasesSpec":
         if any(size < 1 for size in self.parts.values()) or any(not text for text in self.parts):
             raise ValueError("each part is written as some characters and has a size of at least 1")
+        if set(self.means) != set(self.parts):
+            raise ValueError(f"\"means\" says what each part stands for, one entry for each of "
+                             f"{sorted(self.parts)}; it has {sorted(self.means)}")
+        long = [part for part, text in self.means.items() if not text.strip() or len(text) > 40]
+        if long:
+            raise ValueError(f"what part {long[0]!r} stands for is said in a few plain words, at most 40 characters")
         return self
+
+    def plain(self, part: str) -> str | None:
+        """What a part stands for, or None when it stands only for itself ("1": "a 1")."""
+        meaning = self.means[part].strip().strip("'\"").lower()
+        return None if meaning in {part.lower(), f"a {part.lower()}", f"an {part.lower()}"} else self.means[part]
+
+    def why_ends(self, group: CaseGroup) -> str | None:
+        """Why a group's ending is longer than its last part, when a forbidden pattern is the
+        reason: binary strings with no '11' end in '01', not '1', because a 1 cannot follow a 1.
+        This is the crux of such a split, and only code knows it, so code says it."""
+        pieces = self.pieces(group.ends)
+        if not self.forbid or not pieces or len(pieces) < 2:
+            return None
+        last = pieces[-1]
+        for smaller in self.listed(self.total - self.parts[last]):
+            # a smaller case with only the last part added, outside the group: it would be a
+            # case of this group too, were it not ruled out
+            longer = self.join.join([smaller, last]) if smaller else last
+            if longer.endswith(group.ends):
+                continue
+            ruled_out = next((pattern for pattern in self.forbid if pattern in longer), None)
+            if ruled_out is not None:
+                return (f"no case may contain '{ruled_out}', so a case that ends in '{last}' "
+                        f"must end in '{self.join.join(pieces)}'")
+        return None
 
     def listed(self, total: int | None = None) -> list[str]:
         """Every case of the given size (the problem's own size unless given), in order."""
@@ -114,6 +150,11 @@ class CasesSpec(BaseModel):
     def size_of(self, ending: str) -> int | None:
         """How much of the total an ending stands for, read part by part: '+1' is one, '01' is
         two. None when the ending is not made of whole parts."""
+        pieces = self.pieces(ending)
+        return None if pieces is None else sum(self.parts[piece] for piece in pieces)
+
+    def pieces(self, ending: str) -> list[str] | None:
+        """The parts an ending is made of, in order, or None when it is not made of whole parts."""
         text = ending[len(self.join):] if self.join and ending.startswith(self.join) else ending
         pieces = text.split(self.join) if self.join else None
         if pieces is None:
@@ -127,7 +168,7 @@ class CasesSpec(BaseModel):
                 rest = rest[len(part):]
         if not pieces or any(piece not in self.parts for piece in pieces):
             return None
-        return sum(self.parts[piece] for piece in pieces)
+        return pieces
 
     @property
     def items(self) -> list[str]:
@@ -175,6 +216,13 @@ class ConceptSpec(BaseModel):
                              f"last cell, cell {last}, holds {answer}. The table comes to: {facts}. Fix "
                              f"the table's \"start\" (the simply known first cells, counted from cell "
                              f"{table.first}) or its size so that its last cell holds {len(items)}")
+        if last != cases.total:
+            # Live on 2026-11-21: a 2 by 5 board numbered its cells 1 to 6, so the narration read
+            # "Ways[5] = 5" for the 5-column board and then gave its answer, 8, in cell 6.
+            raise ValueError(f"the table's last cell is cell {last}, but the problem's size is "
+                             f"{cases.total}: a cell's number is the size it is the answer for, so "
+                             f"the answer is in cell {cases.total}. The table comes to: {facts}. "
+                             "Change \"first\", \"start\" or \"size\" so the cells are numbered by size")
         for group in cases.groups:
             group.cells = [index for index, item in enumerate(items) if item.endswith(group.ends)]
         for index, item in enumerate(items):
@@ -240,11 +288,16 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
     def step(scene: int, move: dict, sees: str, explain: str) -> None:
         steps.append((scene, move, sees, explain))
 
+    # what the parts of a case stand for, when a part is more than itself: the viewer reads
+    # "V+H" and has to be told it is an upright domino and two flat ones
+    meanings = {part: cases.plain(part) for part in cases.parts}
+    told = "; ".join(f"'{part}' is {meaning}" for part, meaning in meanings.items() if meaning)
     step(0, {"do": "show", "items": ["cases"]},
          f"a row of boxes labelled '{cases.label}': the first two show {cases.items[0]} and "
          f"{cases.items[1]}, the others show only '?'",
-         f"State the problem ({brief.problem}), say what one box holds using the two examples, "
-         "and say there are more. Do not say how many.")
+         f"State the problem ({brief.problem}), say what one box holds using the two examples"
+         + (f", and what the parts of a case stand for ({told})" if told else "")
+         + ", and say there are more. Do not say how many.")
     step(0, {"do": "ask"}, f"the question on screen: {brief.question}", "said by code")
     step(0, {"do": "reveal", "array": "cases"},
          f"every case is now shown: {', '.join(cases.items)}",
@@ -257,8 +310,12 @@ def build_run(concept: ConceptSpec) -> tuple[dict, list[dict]]:
              f"{len(group.cells)} of the boxes take one colour, named '{group.name}', and the last "
              f"part '{group.ends}' of each is struck through, leaving: "
              f"{', '.join(cases.items[cell][:-len(group.ends)] for cell in group.cells)}",
-             f"Say what these {len(group.cells)} cases have in common, and why that makes each of "
-             f"them a case of a smaller problem, of which there are {len(group.cells)}.")
+             f"Say what these {len(group.cells)} cases have in common"
+             + "".join(f" (they end in {meanings[piece]})" for piece in (cases.pieces(group.ends) or [])[-1:]
+                       if meanings[piece])
+             + (f", why they end in '{group.ends}' and no shorter ending: {why}" if (why := cases.why_ends(group)) else "")
+             + f", and why that makes each of them a case of a smaller problem, of which there are "
+               f"{len(group.cells)}.")
     known = [cell + base for cell in range(given)]
     step(2, {"do": "show", "items": ["table"]},
          f"an empty table '{table.label}' of {table.size} boxes numbered {base} to {last + base}",

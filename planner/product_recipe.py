@@ -31,6 +31,10 @@ class Recipe:
     # How a learning video on this recipe is drawn: "map" is one diagram of pieces for the whole
     # lesson, planned in a single call; "free" lets the visual step choose forms scene by scene.
     board: str = "free"
+    # How the lesson is planned: "single" is one model call through the board's playbook;
+    # "staged_table" is the staged table planner (`planner.lesson_recurrence`), which falls back
+    # to the single call when it cannot plan the topic.
+    planner: str = "single"
 
 
 def load_recipes() -> dict[str, Recipe]:
@@ -39,7 +43,8 @@ def load_recipes() -> dict[str, Recipe]:
                        outline_guidance=r["outline_guidance"], scene_guidance=r["scene_guidance"],
                        visual_pattern=r["visual_pattern"],
                        allowed_patterns=tuple(r["allowed_patterns"]),
-                       required_roles=tuple(r["required_roles"]), board=r.get("board", "free"))
+                       required_roles=tuple(r["required_roles"]), board=r.get("board", "free"),
+                       planner=r.get("planner", "single"))
             for rid, r in data.items()}
 
 

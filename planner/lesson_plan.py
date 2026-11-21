@@ -70,6 +70,17 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     if schema_version not in (1, 2):
         raise ValueError(f"unsupported lesson plan schema version: {schema_version}")
     client = client or get_client()
+    if schema_version == 2 and skill.planner == "staged_table":
+        # Staged: a model describes the teaching, code builds every step, a model writes the
+        # sentences. Measured better than one call for table lessons; when it cannot plan the
+        # topic, the one-call lesson below still gives the client a video.
+        from planner import lesson_recurrence
+        try:
+            return lesson_recurrence.generate(topic, skill, client=client)
+        except (LessonPlanError, ValueError) as exc:     # a fault in the plan, not the network
+            if on_reject is not None:
+                on_reject(f"the staged table lesson could not be planned, so the one-call "
+                          f"lesson is used: {exc}")
     # The recipe decides the board, and the board its playbook: a prompt of its own, a menu of
     # moves, and the code that draws them. A board without a playbook gets the general prompt.
     playbook = PLAYBOOKS.get(skill.board) if schema_version == 2 else None

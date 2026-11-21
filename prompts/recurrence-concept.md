@@ -22,6 +22,7 @@ You are a teacher designing a short learning video about a problem that is solve
               "plus": a constant added after it, 0 unless needed},
     "cases": {"label": one to three words, such as "Routes up 5 stairs",
               "parts": the choices a case is made of, each written as a short text with the size it uses up, such as {"1": 1, "2": 2} for steps of one or two stairs, or {"0": 1, "1": 1} for the letters of a string,
+              "means": what each part stands for in the real problem, in a few plain words, one entry for each part, such as {"1": "a step of one stair", "2": "a step of two stairs"} or {"V": "one upright domino", "H": "two flat dominoes, one on the other"}; a part that is only itself, like a letter, is {"0": "a 0"},
               "join": the character written between parts, such as "+", or "" to write them side by side,
               "total": the size every case adds up to, such as 5 stairs or 4 letters,
               "forbid": patterns no case may contain, such as ["11"], or [],

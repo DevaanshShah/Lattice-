@@ -360,7 +360,8 @@ def test_the_recipe_decides_the_board_and_only_that_prompt_is_sent():
     recipes = load_recipes()
     assert {name: recipe.board for name, recipe in recipes.items()} == {
         "architecture_explainer": "map", "workflow_explainer": "map", "before_after": "map",
-        "algorithm_explainer": "trace", "funnel_explainer": "free", "metric_story": "free"}
+        "algorithm_explainer": "trace", "table_explainer": "trace", "funnel_explainer": "free",
+        "metric_story": "free"}
     client = _Scripted([_answer()])
     lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
     system, user = client.asked[0][0]["content"], client.asked[0][1]["content"]

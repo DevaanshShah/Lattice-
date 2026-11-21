@@ -29,6 +29,7 @@ CONCEPT = {
                   "back": [1, 2], "op": "sum", "plus": 0},
         "cases": {"label": "Routes up 5 stairs",
                   "parts": {"1": 1, "2": 2}, "join": "+", "total": 5, "forbid": [],
+                  "means": {"1": "a step of one stair", "2": "a step of two stairs"},
                   "groups": [{"name": "end in a 1-step", "ends": "+1"},
                              {"name": "end in a 2-step", "ends": "+2"}]},
         "name": "dynamic programming",
@@ -74,7 +75,9 @@ def test_code_builds_the_whole_run_and_no_model_writes_a_move():
     (lambda c: c["spec"]["table"].update(start=[1, 2]), r"the problem has 8 cases .* holds 13.*Fix the table's \"start\""),
     (lambda c: c["spec"]["cases"]["groups"][0].update(ends="2"), "must end like exactly one group"),
     (lambda c: c["spec"]["cases"].update(parts={"1": 1, "2": 1}), "more than 12 cases"),
-    (lambda c: c["spec"]["cases"].update(parts={"one": 1, "2": 2}), "does not fit in a box"),
+    (lambda c: c["spec"]["cases"].update(parts={"one": 1, "2": 2}, means={"one": "a step", "2": "two"}),
+     "does not fit in a box"),
+    (lambda c: c["spec"]["cases"].update(means={"1": "a step of one stair"}), r"one entry for each of \['1', '2'\]"),
     (lambda c: c["brief"].update(turning_point="Because " + "every route ends in one step " * 5),
      "brief.turning_point is shown on screen"),
 ])
@@ -264,6 +267,7 @@ def test_a_split_that_does_not_leave_the_smaller_cases_is_sent_back():
                            "back": [1, 2], "op": "sum", "plus": 0},
                  "cases": {"label": "Strings of length 4",
                            "parts": {"0": 1, "1": 1}, "join": "", "total": 4, "forbid": ["11"],
+                           "means": {"0": "a 0", "1": "a 1"},
                            "groups": [{"name": "end in 0", "ends": "0"},
                                       {"name": "end in 1", "ends": "1"}]},
                  "name": "dynamic programming"}}
@@ -281,3 +285,89 @@ def test_parts_written_as_a_list_are_read_as_the_mapping_they_mean():
     concept = copy.deepcopy(CONCEPT)
     concept["spec"]["cases"]["parts"] = [{"name": "1", "size": 1}, {"name": "2", "size": 2}]
     assert ConceptSpec.model_validate(concept).spec.cases.parts == {"1": 1, "2": 2}
+
+
+@pytest.mark.unit
+def test_the_narration_is_told_what_the_parts_stand_for_and_why_a_split_ends_as_it_does():
+    """Reviewed on 2026-10-15: binary strings and domino tilings never said their crux, that a 1
+    cannot follow a 1, or what V and H are. Code held both facts (`forbid`, the parts) and passed
+    neither on: the narration step was asked why a group's cases are smaller cases, never why
+    the group ends in '01' and not '1'."""
+    stairs = build_run(ConceptSpec.model_validate(CONCEPT))[1]
+    assert "'1' is a step of one stair; '2' is a step of two stairs" in stairs[0]["the sentence must"]
+    assert "(they end in a step of one stair)" in stairs[4]["the sentence must"]
+    assert "no shorter ending" not in stairs[4]["the sentence must"]        # nothing is forbidden
+
+    strings = copy.deepcopy(CONCEPT)
+    strings["spec"] = {"table": {"label": "Count", "unit": "letters", "first": 0, "size": 5, "start": [1, 2],
+                                 "back": [1, 2], "op": "sum", "plus": 0},
+                       "cases": {"label": "Strings of length 4", "parts": {"0": 1, "1": 1},
+                                 "means": {"0": "a 0", "1": "a 1"}, "join": "", "total": 4, "forbid": ["11"],
+                                 "groups": [{"name": "end in 0", "ends": "0"},
+                                            {"name": "end in 01", "ends": "01"}]},
+                       "name": "dynamic programming"}
+    steps = build_run(ConceptSpec.model_validate(strings))[1]
+    musts = [step["the sentence must"] for step in steps if step["scene"] == 2]
+    assert "stand for" not in steps[0]["the sentence must"]          # a letter stands for itself
+    assert "no shorter ending" not in musts[1]                       # '0' is a single part
+    assert ("why they end in '01' and no shorter ending: no case may contain '11', so a case that "
+            "ends in '1' must end in '01'") in musts[2]
+
+    tiles = copy.deepcopy(strings)
+    tiles["spec"]["cases"].update(label="Tilings of 4 columns", parts={"V": 1, "H": 2},
+                                  means={"V": "one upright domino", "H": "two flat dominoes"},
+                                  forbid=[], groups=[{"name": "end in V", "ends": "V"},
+                                                     {"name": "end in H", "ends": "H"}])
+    tiles["spec"]["table"].update(start=[1, 1], unit="columns")
+    steps = build_run(ConceptSpec.model_validate(tiles))[1]
+    assert "'V' is one upright domino; 'H' is two flat dominoes" in steps[0]["the sentence must"]
+    assert "(they end in two flat dominoes)" in steps[5]["the sentence must"]
+
+
+@pytest.mark.unit
+def test_a_table_topic_reaches_the_staged_planner_through_the_app_route():
+    """2026-11-21: the staged planner had been built and measured but nothing in the app called
+    it, so clients still got the one-call lesson. The recipe now names it."""
+    from planner import lesson_plan
+
+    skill = load_recipes()["table_explainer"]
+    assert (skill.board, skill.planner) == ("trace", "staged_table")
+    steps = len(build_run(ConceptSpec.model_validate(CONCEPT))[1])
+    client = _Scripted([CONCEPT, _narration(steps)])
+    plan = lesson_plan.generate("Counting the ways to climb stairs", skill, client=client, schema_version=2)
+    assert len(client.asked) == 2
+    assert client.asked[0][0]["content"].startswith("You are a teacher designing a short learning video")
+    assert plan.trace is not None and plan.skill_id == "table_explainer"
+
+
+@pytest.mark.unit
+def test_a_staged_failure_falls_back_to_the_one_call_lesson():
+    """A client always gets a video: when the staged planner cannot plan a topic, the one-call
+    trace lesson is asked for, and why is reported."""
+    from planner import lesson_plan
+
+    skill = load_recipes()["table_explainer"]
+    wrong = copy.deepcopy(CONCEPT)
+    wrong["spec"]["cases"]["total"] = 4
+    one_call = _Scripted([wrong] * 3 + [{"not": "a lesson"}] * 5)
+    rejected = []
+    with pytest.raises(LessonPlanError, match="lesson plan invalid after"):
+        lesson_plan.generate("Stairs", skill, client=one_call, schema_version=2, on_reject=rejected.append)
+    assert "the staged table lesson could not be planned" in rejected[0]
+    assert one_call.asked[3][0]["content"] != one_call.asked[0][0]["content"]   # the trace prompt now
+    assert len(one_call.asked) == 3 + lesson_plan.PLAYBOOK_ATTEMPTS
+
+
+@pytest.mark.unit
+def test_other_recipes_keep_the_one_call_planner():
+    assert {rid for rid, r in load_recipes().items() if r.planner != "single"} == {"table_explainer"}
+
+
+@pytest.mark.unit
+def test_a_cell_is_numbered_by_the_size_it_answers():
+    """Live on 2026-11-21 (gpt-4o-mini, 2 by 5 dominoes): cells 1 to 6 with the answer in cell 6,
+    so "Ways[5] = 5" was spoken for the 5-column board. The count matched, the numbering did not."""
+    concept = copy.deepcopy(CONCEPT)
+    concept["spec"]["table"].update(first=1, start=[1, 1], size=6)     # cells 1..6, answer 8 in cell 6
+    with pytest.raises(ValidationError, match=r"last cell is cell 6, but the problem's size is 5"):
+        ConceptSpec.model_validate(concept)

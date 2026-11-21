@@ -29,6 +29,37 @@
     "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box.",
     "board": "trace"
   },
+  "table_explainer": {
+    "visual_pattern": "workflow_flow",
+    "allowed_patterns": [
+      "workflow",
+      "decision",
+      "comparison",
+      "transformation"
+    ],
+    "required_roles": [
+      "input",
+      "operation",
+      "result"
+    ],
+    "keywords": [
+      "number of ways",
+      "how many ways",
+      "count the ways",
+      "ways to climb",
+      "climbing stairs",
+      "tiling",
+      "tilings",
+      "dominoes",
+      "binary strings",
+      "coin change",
+      "fewest coins"
+    ],
+    "outline_guidance": "Teach counting the cases of a problem with a table: list the cases of one small instance by hand, split them by how they end so each group is the cases of a smaller instance, then fill a table where each cell is worked out from earlier cells. For problems like climbing stairs, tilings, strings with a forbidden pattern, or coin counts.",
+    "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box.",
+    "board": "trace",
+    "planner": "staged_table"
+  },
   "architecture_explainer": {
     "visual_pattern": "architecture_map",
     "allowed_patterns": [
