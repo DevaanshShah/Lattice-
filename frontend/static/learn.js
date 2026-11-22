@@ -177,7 +177,7 @@
       </div>`;
     }
     return `<div style="${box}">
-      <video src="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}"
+      <video onerror="videoFailed(this)" src="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}"
         controls style="display:block;width:100%;aspect-ratio:16/9;background:#000;"></video>
       <div style="padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <div style="display:flex;align-items:baseline;gap:12px;min-width:0;">
@@ -185,7 +185,7 @@
           <span style="${MONO}font-size:10.5px;color:var(--faint);white-space:nowrap;">v${m.version || 1}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <a href="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}" download
+          <a href="#" data-name="lattice-lesson.mp4" data-dl="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}"
             style="padding:8px 13px;border-radius:6px;border:1px solid var(--line);color:var(--muted);
             text-decoration:none;${MONO}font-size:11px;letter-spacing:0.06em;text-transform:uppercase;">Download</a>
           <div data-act="learn-refine-start" data-id="${m.id}" style="display:flex;align-items:center;gap:7px;
@@ -305,11 +305,11 @@
     el.onchange = async () => {
       const f = el.files && el.files[0];
       if (!f) return;
-      if (!/^image\/(png|jpe?g|webp)$/i.test(f.type)) { alert("Use a PNG, JPG, or WebP image."); return; }
+      if (!/^image\/(png|jpe?g|webp)$/i.test(f.type)) { notify("Use a PNG, JPG, or WebP image."); return; }
       try {
         L.pendingImage = typeof downscale === "function" ? await downscale(f) : await asDataUrl(f);
         render();
-      } catch (e) { alert("Couldn't read that image: " + e.message); }
+      } catch (e) { notify("Couldn't read that image: " + friendlyMessage(e)); }
     };
     el.click();
   }
@@ -328,7 +328,7 @@
     try {
       L.tid = tid; L.thread = await api("GET", `/api/learn/threads/${tid}`);
       L.refining = null; L.videoMode = false;
-    } catch (e) { alert("Couldn't open that thread: " + e.message); L.tid = null; L.thread = null; }
+    } catch (e) { notify("Couldn't open that thread: " + friendlyMessage(e)); L.tid = null; L.thread = null; }
     finally { L.busy = false; render(); scrollThread(); }
   }
 
@@ -369,7 +369,7 @@
         L.thread = await api("POST", `/api/learn/threads/${L.tid}/messages`, { message: text, image });
       }
     } catch (e) {
-      alert("Couldn't send that: " + e.message);
+      notify("Couldn't send that: " + friendlyMessage(e));
       if (box) box.value = raw;
       L.pendingImage = image;            // hand the attachment back so a retry keeps it
     }
@@ -384,7 +384,7 @@
       L.thread = await api("GET", `/api/learn/threads/${L.tid}`);
       render(); scrollThread();
       watchVideo(r.message_id, r.job_id);
-    } catch (e) { alert("Couldn't start that video: " + e.message); }
+    } catch (e) { notify("Couldn't start that video: " + friendlyMessage(e)); }
     finally { L.busy = false; render(); }
   }
 
@@ -397,7 +397,7 @@
       L.thread = await api("GET", `/api/learn/threads/${L.tid}`);
       render(); scrollThread();
       watchVideo(r.message_id, r.job_id);
-    } catch (e) { alert("Couldn't refine that video: " + e.message); }
+    } catch (e) { notify("Couldn't refine that video: " + friendlyMessage(e)); }
     finally { L.busy = false; render(); }
   }
 

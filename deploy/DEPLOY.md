@@ -40,6 +40,13 @@ LATTICE_RENDER_MEMORY=1500m
 
 `r2-setup.md` (next to this file) covers the bucket itself.
 
+**What a public instance shows visitors.** Two things are off by default and should stay off on a server:
+`LATTICE_API_DOCS` (the generated `/docs`, `/redoc` and `/openapi.json`, a map of every endpoint) and
+`LATTICE_DEV_CONSOLE` (each scene's generated code, the exact model prompts and the raw job log, visible
+to any signed-in account). Errors never carry exception text, paths or stack traces: a person who lands on
+an API address gets a readable page, the UI gets JSON with a stable `code`, and a crash gets a short
+`ref` that is also written to the server log (`journalctl -u lattice | grep <ref>`) so you can find the cause.
+
 ---
 
 ## 3. Sizing — the arithmetic that gets containers OOM-killed

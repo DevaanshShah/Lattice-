@@ -26,6 +26,7 @@ from uuid import uuid4
 
 from core import cancel, usage
 from core.config import settings
+from web import errors as errors_mod
 from web import phases
 
 # lifecycle states
@@ -180,7 +181,9 @@ class Job:
             self.result = result
             self.finished_at = self._now()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, *, debug: bool = False) -> dict:
+        """`debug=True` keeps the raw exception text for the owner's console. The default, which is what
+        the browser gets, replaces a FAILED job's error with one plain sentence (no trace, no paths)."""
         with self._lock:
             return {
                 "id": self.id,
@@ -194,7 +197,8 @@ class Job:
                 "attempt": self.attempt,
                 "cancelled": self.token.cancelled,
                 "scenes": dict(self.scenes),
-                "error": self.error,
+                "error": (self.error if (debug or self.status != FAILED)
+                          else errors_mod.public_job_error(self.error)),
                 "event_count": len(self.events),
                 "created_at": self.created_at,
                 "started_at": self.started_at,

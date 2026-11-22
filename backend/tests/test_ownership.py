@@ -77,7 +77,8 @@ def test_videos_are_private_to_their_creator(app_parts):
     for path in (f"/api/projects/{pid}", f"/api/projects/{pid}/final", f"/api/projects/{pid}/script",
                  f"/api/projects/{pid}/download", f"/api/projects/{pid}/scenes/0/preview"):
         r = b.get(path)
-        assert r.status_code == 404 and r.json()["detail"] == f"no project {pid!r}", path
+        assert r.status_code == 404 and r.json()["code"] == "not_found", path
+        assert pid not in r.json()["detail"], path           # the answer never echoes the id back
     assert b.post(f"/api/projects/{pid}/build", json={}).status_code == 404
     assert b.delete(f"/api/projects/{pid}/scenes/0").status_code == 404
 

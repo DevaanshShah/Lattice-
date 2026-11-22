@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     public_url: str = ""              # e.g. https://lattice.example.com — the OAuth return address.
                                       # Empty = derived from the request (fine locally; set it in prod)
 
+    # --- what a public instance exposes ---
+    # The auto-generated API docs (/docs, /redoc, /openapi.json) describe every endpoint. Useful on a
+    # laptop, a map for anyone with a Google account on a public server. Off unless you turn it on.
+    api_docs: bool = False
+    # The developer console: each scene's generated code, the exact model prompts, and the raw job log.
+    # That is the product's prompt engineering, so it is for the owner's own machine, not for users.
+    dev_console: bool = False
+
     # --- per-account limits (web/quota.py): a rolling 24 hours, enforced only with sign-in on ---
     quota_videos_per_day: int = 5        # whole videos: build, deck, lesson video. 0 = unlimited
     quota_edits_per_day: int = 40        # scene regenerate / tweak / narration / insert. 0 = unlimited
@@ -150,6 +158,9 @@ class Settings(BaseSettings):
     kokoro_model: str = "kokoro-v1.0.onnx"            # path to the Kokoro ONNX model
     kokoro_voices: str = "voices-v1.0.bin"            # path to the Kokoro voices bin
     kokoro_voice: str = "af_heart"                    # af_*=female, am_*=male, bf_/bm_=British
+    # Speaking pace. At 1.0 the voice ran about 168 words a minute; a reference explainer
+    # (KodeKloud, 2026-11-22) speaks 142. 0.87 gives about 146. Lesson word budgets follow it.
+    kokoro_speed: float = Field(default=0.87, ge=0.6, le=1.3)
 
     # --- object storage: Cloudflare R2 (S3-compatible) ---
     # A PaaS container's disk is ephemeral, so without this every redeploy destroys every video the

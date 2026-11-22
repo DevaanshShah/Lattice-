@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from core import storage, usage
 from core.config import settings
 from web import auth as auth_mod
+from web import errors as errors_mod
 from web import jobs as jobs_mod
 from web import ownership as own
 from web import quota as quota_mod
@@ -155,13 +156,14 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         if request.method == "POST" and not path.startswith(("/auth", "/api/admin"))                 and not path.endswith("/cancel"):
             quota.check_spend(usage.current().user)     # runs after identity: it is a later dependency
 
+    docs = {} if settings.api_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
     app = FastAPI(title="Lattice", version="0.1.0", lifespan=lifespan,
-                  dependencies=[Depends(users_mod.dependency(user_store)), Depends(spend_guard)])
+                  dependencies=[Depends(users_mod.dependency(user_store)), Depends(spend_guard)], **docs)
+    errors_mod.install(app)          # a readable page for a person, JSON for the UI, never a stack trace
 
     @app.exception_handler(quota_mod.QuotaExceeded)
-    async def _over_quota(_request: Request, exc: quota_mod.QuotaExceeded):
-        return JSONResponse({"detail": exc.message}, status_code=429,
-                            headers={"Retry-After": str(exc.retry_after)})
+    async def _over_quota(request: Request, exc: quota_mod.QuotaExceeded):
+        return errors_mod.respond(request, 429, exc.message, headers={"Retry-After": str(exc.retry_after)})
 
     @app.get("/api/quota")
     def my_quota() -> dict:
@@ -363,7 +365,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     @app.get("/api/jobs/{job_id}/events")
     def job_events(job_id: str, cursor: int = Query(0, ge=0)) -> dict:
         job = _job_or_404(job_id)
-        evs = job.events_since(cursor)
+        evs = job.events_since(cursor) if settings.dev_console else []     # the raw log is for the owner
         return {
             "status": job.status,
             "scenes": dict(job.scenes),
@@ -385,7 +387,8 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
                 # raw engine lines go out as `log` (the UI keeps them in a hidden details pane)
                 for e in job.events_since(cursor):
                     cursor = e.seq + 1
-                    yield f"event: log\ndata: {json.dumps({'seq': e.seq, 'message': e.message})}\n\n"
+                    if settings.dev_console:       # the raw engine log names paths, models and prompts
+                        yield f"event: log\ndata: {json.dumps({'seq': e.seq, 'message': e.message})}\n\n"
                 # the coarse, user-facing progress — only pushed when it actually changes
                 prog = job.progress()
                 if prog != last_prog:
@@ -403,7 +406,10 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     @app.get("/api/projects/{pid}/scenes/{index}/preview")
     def preview(pid: str, index: int):
         _load_or_404(pid)
-        mp4 = engine.scene_mp4(pid, index)
+        try:
+            mp4 = engine.scene_mp4(pid, index)
+        except IndexError:                # a scene number the project doesn't have: not found, not a crash
+            mp4 = None
         if not mp4:
             raise HTTPException(404, f"scene {index} not rendered yet")
         return FileResponse(str(mp4), media_type="video/mp4")
@@ -426,6 +432,8 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     @app.get("/api/projects/{pid}/scenes/{index}/source")
     def scene_source(pid: str, index: int) -> dict:
         """Developer inspection: the generated code + the exact codegen prompt + spec + narration."""
+        if not settings.dev_console:
+            raise HTTPException(403, "developer tools are turned off on this server")
         _load_or_404(pid)
         try:
             return engine.scene_source(pid, index)

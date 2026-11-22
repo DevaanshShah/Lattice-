@@ -43,3 +43,12 @@ def sign_in_stays_off(monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", "")
     monkeypatch.setattr(settings, "supabase_anon_key", "")
     monkeypatch.setattr(settings, "supabase_jwt_secret", "")
+
+
+@pytest.fixture(autouse=True)
+def public_defaults(monkeypatch):
+    """A developer's `.env` turns the dev console and the API docs ON for their own machine. The suite
+    runs against what a public server does by default (both off); a test that wants either sets it."""
+    from core.config import settings
+    monkeypatch.setattr(settings, "dev_console", False)
+    monkeypatch.setattr(settings, "api_docs", False)

@@ -40,7 +40,9 @@ async function api(method, url, body) {
   const opt = { method, headers: {} };
   if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   opt.credentials = "include";                         // split deploy: send the sign-in cookies cross-origin
-  const r = await fetch(U(url), opt);
+  let r;
+  try { r = await fetch(U(url), opt); }
+  catch (_) { throw Object.assign(new Error("Couldn't reach the server. Check your connection and try again."), { status: 0 }); }
   const err = r.ok ? null : await r.json().catch(() => ({}));
   // The gate's own 401 is the proof sign-in is on, even if /api/auth/me couldn't be read at boot.
   if (r.status === 401 && (state.auth.enabled || err.detail === "sign in required")) {
@@ -48,7 +50,7 @@ async function api(method, url, body) {
     signedOut(); throw new Error("Please sign in to continue.");
   }
   if (r.status === 429) loadQuota();                  // over the limit: the meter should say so too
-  if (!r.ok) throw new Error(err.detail || r.statusText);
+  if (!r.ok) throw Object.assign(new Error(typeof err.detail === "string" && err.detail ? err.detail : "That didn't work. Please try again."), { status: r.status });
   return r.json();
 }
 
@@ -193,7 +195,7 @@ async function stopGenerating() {
   if (!state.gen.jobId || state.gen.stopping) return;
   state.gen.stopping = true; renderGenProgress();
   try { await api("POST", `/api/jobs/${state.gen.jobId}/cancel`); }
-  catch (e) { state.gen.stopping = false; renderGenProgress(); alert("Couldn't stop: " + e.message); }
+  catch (e) { state.gen.stopping = false; renderGenProgress(); notify("Couldn't stop: " + friendlyMessage(e)); }
 }
 
 // ---- flows -------------------------------------------------------------------------------
@@ -207,7 +209,7 @@ async function planTopic(topic) {
   topic = (topic || "").trim(); if (!topic) return;
   state.screen = "studio"; state.phase = "prompt"; state.planning = true; render();
   try { enterOutline(await api("POST", "/api/projects", { topic, renderer: "browser_v2", recipe: "auto" })); }
-  catch (e) { alert("Couldn't plan: " + e.message); state.phase = "prompt"; }
+  catch (e) { notify("Couldn't plan: " + friendlyMessage(e)); state.phase = "prompt"; }
   state.planning = false; render(); loadProjects();
 }
 
@@ -230,11 +232,11 @@ function downscale(file) {
 }
 async function goFromCode() {
   const t = $("seed-code"), code = t ? t.value.trim() : "";
-  if (!code) { alert("Paste some code first."); return; }
+  if (!code) { notify("Paste some code first."); return; }
   const ls = $("seed-lang"), lang = ls ? ls.value : "auto";
   state.screen = "studio"; state.phase = "prompt"; state.planning = true; render();
   try { enterOutline(await api("POST", "/api/projects/from-code", { code, language: lang === "auto" ? null : lang })); }
-  catch (e) { alert("Couldn't read that code: " + e.message); state.phase = "prompt"; }
+  catch (e) { notify("Couldn't read that code: " + friendlyMessage(e)); state.phase = "prompt"; }
   state.planning = false; render(); loadProjects();
 }
 async function approveGenerate() {
@@ -261,7 +263,7 @@ async function approveGenerate() {
     if (final && final.status === "failed") throw new Error(final.error || "the build failed");
     state.project = await api("GET", `/api/projects/${state.project.id}`);
     state.selected = 0; state.phase = "result";
-  } catch (e) { alert("Build failed: " + e.message); state.phase = "outline"; }
+  } catch (e) { notify("Build failed: " + friendlyMessage(e)); state.phase = "outline"; }
   render(); loadProjects();
 }
 async function openProject(id) {
@@ -269,18 +271,18 @@ async function openProject(id) {
     state.project = await api("GET", `/api/projects/${id}`);
     state.screen = "studio"; state.phase = "result"; state.selected = 0; state.historyOpen = false;
     render();
-  } catch (e) { alert(e.message); }
+  } catch (e) { notify(friendlyMessage(e)); }
 }
 async function sceneJob(url, body) {
   state.busy = true; render();
   try { const { job_id } = await api("POST", url, body || {}); await followJob(job_id, () => {}); state.project = await api("GET", `/api/projects/${state.project.id}`); }
-  catch (e) { alert(e.message); }
+  catch (e) { notify(friendlyMessage(e)); }
   state.busy = false; render();
 }
 async function structural(url, method, body) {
   state.busy = true; render();
   try { state.project = await api(method, url, body); }
-  catch (e) { alert(e.message); }
+  catch (e) { notify(friendlyMessage(e)); }
   state.busy = false; render();
 }
 
@@ -505,7 +507,6 @@ function topbar() {
       ${tab("home", "Home", state.screen === "landing")}${tab("learn", "Learn", state.screen === "learn")}${tab("studio", "Teach", state.screen === "studio")}${tab("slides", "Slides", state.screen === "slides")}${tab("gallery", "Gallery", state.screen === "gallery")}
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <div data-act="replay-intro" title="Replay intro" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:15px;">↺</div>
       <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);">${state.theme === "dark" ? ICON.moon : ICON.sun}</div>
       ${accountChip()}
     </div>
@@ -578,7 +579,6 @@ function landing() {
   return `<div class="lt-scroll" style="flex:1;overflow-y:auto;position:relative;">
     <canvas data-lattice style="position:absolute;top:0;left:0;width:100%;height:560px;opacity:0.4;pointer-events:none;"></canvas>
     <div style="position:relative;max-width:1200px;margin:0 auto;padding:64px 40px 0;">
-      <div class="lt-fade" style="display:flex;align-items:center;gap:10px;${MONO}font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:26px;"><span style="width:22px;height:1px;background:var(--accent);"></span>Made-to-order explainers</div>
       <h1 class="lt-fade" style="${DISPLAY}font-size:clamp(44px,7.4vw,88px);line-height:0.98;letter-spacing:-0.035em;font-weight:600;margin:0 0 24px;color:var(--text);max-width:14ch;">Turn any idea into an <span style="color:var(--accent);">explainer video</span>.</h1>
       <p class="lt-fade" style="font-size:19px;line-height:1.5;color:var(--muted);max-width:48ch;margin:0 0 30px;">Describe a concept in a sentence. Lattice storyboards it, animates every idea, and narrates the whole thing — start to finish, no design or editing.</p>
       <div class="lt-fade" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:0 0 30px;">
@@ -870,7 +870,7 @@ function phaseResult() {
   const sel = scenes[state.selected] || scenes[0];
   const pid = state.project.id;
   const bust = Date.now();
-  const player = sel && sel.built ? `<video id="main-player" src="${U(`/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
+  const player = sel && sel.built ? `<video id="main-player" onerror="videoFailed(this)" src="${U(`/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
   return `<div class="lt-fade" style="max-width:1140px;margin:0 auto;padding:26px 26px 64px;">
     <div style="width:100%;max-width:calc(54vh * 16 / 9);margin:0 auto;border-radius:8px;overflow:hidden;background:#0B0B10;border:1px solid var(--line);"><div style="position:relative;aspect-ratio:16/9;">${player}</div></div>
     ${timeline(scenes)}
@@ -941,7 +941,7 @@ function editorPanel(sel) {
   const browserV2 = state.project && state.project.renderer === "browser_v2";
   return `<div class="lt-snap" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
     <div>
-      <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video src="${U(`/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
+      <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video onerror="videoFailed(this)" src="${U(`/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
       <div style="${DISPLAY}font-size:19px;font-weight:600;color:var(--text);letter-spacing:-0.015em;margin-top:14px;">${esc(sel.title)}</div>
       <div style="${MONO}font-size:11px;color:var(--faint);margin-top:3px;">scene ${state.selected + 1} of ${state.project.scenes.length}</div>
     </div>
@@ -1020,7 +1020,6 @@ function handle(act, el) {
   if (window.LatticeDecks && window.LatticeDecks.handle(act, el)) return;   // Slides mode owns deck-*
   if (window.LatticeLearn && window.LatticeLearn.handle(act, el)) return;   // Learn chat owns learn-*
   switch (act) {
-    case "replay-intro": if (window.playLatticeIntro) window.playLatticeIntro(); break;
     case "home": state.screen = "landing"; render(); break;
     case "tab-home": state.screen = "landing"; render(); break;
     case "tab-learn": state.screen = "learn"; render(); break;
@@ -1065,7 +1064,7 @@ function handle(act, el) {
     case "dl-toggle": state.downloadOpen = !state.downloadOpen; render(); break;
     case "sub-toggle": state.subtitles = !state.subtitles; render(); break;
     case "fmt": state.format = v; render(); break;
-    case "do-download": window.open(U(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}&format=${state.format}`), "_blank"); state.downloadOpen = false; render(); break;
+    case "do-download": { const t = (state.project && state.project.topic) || ""; downloadFile(U(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}&format=${state.format}`), fileName(t, state.format === "reel" ? "lattice-reel" : "lattice-video")); state.downloadOpen = false; render(); break; }
     case "signout": signOut(); break;
     case "dev-toggle": state.dev.open = !state.dev.open; render(); break;
     case "dev-tab": state.dev.tab = v; render(); break;

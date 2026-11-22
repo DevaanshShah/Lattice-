@@ -276,7 +276,7 @@ def register(app, engine, queue, *, deck_store=None, learn_store=None, user_stor
     def _live_jobs() -> list[dict]:
         out = []
         for j in queue.list():
-            d = j.to_dict()
+            d = j.to_dict(debug=True)
             d["progress"] = j.progress()
             out.append(d)
         return sorted(out, key=lambda d: d.get("created_at") or 0, reverse=True)

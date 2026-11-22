@@ -42,6 +42,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from web import errors as errors_mod
+
 ACCESS_COOKIE = "lattice_at"
 REFRESH_COOKIE = "lattice_rt"
 PKCE_COOKIE = "lattice_pkce"
@@ -538,7 +540,7 @@ class AuthMiddleware:
         state["auth"] = AuthState(enabled=True, required=cfg.required, user=user)
 
         if user is None and cfg.required and not self.service.is_public(path):
-            denied = _with_cookies(JSONResponse({"detail": "sign in required"}, status_code=401), cookies)
+            denied = _with_cookies(errors_mod.respond(Request(scope), 401, "sign in required"), cookies)
             await denied(scope, receive, send)
             return
         if not cookies:

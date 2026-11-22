@@ -242,7 +242,8 @@ def test_outline_gate_cut_before_render(client):
 
 
 @pytest.mark.unit
-def test_job_events_and_stream(client):
+def test_job_events_and_stream(client, monkeypatch):
+    monkeypatch.setattr("core.config.settings.dev_console", True)   # the raw log is the owner's, off by default
     pid = client.post("/api/projects", json={"topic": "TCP"}).json()["id"]
     job_id = client.post(f"/api/projects/{pid}/build", json={}).json()["job_id"]
 
