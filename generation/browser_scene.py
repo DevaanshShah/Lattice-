@@ -108,11 +108,11 @@ body:has(.semantic-stage){background:#0a0a0a}
 .piece-label{font:700 19px/1.15 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
 .semantic-piece.is-active .piece-icons{filter:drop-shadow(0 0 12px var(--tone))}
 .semantic-piece.is-placeholder .piece-icons{border-color:var(--tone)}
-.semantic-piece.is-placeholder svg,.semantic-piece.is-placeholder .piece-label{visibility:hidden}
+.semantic-piece.is-placeholder svg,.semantic-piece.is-placeholder .piece-label{visibility:hidden}.semantic-piece.is-placeholder .piece-icons{position:relative}.semantic-piece.is-placeholder .piece-icons::after{content:'?';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--tone);font:700 54px/1 Segoe UI,system-ui,sans-serif;opacity:.85}
 .semantic-panel{display:flex;flex-direction:column;gap:16px;padding:16px 22px 22px;border:1.5px solid color-mix(in srgb,var(--tone) 45%,transparent);border-radius:20px;background:#0d1114}
 .panel-header{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
 .panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:64px 56px;max-width:420px}
-.semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
+.semantic-captions{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}.semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
 .semantic-caption-line.is-question{color:#f4f4f5;font-size:29px;line-height:1.3}
 .semantic-caption-line.is-idea{color:#fde68a;font-size:27px;line-height:1.3}
 .idea-mark{background:transparent;border:2px solid #fbbf24;color:#fbbf24;line-height:32px}
@@ -441,6 +441,10 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
         drawn[obj_id] = html
     top = [obj_id for obj_id in placed if obj_id not in inside and objects[obj_id].kind != "caption"]
     captions = "".join(drawn[obj_id] for obj_id in placed if objects[obj_id].kind == "caption")
+    # The lines of text under the picture sit together in one band, close to each other: as
+    # separate children of the stage each took the stage's wide gap, and a recap's three lines
+    # held the bottom half of the frame empty for the whole scene.
+    captions = f'<div class="semantic-captions">{captions}</div>' if captions else ""
     if not flow:
         code = [obj_id for obj_id in top if objects[obj_id].kind == "code"]
         rest = [obj_id for obj_id in top if objects[obj_id].kind != "code"]
@@ -558,7 +562,24 @@ _SEMANTIC_LABEL_JS = (
     "label.setAttribute('class','edge-label');"
     "lines.forEach((text,i)=>{const span=document.createElementNS('http://www.w3.org/2000/svg','tspan');"
     "span.setAttribute('x',x);span.setAttribute('y',bottom-(lines.length-1-i)*21*fit);"
-    "span.textContent=text+(i<lines.length-1?' ':'');label.append(span)});svg.append(label)}")
+    "span.textContent=text+(i<lines.length-1?' ':'');label.append(span)});svg.append(label);"
+    # A label that lands on another label or on a piece moves along its own arrow to the first
+    # free spot: the same things the layout check counts, so a placed label is one it accepts.
+    "const overlap=(p,q)=>Math.max(0,Math.min(p.right,q.right)-Math.max(p.left,q.left))"
+    "*Math.max(0,Math.min(p.bottom,q.bottom)-Math.max(p.top,q.top));"
+    "const others=[...svg.querySelectorAll('text.edge-label')].filter(e=>e!==label)"
+    ".map(e=>e.getBoundingClientRect());"
+    "const solids=[...document.querySelectorAll('.semantic-object')]"
+    ".filter(e=>!e.classList.contains('semantic-panel')).map(e=>e.getBoundingClientRect());"
+    "const hits=()=>{const own=label.getBoundingClientRect();"
+    "return others.some(o=>overlap(o,own)>1)||solids.some(o=>overlap(o,own)>1)};"
+    "if(hits()){const own=label.getBoundingClientRect(),h=own.height+6*fit,w=own.width/2+12*fit;"
+    "const steps=horizontal?[[0,h+30*fit],[-w,0],[w,0],[-w,h+30*fit],[w,h+30*fit]]"
+    ":[[0,h],[0,-h],[0,2*h],[0,-2*h],[0,3*h]];"
+    "const spans=[...label.querySelectorAll('tspan')].map(t=>[t,+t.getAttribute('x'),+t.getAttribute('y')]);"
+    "for(const [dx,dy] of steps){spans.forEach(([t,x0,y0])=>{t.setAttribute('x',x0+dx);"
+    "t.setAttribute('y',y0+dy)});if(!hits())break}"
+    "if(hits())spans.forEach(([t,x0,y0])=>{t.setAttribute('x',x0);t.setAttribute('y',y0)})}}")
 
 
 def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = None,
@@ -587,10 +608,12 @@ window.fitFlow=()=>{
   const flow=block.classList.contains('semantic-flow');
   const sized=flow||block.classList.contains('semantic-split');   // these have a width of their own
   const need=block.getBoundingClientRect(),room=stage.getBoundingClientRect();
-  let lines=0;
-  for(const line of stage.querySelectorAll(':scope > .semantic-caption-line'))
-    lines+=line.getBoundingClientRect().height+34;
-  const fit=Math.min(flow?1.3:1,sized?room.width*.96/need.width:1,(room.height*.94-lines)/need.height);
+  // What the lines of text under the picture take, measured with their real gaps and margins:
+  // estimated, they came out short, and a recap scene's map was pushed up into the title.
+  const parts=[...stage.children].map(e=>e.getBoundingClientRect()).filter(r=>r.height>0);
+  const span=Math.max(...parts.map(r=>r.bottom))-Math.min(...parts.map(r=>r.top));
+  const lines=span-need.height;
+  const fit=Math.min(flow?1.3:1,sized?room.width*.96/need.width:1,(room.height*.96-lines)/need.height);
   block.style.zoom=fit;window.flowFit=fit;
   document.documentElement.style.setProperty('--fit',fit);
 };
@@ -642,7 +665,13 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     // stroke stays clear of a level arrow's label, which is centred in the same gap, and this
     // arrow's own label sits beside that stroke: the one part of it no other arrow shares, even
     // when a second arrow runs level into the same target.
-    const turn=(right?ca.right:ca.left)-box.left+(right?12:-12)*(window.flowFit||1);
+    // Arrows leaving the same column each take their own lane, further out: sharing one, two
+    // arrows ran as a single line and their labels landed on one spot (a health check beside a
+    // load balancer, both pointing at servers).
+    const column=(right?'r':'l')+Math.round(ca.left);
+    const before=svg.querySelectorAll(`path.edge[data-turn="${column}"]`).length;
+    const turn=(right?ca.right:ca.left)-box.left+(right?1:-1)*(12+16*before)*(window.flowFit||1);
+    line.dataset.turn=column;
     const sy=ra.top+ra.height/2-box.top,ey=rb.top+rb.height/2-box.top;
     points=[[sx,sy],[turn,sy],[turn,ey],[ex,ey]];
     labelX=turn;labelY=(sy+ey)/2;bent=true;side=true;
@@ -659,6 +688,7 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
       // the label sits on the part of the run that is clear of the source and its name
       const clear=right?Math.max(cx,ra.right-box.left):Math.min(cx,ra.left-box.left);
       points=[[cx,edge],[cx,ey],[ex,ey]];labelX=(clear+ex)/2;labelY=ey;side=false;
+      delete line.dataset.turn;     // it leaves from the top or bottom, not through the lane
     }
   }else{
     const intersects=r=>{
@@ -695,6 +725,7 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
     path.setAttribute('d',points.map((p,i)=>(i?'L':'M')+' '+p.join(' ')).join(' '));
     path.dataset.sourceId=line.dataset.sourceId;path.dataset.targetId=line.dataset.targetId;
     if(lane)path.dataset.lane=lane;
+    if(line.dataset.turn)path.dataset.turn=line.dataset.turn;
     line.replaceWith(path);line=path;
   }
   line.dataset.route=JSON.stringify(points);

@@ -1,0 +1,841 @@
+{
+  "schema_version": 2,
+  "topic": "How sharding splits a huge database across machines",
+  "skill_id": "architecture_explainer",
+  "learning_objective": "Explain how sharding splits rows across machines by a shard key, and why that lets a huge table scale.",
+  "audience": "A beginner programmer who knows a database stores rows in tables and can write simple queries, but has never had to think about what happens when data gets too big for one machine.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner programmer who knows a database stores rows in tables and can write simple queries, but has never had to think about what happens when data gets too big for one machine.",
+    "can_do": "Explain how sharding splits rows across machines by a shard key, and why that lets a huge table scale.",
+    "question": "How does one giant table fit on many machines?",
+    "problem": "An online shop's orders table has grown to 900 million rows, and its single database server is out of disk and slow at every query.",
+    "naive_attempt": "Buy a bigger server and keep one copy of the table, but it runs out of disk again and every query still hits one machine.",
+    "turning_point": "Split the rows by a key like customer_id so each machine holds one slice and only answers for its own slice.",
+    "check_question": "Which rows does the machine for shard 3 hold?",
+    "check_answer": "Only the rows whose shard key maps to shard 3."
+  },
+  "map": {
+    "pieces": [
+      {
+        "id": "app",
+        "label": "Shop app",
+        "kind": "piece",
+        "icon": "laptop",
+        "tone": "blue",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "router",
+        "label": "Router",
+        "kind": "piece",
+        "icon": "router",
+        "tone": "purple",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "bigdb",
+        "label": "One big DB",
+        "kind": "piece",
+        "icon": "database",
+        "tone": "yellow",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "shard1",
+        "label": "Shard 1",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "teal",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "shard2",
+        "label": "Shard 2",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "green",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "shard3",
+        "label": "Shard 3",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "pink",
+        "panel": null,
+        "count": 1,
+        "planned": true,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "freeze",
+        "label": "Disk full",
+        "kind": "piece",
+        "icon": "hard-drive",
+        "tone": "white",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "load",
+        "label": "Query load",
+        "kind": "meter",
+        "icon": "activity",
+        "tone": "blue",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": 20.0,
+        "max": 100.0
+      }
+    ],
+    "arrows": [
+      {
+        "source": "app",
+        "target": "bigdb",
+        "label": "send query"
+      },
+      {
+        "source": "app",
+        "target": "router",
+        "label": "send query"
+      },
+      {
+        "source": "router",
+        "target": "shard1",
+        "label": "route"
+      },
+      {
+        "source": "router",
+        "target": "shard2",
+        "label": "route"
+      },
+      {
+        "source": "router",
+        "target": "shard3",
+        "label": "route"
+      }
+    ]
+  },
+  "trace": null,
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "The giant table",
+      "learning_goal": "See the concrete problem: one database cannot hold or serve 900 million rows.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "An online shop keeps every order in one orders table, and it has grown to nine hundred million rows.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Shop app",
+            "One big DB"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "app",
+              "bigdb"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "The app sends each query to that single database server, which must store the whole table on its own disks.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "Shop app",
+            "One big DB"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "app",
+              "bigdb"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "As orders pour in, the disk fills and query load climbs, so the server slows to a crawl.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "One big DB",
+            "Disk full",
+            "Shop app",
+            "Query load: 95"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "bigdb",
+              "freeze"
+            ],
+            "path": [
+              "app",
+              "bigdb"
+            ],
+            "meter": "load",
+            "value": 95.0,
+            "count": 4,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "How does one giant table fit on many machines?",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "How does one giant table fit on many machines?"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "How does one giant table fit on many machines?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "One server cannot hold everything."
+    },
+    {
+      "id": "s2",
+      "title": "The bigger server attempt",
+      "learning_goal": "Show why buying a bigger machine is only a temporary fix.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "The obvious first try is to buy a bigger server: more disk, more memory, keep the one big table.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "One big DB"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "point",
+            "text": null,
+            "pieces": [
+              "bigdb"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "That works for a while, but the table keeps growing and every query still lands on this one machine.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "One big DB",
+            "Disk full",
+            "Query load: 100"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "bigdb",
+              "freeze"
+            ],
+            "path": [],
+            "meter": "load",
+            "value": 100.0,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "A bigger box still has a ceiling."
+    },
+    {
+      "id": "s3",
+      "title": "Split the rows",
+      "learning_goal": "Introduce the shard key and route each query to the right shard.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "Instead, split the rows by a shard key, here customer_id, so each slice of the table lives on its own server.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "Router",
+            "Shard 1",
+            "Shard 2"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "router",
+              "shard1",
+              "shard2"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "A small router sits in front and reads the customer_id on each query to decide which shard owns it.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "Shop app",
+            "Router",
+            "Shard 1"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "app",
+              "router",
+              "shard1"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "A query for customer 42 goes only to the shard holding customer 42, so other servers are untouched.",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "Shop app",
+            "Router",
+            "Shard 2"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "app",
+              "router",
+              "shard2"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "Now add a third shard for the next block of customers, and the load meter falls as work spreads out.",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "Shard 3",
+            "Query load: 35"
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fix",
+            "text": null,
+            "pieces": [
+              "shard3"
+            ],
+            "path": [],
+            "meter": "load",
+            "value": 35.0,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Each machine answers for its own slice."
+    },
+    {
+      "id": "s4",
+      "title": "One table, many machines",
+      "learning_goal": "Close the loop: the table now scales by adding shards, and each query hits only one.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s4_b1",
+          "spoken_text": "Together the shards hold the whole orders table, but no single machine stores all of it.",
+          "claim_ids": [
+            "s4_b1_c"
+          ],
+          "visual_anchors": [
+            "Shard 1",
+            "Shard 2",
+            "Shard 3"
+          ],
+          "claim_requirements": {
+            "s4_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "point",
+            "text": null,
+            "pieces": [
+              "shard1",
+              "shard2",
+              "shard3"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s4_b2",
+          "spoken_text": "When the shop grows again, you add another shard and move a block of customers onto it.",
+          "claim_ids": [
+            "s4_b2_c"
+          ],
+          "visual_anchors": [
+            "Disk full"
+          ],
+          "claim_requirements": {
+            "s4_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "freeze"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s4_b3",
+          "spoken_text": "So a giant table fits on many machines because the shard key decides where each row lives.",
+          "claim_ids": [
+            "s4_b3_c"
+          ],
+          "visual_anchors": [
+            "Query load: 30"
+          ],
+          "claim_requirements": {
+            "s4_b3_c": [
+              "value"
+            ]
+          },
+          "move": {
+            "do": "measure",
+            "text": null,
+            "pieces": [],
+            "path": [],
+            "meter": "load",
+            "value": 30.0,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s4_b4",
+          "spoken_text": "Which rows does the machine for shard 3 hold?",
+          "claim_ids": [
+            "s4_b4_c"
+          ],
+          "visual_anchors": [
+            "Which rows does the machine for shard 3 hold?"
+          ],
+          "claim_requirements": {
+            "s4_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "Which rows does the machine for shard 3 hold?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s4_b5",
+          "spoken_text": "Only the rows whose shard key maps to shard 3.",
+          "claim_ids": [
+            "s4_b5_c"
+          ],
+          "visual_anchors": [
+            "Only the rows whose shard key maps to shard 3."
+          ],
+          "claim_requirements": {
+            "s4_b5_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "Only the rows whose shard key maps to shard 3.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Sharding scales a table by splitting rows."
+    }
+  ]
+}

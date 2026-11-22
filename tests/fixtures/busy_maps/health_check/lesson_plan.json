@@ -1,0 +1,729 @@
+{
+  "schema_version": 2,
+  "topic": "How a load balancer keeps a website up when traffic spikes",
+  "skill_id": "architecture_explainer",
+  "learning_objective": "Explain how a load balancer spreads incoming requests across several servers and checks their health so a website stays up during traffic spikes.",
+  "audience": "A beginner web user who knows websites run on servers but has never thought about what happens when many people visit at once.",
+  "prerequisites": [],
+  "brief": {
+    "learner": "A beginner web user who knows websites run on servers but has never thought about what happens when many people visit at once.",
+    "can_do": "Explain how a load balancer spreads incoming requests across several servers and checks their health so a website stays up during traffic spikes.",
+    "question": "How does a website stay up when everyone visits at once?",
+    "problem": "A ticket-selling site crashes the moment a popular concert goes on sale, even though it works fine on quiet days.",
+    "naive_attempt": "A beginner thinks you just buy one bigger, faster server and everything will be fine, but a single server still has a fixed limit and is a single point of failure.",
+    "turning_point": "A load balancer sits in front of many servers and shares each request, skipping any server that is down.",
+    "check_question": "What does the load balancer do with a request when one server is down?",
+    "check_answer": "It sends the request to another healthy server instead."
+  },
+  "map": {
+    "pieces": [
+      {
+        "id": "users",
+        "label": "Users",
+        "kind": "piece",
+        "icon": "users",
+        "tone": "blue",
+        "panel": null,
+        "count": 3,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "lb",
+        "label": "Load Balancer",
+        "kind": "piece",
+        "icon": "split",
+        "tone": "purple",
+        "panel": null,
+        "count": 1,
+        "planned": true,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "s1",
+        "label": "Server 1",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "teal",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "s2",
+        "label": "Server 2",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "green",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "s3",
+        "label": "Server 3",
+        "kind": "piece",
+        "icon": "server",
+        "tone": "yellow",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      },
+      {
+        "id": "health",
+        "label": "Health Check",
+        "kind": "piece",
+        "icon": "activity",
+        "tone": "white",
+        "panel": null,
+        "count": 1,
+        "planned": false,
+        "value": null,
+        "max": 100.0
+      }
+    ],
+    "arrows": [
+      {
+        "source": "users",
+        "target": "lb",
+        "label": "requests"
+      },
+      {
+        "source": "lb",
+        "target": "s1",
+        "label": "route"
+      },
+      {
+        "source": "lb",
+        "target": "s2",
+        "label": "route"
+      },
+      {
+        "source": "lb",
+        "target": "s3",
+        "label": "route"
+      },
+      {
+        "source": "health",
+        "target": "s2",
+        "label": "status"
+      }
+    ]
+  },
+  "trace": null,
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "When everyone visits at once",
+      "learning_goal": "See that a single server cannot handle a traffic spike.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s1_b1",
+          "spoken_text": "Imagine a concert ticket site on the day tickets go on sale, with thousands of fans clicking refresh at the same moment.",
+          "claim_ids": [
+            "s1_b1_c"
+          ],
+          "visual_anchors": [
+            "Users",
+            "Server 1"
+          ],
+          "claim_requirements": {
+            "s1_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "users",
+              "s1"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b2",
+          "spoken_text": "Every one of those clicks is a request going straight to the one server that runs the whole site.",
+          "claim_ids": [
+            "s1_b2_c"
+          ],
+          "visual_anchors": [
+            "Users",
+            "Load Balancer",
+            "Server 1"
+          ],
+          "claim_requirements": {
+            "s1_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "users",
+              "lb",
+              "s1"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b3",
+          "spoken_text": "The beginner's plan is to buy a bigger, faster server, but the requests just keep piling on faster than it can answer.",
+          "claim_ids": [
+            "s1_b3_c"
+          ],
+          "visual_anchors": [
+            "Users",
+            "Server 1",
+            "Load Balancer"
+          ],
+          "claim_requirements": {
+            "s1_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "users",
+              "s1"
+            ],
+            "path": [
+              "users",
+              "lb",
+              "s1"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 4,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s1_b4",
+          "spoken_text": "How does a website stay up when everyone visits at once?",
+          "claim_ids": [
+            "s1_b4_c"
+          ],
+          "visual_anchors": [
+            "How does a website stay up when everyone visits at once?"
+          ],
+          "claim_requirements": {
+            "s1_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "How does a website stay up when everyone visits at once?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "One server has a hard limit."
+    },
+    {
+      "id": "s2",
+      "title": "Health checks keep traffic moving",
+      "learning_goal": "See how health checks keep the system working when one server fails.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s2_b1",
+          "spoken_text": "Behind it stand several ordinary servers, each able to handle its own share of the visitors.",
+          "claim_ids": [
+            "s2_b1_c"
+          ],
+          "visual_anchors": [
+            "Server 2",
+            "Server 3"
+          ],
+          "claim_requirements": {
+            "s2_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "s2",
+              "s3"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b2",
+          "spoken_text": "A health checker pings each server regularly to confirm it is awake and answering quickly.",
+          "claim_ids": [
+            "s2_b2_c"
+          ],
+          "visual_anchors": [
+            "Health Check"
+          ],
+          "claim_requirements": {
+            "s2_b2_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "introduce",
+            "text": null,
+            "pieces": [
+              "health"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b3",
+          "spoken_text": "One afternoon server two stops responding, so the health checker notices and marks it as down.",
+          "claim_ids": [
+            "s2_b3_c"
+          ],
+          "visual_anchors": [
+            "Server 2",
+            "Health Check"
+          ],
+          "claim_requirements": {
+            "s2_b3_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "trouble",
+            "text": null,
+            "pieces": [
+              "s2",
+              "health"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b4",
+          "spoken_text": "The load balancer immediately skips that server and sends its next request to a healthy one instead.",
+          "claim_ids": [
+            "s2_b4_c"
+          ],
+          "visual_anchors": [
+            "Server 2",
+            "Load Balancer",
+            "Server 1"
+          ],
+          "claim_requirements": {
+            "s2_b4_c": [
+              "state_change"
+            ]
+          },
+          "move": {
+            "do": "fix",
+            "text": null,
+            "pieces": [
+              "s2",
+              "lb",
+              "s1"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s2_b5",
+          "spoken_text": "Visitors never see the failure because their requests keep flowing to servers that are still working.",
+          "claim_ids": [
+            "s2_b5_c"
+          ],
+          "visual_anchors": [
+            "Users",
+            "Load Balancer",
+            "Server 3"
+          ],
+          "claim_requirements": {
+            "s2_b5_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "users",
+              "lb",
+              "s3"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Health checks keep traffic moving."
+    },
+    {
+      "id": "s3",
+      "title": "The united front",
+      "learning_goal": "Explain that many servers behind a load balancer act as one reliable website.",
+      "example": null,
+      "beats": [
+        {
+          "id": "s3_b1",
+          "spoken_text": "Now the busy site runs as a team: one front door, many servers, and a health checker watching over them all.",
+          "claim_ids": [
+            "s3_b1_c"
+          ],
+          "visual_anchors": [
+            "Load Balancer",
+            "Server 1",
+            "Server 2"
+          ],
+          "claim_requirements": {
+            "s3_b1_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "point",
+            "text": null,
+            "pieces": [
+              "lb",
+              "s1",
+              "s2",
+              "s3",
+              "health"
+            ],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b2",
+          "spoken_text": "So the website stays up during a spike because the load balancer shares the crowd and quietly routes around any server that fails.",
+          "claim_ids": [
+            "s3_b2_c"
+          ],
+          "visual_anchors": [
+            "Users",
+            "Load Balancer",
+            "Server 2"
+          ],
+          "claim_requirements": {
+            "s3_b2_c": [
+              "relationship"
+            ]
+          },
+          "move": {
+            "do": "send",
+            "text": null,
+            "pieces": [],
+            "path": [
+              "users",
+              "lb",
+              "s2"
+            ],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b3",
+          "spoken_text": "What does the load balancer do with a request when one server is down?",
+          "claim_ids": [
+            "s3_b3_c"
+          ],
+          "visual_anchors": [
+            "What does the load balancer do with a request when one server is down?"
+          ],
+          "claim_requirements": {
+            "s3_b3_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "ask",
+            "text": "What does the load balancer do with a request when one server is down?",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        },
+        {
+          "id": "s3_b4",
+          "spoken_text": "It sends the request to another healthy server instead.",
+          "claim_ids": [
+            "s3_b4_c"
+          ],
+          "visual_anchors": [
+            "It sends the request to another healthy server instead."
+          ],
+          "claim_requirements": {
+            "s3_b4_c": [
+              "label"
+            ]
+          },
+          "move": {
+            "do": "answer",
+            "text": "It sends the request to another healthy server instead.",
+            "pieces": [],
+            "path": [],
+            "meter": null,
+            "value": null,
+            "count": 1,
+            "lines": [],
+            "items": [],
+            "pointer": null,
+            "index": null,
+            "against": null,
+            "out_of": null,
+            "ends": null,
+            "match": [],
+            "array": null,
+            "cells": [],
+            "cell": null,
+            "counter": null,
+            "tree": null,
+            "depth": null,
+            "expect": null
+          },
+          "why": null
+        }
+      ],
+      "bridge_to_next": null,
+      "takeaway": "Many servers, one front door."
+    }
+  ]
+}

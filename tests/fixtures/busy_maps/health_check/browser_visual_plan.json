@@ -1,0 +1,1022 @@
+{
+  "schema_version": 2,
+  "topic": "How a load balancer keeps a website up when traffic spikes",
+  "skill_id": "architecture_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "users",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Users",
+          "payload": {
+            "asset_id": "users",
+            "tone": "blue",
+            "count": 3
+          }
+        },
+        {
+          "id": "lb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Load Balancer",
+          "payload": {
+            "asset_id": "split",
+            "tone": "purple",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "s1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "s2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "s3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "health",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Health Check",
+          "payload": {
+            "asset_id": "activity",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "s1_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "How does a website stay up when everyone visits at once?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "takeaway_s1",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One server has a hard limit.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "users",
+          "target_id": "lb",
+          "kind": "flows_to",
+          "label": "requests"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s3",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "health",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "status"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s1_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "users",
+                "s1"
+              ],
+              "id": "s1_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b1_c"
+              ],
+              "object_ids": [
+                "users",
+                "s1"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "lb"
+              ],
+              "id": "s1_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "trace",
+              "target_ids": [
+                "users",
+                "lb",
+                "s1"
+              ],
+              "id": "s1_b2_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b2_c"
+              ],
+              "object_ids": [
+                "users",
+                "lb",
+                "s1"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s1_b2_1",
+                "s1_b2_2"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b3",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "users",
+                "lb",
+                "s1"
+              ],
+              "id": "s1_b3_1",
+              "params": {
+                "count": 4
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "users",
+                "s1"
+              ],
+              "id": "s1_b3_2",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b3_c"
+              ],
+              "object_ids": [
+                "users",
+                "s1",
+                "lb"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b3_1",
+                "s1_b3_2"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s1_b4_line"
+              ],
+              "id": "s1_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s1"
+              ],
+              "id": "s1_b4_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b4_c"
+              ],
+              "object_ids": [
+                "s1_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b4_1",
+                "s1_b4_2"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s1_b4_line",
+        "takeaway_s1"
+      ],
+      "carryover_ids": [],
+      "layout_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health",
+        "s1_b4_line",
+        "takeaway_s1"
+      ]
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "users",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Users",
+          "payload": {
+            "asset_id": "users",
+            "tone": "blue",
+            "count": 3
+          }
+        },
+        {
+          "id": "lb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Load Balancer",
+          "payload": {
+            "asset_id": "split",
+            "tone": "purple",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "s1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "s2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "s3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "health",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Health Check",
+          "payload": {
+            "asset_id": "activity",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "takeaway_s2",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Health checks keep traffic moving.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "users",
+          "target_id": "lb",
+          "kind": "flows_to",
+          "label": "requests"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s3",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "health",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "status"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s2_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s2",
+                "s3"
+              ],
+              "id": "s2_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b1_c"
+              ],
+              "object_ids": [
+                "s2",
+                "s3"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s2_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b2",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "health"
+              ],
+              "id": "s2_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b2_c"
+              ],
+              "object_ids": [
+                "health"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s2_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "s2",
+                "health"
+              ],
+              "id": "s2_b3_1",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b3_c"
+              ],
+              "object_ids": [
+                "s2",
+                "health"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b3_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b4",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "lb"
+              ],
+              "id": "s2_b4_1",
+              "params": {
+                "placeholder": false
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.236
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "s2"
+              ],
+              "id": "s2_b4_2",
+              "params": {
+                "tone": "green"
+              },
+              "start_fraction": 0.236,
+              "end_fraction": 0.412
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "s1"
+              ],
+              "id": "s2_b4_3",
+              "params": {
+                "tone": "teal"
+              },
+              "start_fraction": 0.412,
+              "end_fraction": 0.588
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "health"
+              ],
+              "id": "s2_b4_4",
+              "params": {
+                "tone": "white"
+              },
+              "start_fraction": 0.588,
+              "end_fraction": 0.764
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "users"
+              ],
+              "id": "s2_b4_5",
+              "params": {
+                "tone": "blue"
+              },
+              "start_fraction": 0.764,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b4_c"
+              ],
+              "object_ids": [
+                "s2",
+                "lb",
+                "s1"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b4_1",
+                "s2_b4_2",
+                "s2_b4_3",
+                "s2_b4_4",
+                "s2_b4_5"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b5",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "users",
+                "lb",
+                "s3"
+              ],
+              "id": "s2_b5_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b5_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b5_c"
+              ],
+              "object_ids": [
+                "users",
+                "lb",
+                "s3"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s2_b5_1",
+                "s2_b5_2"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "users",
+        "lb",
+        "s1"
+      ],
+      "closing_visible_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health",
+        "takeaway_s2"
+      ],
+      "carryover_ids": [
+        "users",
+        "lb",
+        "s1"
+      ],
+      "layout_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health",
+        "takeaway_s2"
+      ]
+    },
+    {
+      "lesson_scene_id": "s3",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "users",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Users",
+          "payload": {
+            "asset_id": "users",
+            "tone": "blue",
+            "count": 3
+          }
+        },
+        {
+          "id": "lb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Load Balancer",
+          "payload": {
+            "asset_id": "split",
+            "tone": "purple",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "s1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "s2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "s3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Server 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "health",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Health Check",
+          "payload": {
+            "asset_id": "activity",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "s3_b3_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "What does the load balancer do with a request when one server is down?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "s3_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "It sends the request to another healthy server instead.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        },
+        {
+          "id": "takeaway_s3",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Many servers, one front door.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "users",
+          "target_id": "lb",
+          "kind": "flows_to",
+          "label": "requests"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "lb",
+          "target_id": "s3",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "health",
+          "target_id": "s2",
+          "kind": "flows_to",
+          "label": "status"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s3_b1",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "lb",
+                "s1",
+                "s2",
+                "s3",
+                "health"
+              ],
+              "id": "s3_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b1_c"
+              ],
+              "object_ids": [
+                "lb",
+                "s1",
+                "s2",
+                "s3",
+                "health"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b2",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "users",
+                "lb",
+                "s2"
+              ],
+              "id": "s3_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s3"
+              ],
+              "id": "s3_b2_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b2_c"
+              ],
+              "object_ids": [
+                "users",
+                "lb",
+                "s2"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s3_b2_1",
+                "s3_b2_2"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b3",
+          "actions": [
+            {
+              "kind": "hide",
+              "target_ids": [
+                "takeaway_s3"
+              ],
+              "id": "s3_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b3_line"
+              ],
+              "id": "s3_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b3_c"
+              ],
+              "object_ids": [
+                "s3_b3_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b3_1",
+                "s3_b3_2"
+              ]
+            }
+          ],
+          "pause_after": 4.0,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s3_b4_line"
+              ],
+              "id": "s3_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b4_c"
+              ],
+              "object_ids": [
+                "s3_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b4_1"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health"
+      ],
+      "closing_visible_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health",
+        "s3_b3_line",
+        "s3_b4_line"
+      ],
+      "carryover_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health"
+      ],
+      "layout_ids": [
+        "users",
+        "lb",
+        "s1",
+        "s2",
+        "s3",
+        "health",
+        "s3_b3_line",
+        "s3_b4_line",
+        "takeaway_s3"
+      ]
+    }
+  ]
+}

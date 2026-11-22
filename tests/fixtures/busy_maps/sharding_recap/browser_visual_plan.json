@@ -1,0 +1,1347 @@
+{
+  "schema_version": 2,
+  "topic": "How sharding splits a huge database across machines",
+  "skill_id": "architecture_explainer",
+  "scenes": [
+    {
+      "lesson_scene_id": "s1",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "app",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shop app",
+          "payload": {
+            "asset_id": "laptop",
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "router",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Router",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "bigdb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "One big DB",
+          "payload": {
+            "asset_id": "database",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "shard1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "shard2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "shard3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "pink",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "freeze",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Disk full",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Query load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "s1_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "How does one giant table fit on many machines?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "takeaway_s1",
+          "kind": "caption",
+          "role": "audit",
+          "label": "One server cannot hold everything.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "app",
+          "target_id": "bigdb",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "app",
+          "target_id": "router",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard3",
+          "kind": "flows_to",
+          "label": "route"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s1_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "app",
+                "bigdb"
+              ],
+              "id": "s1_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b1_c"
+              ],
+              "object_ids": [
+                "app",
+                "bigdb"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b2",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "app",
+                "bigdb"
+              ],
+              "id": "s1_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b2_c"
+              ],
+              "object_ids": [
+                "app",
+                "bigdb"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s1_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b3",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "freeze",
+                "load"
+              ],
+              "id": "s1_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.28
+            },
+            {
+              "kind": "trace",
+              "target_ids": [
+                "app",
+                "bigdb"
+              ],
+              "id": "s1_b3_2",
+              "params": {
+                "count": 4
+              },
+              "start_fraction": 0.28,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s1_b3_3",
+              "params": {
+                "value": 95,
+                "tone": "red"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.72
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "bigdb",
+                "freeze"
+              ],
+              "id": "s1_b3_4",
+              "params": {
+                "tone": "red"
+              },
+              "start_fraction": 0.72,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b3_c"
+              ],
+              "object_ids": [
+                "bigdb",
+                "freeze",
+                "app",
+                "load"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s1_b3_1",
+                "s1_b3_2",
+                "s1_b3_3",
+                "s1_b3_4"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s1_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s1_b4_line"
+              ],
+              "id": "s1_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s1"
+              ],
+              "id": "s1_b4_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s1_b4_c"
+              ],
+              "object_ids": [
+                "s1_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s1_b4_1",
+                "s1_b4_2"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [],
+      "closing_visible_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load",
+        "s1_b4_line",
+        "takeaway_s1"
+      ],
+      "carryover_ids": [],
+      "layout_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "s1_b4_line",
+        "takeaway_s1"
+      ]
+    },
+    {
+      "lesson_scene_id": "s2",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "app",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shop app",
+          "payload": {
+            "asset_id": "laptop",
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "router",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Router",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "bigdb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "One big DB",
+          "payload": {
+            "asset_id": "database",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "shard1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "shard2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "shard3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "pink",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "freeze",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Disk full",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Query load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "takeaway_s2",
+          "kind": "caption",
+          "role": "audit",
+          "label": "A bigger box still has a ceiling.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "app",
+          "target_id": "bigdb",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "app",
+          "target_id": "router",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard3",
+          "kind": "flows_to",
+          "label": "route"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s2_b1",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "bigdb"
+              ],
+              "id": "s2_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b1_c"
+              ],
+              "object_ids": [
+                "bigdb"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s2_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s2_b2",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s2_b2_1",
+              "params": {
+                "value": 100,
+                "tone": "red"
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s2"
+              ],
+              "id": "s2_b2_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s2_b2_c"
+              ],
+              "object_ids": [
+                "bigdb",
+                "freeze",
+                "load"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s2_b2_1",
+                "s2_b2_2"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load"
+      ],
+      "closing_visible_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load",
+        "takeaway_s2"
+      ],
+      "carryover_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load"
+      ],
+      "layout_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "takeaway_s2"
+      ]
+    },
+    {
+      "lesson_scene_id": "s3",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "app",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shop app",
+          "payload": {
+            "asset_id": "laptop",
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "router",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Router",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "bigdb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "One big DB",
+          "payload": {
+            "asset_id": "database",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "shard1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "shard2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "shard3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "pink",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "freeze",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Disk full",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Query load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "takeaway_s3",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Each machine answers for its own slice.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "app",
+          "target_id": "bigdb",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "app",
+          "target_id": "router",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard3",
+          "kind": "flows_to",
+          "label": "route"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s3_b1",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "router",
+                "shard1",
+                "shard2"
+              ],
+              "id": "s3_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b1_c"
+              ],
+              "object_ids": [
+                "router",
+                "shard1",
+                "shard2"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s3_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b2",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "app",
+                "router",
+                "shard1"
+              ],
+              "id": "s3_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b2_c"
+              ],
+              "object_ids": [
+                "app",
+                "router",
+                "shard1"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s3_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b3",
+          "actions": [
+            {
+              "kind": "trace",
+              "target_ids": [
+                "app",
+                "router",
+                "shard2"
+              ],
+              "id": "s3_b3_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b3_c"
+              ],
+              "object_ids": [
+                "app",
+                "router",
+                "shard2"
+              ],
+              "kind": "relationship",
+              "action_ids": [
+                "s3_b3_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s3_b4",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "shard3"
+              ],
+              "id": "s3_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.2067
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "shard3"
+              ],
+              "id": "s3_b4_2",
+              "params": {
+                "placeholder": false
+              },
+              "start_fraction": 0.2067,
+              "end_fraction": 0.3533
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "bigdb"
+              ],
+              "id": "s3_b4_3",
+              "params": {
+                "tone": "yellow"
+              },
+              "start_fraction": 0.3533,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "freeze"
+              ],
+              "id": "s3_b4_4",
+              "params": {
+                "tone": "white"
+              },
+              "start_fraction": 0.5,
+              "end_fraction": 0.6467
+            },
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s3_b4_5",
+              "params": {
+                "value": 35,
+                "tone": "blue"
+              },
+              "start_fraction": 0.6467,
+              "end_fraction": 0.7933
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s3"
+              ],
+              "id": "s3_b4_6",
+              "params": {},
+              "start_fraction": 0.7933,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s3_b4_c"
+              ],
+              "object_ids": [
+                "shard3",
+                "load"
+              ],
+              "kind": "state_change",
+              "action_ids": [
+                "s3_b4_1",
+                "s3_b4_2",
+                "s3_b4_3",
+                "s3_b4_4",
+                "s3_b4_5",
+                "s3_b4_6"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load"
+      ],
+      "closing_visible_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "takeaway_s3"
+      ],
+      "carryover_ids": [
+        "app",
+        "bigdb",
+        "freeze",
+        "load"
+      ],
+      "layout_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "takeaway_s3"
+      ]
+    },
+    {
+      "lesson_scene_id": "s4",
+      "pattern": "architecture",
+      "render_mode": "browser",
+      "objects": [
+        {
+          "id": "app",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shop app",
+          "payload": {
+            "asset_id": "laptop",
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "router",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Router",
+          "payload": {
+            "asset_id": "router",
+            "tone": "purple"
+          }
+        },
+        {
+          "id": "bigdb",
+          "kind": "icon",
+          "role": "operation",
+          "label": "One big DB",
+          "payload": {
+            "asset_id": "database",
+            "tone": "yellow"
+          }
+        },
+        {
+          "id": "shard1",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 1",
+          "payload": {
+            "asset_id": "server",
+            "tone": "teal"
+          }
+        },
+        {
+          "id": "shard2",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 2",
+          "payload": {
+            "asset_id": "server",
+            "tone": "green"
+          }
+        },
+        {
+          "id": "shard3",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Shard 3",
+          "payload": {
+            "asset_id": "server",
+            "tone": "pink",
+            "placeholder": true
+          }
+        },
+        {
+          "id": "freeze",
+          "kind": "icon",
+          "role": "operation",
+          "label": "Disk full",
+          "payload": {
+            "asset_id": "hard-drive",
+            "tone": "white"
+          }
+        },
+        {
+          "id": "load",
+          "kind": "metric",
+          "role": "metric",
+          "label": "Query load",
+          "payload": {
+            "value": 20,
+            "max": 100,
+            "tone": "blue"
+          }
+        },
+        {
+          "id": "s4_b4_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Which rows does the machine for shard 3 hold?",
+          "payload": {
+            "tone": "white",
+            "ask": true
+          }
+        },
+        {
+          "id": "s4_b5_line",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Only the rows whose shard key maps to shard 3.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        },
+        {
+          "id": "takeaway_s4",
+          "kind": "caption",
+          "role": "audit",
+          "label": "Sharding scales a table by splitting rows.",
+          "payload": {
+            "tone": "teal",
+            "tick": true
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "source_id": "app",
+          "target_id": "bigdb",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "app",
+          "target_id": "router",
+          "kind": "flows_to",
+          "label": "send query"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard1",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard2",
+          "kind": "flows_to",
+          "label": "route"
+        },
+        {
+          "source_id": "router",
+          "target_id": "shard3",
+          "kind": "flows_to",
+          "label": "route"
+        }
+      ],
+      "beats": [
+        {
+          "narration_beat_id": "s4_b1",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "shard1",
+                "shard2",
+                "shard3"
+              ],
+              "id": "s4_b1_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s4_b1_c"
+              ],
+              "object_ids": [
+                "shard1",
+                "shard2",
+                "shard3"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s4_b1_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s4_b2",
+          "actions": [
+            {
+              "kind": "highlight",
+              "target_ids": [
+                "freeze"
+              ],
+              "id": "s4_b2_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s4_b2_c"
+              ],
+              "object_ids": [
+                "freeze"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s4_b2_1"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s4_b3",
+          "actions": [
+            {
+              "kind": "set_state",
+              "target_ids": [
+                "load"
+              ],
+              "id": "s4_b3_1",
+              "params": {
+                "value": 30
+              },
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "takeaway_s4"
+              ],
+              "id": "s4_b3_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s4_b3_c"
+              ],
+              "object_ids": [
+                "load"
+              ],
+              "kind": "value",
+              "action_ids": [
+                "s4_b3_1",
+                "s4_b3_2"
+              ]
+            }
+          ],
+          "pause_after": 0.4,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s4_b4",
+          "actions": [
+            {
+              "kind": "hide",
+              "target_ids": [
+                "takeaway_s4"
+              ],
+              "id": "s4_b4_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.5
+            },
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s4_b4_line"
+              ],
+              "id": "s4_b4_2",
+              "params": {},
+              "start_fraction": 0.5,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s4_b4_c"
+              ],
+              "object_ids": [
+                "s4_b4_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s4_b4_1",
+                "s4_b4_2"
+              ]
+            }
+          ],
+          "pause_after": 4.0,
+          "min_seconds": 0.0
+        },
+        {
+          "narration_beat_id": "s4_b5",
+          "actions": [
+            {
+              "kind": "appear",
+              "target_ids": [
+                "s4_b5_line"
+              ],
+              "id": "s4_b5_1",
+              "params": {},
+              "start_fraction": 0.06,
+              "end_fraction": 0.94
+            }
+          ],
+          "evidence": [
+            {
+              "claim_ids": [
+                "s4_b5_c"
+              ],
+              "object_ids": [
+                "s4_b5_line"
+              ],
+              "kind": "label",
+              "action_ids": [
+                "s4_b5_1"
+              ]
+            }
+          ],
+          "pause_after": 0.9,
+          "min_seconds": 0.0
+        }
+      ],
+      "opening_visible_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load"
+      ],
+      "closing_visible_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "s4_b4_line",
+        "s4_b5_line"
+      ],
+      "carryover_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load"
+      ],
+      "layout_ids": [
+        "app",
+        "router",
+        "bigdb",
+        "shard1",
+        "shard2",
+        "shard3",
+        "freeze",
+        "load",
+        "s4_b4_line",
+        "s4_b5_line",
+        "takeaway_s4"
+      ]
+    }
+  ]
+}
