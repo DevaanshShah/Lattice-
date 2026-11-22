@@ -112,7 +112,7 @@ body:has(.semantic-stage){background:#0a0a0a}
 .semantic-panel{display:flex;flex-direction:column;gap:16px;padding:16px 22px 22px;border:1.5px solid color-mix(in srgb,var(--tone) 45%,transparent);border-radius:20px;background:#0d1114}
 .panel-header{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);font:700 16px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
 .panel-body{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:64px 56px;max-width:420px}
-.semantic-captions{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}.semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
+.semantic-captions{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;position:absolute;left:0;right:0;bottom:0}.semantic-stage:has(> .semantic-captions){position:relative}.semantic-caption-line{align-self:center;width:100%;text-align:center;color:var(--tone);font:650 24px/1.2 Segoe UI,system-ui,sans-serif;letter-spacing:.02em}
 .semantic-caption-line.is-question{color:#f4f4f5;font-size:29px;line-height:1.3}
 .semantic-caption-line.is-idea{color:#fde68a;font-size:27px;line-height:1.3}
 .idea-mark{background:transparent;border:2px solid #fbbf24;color:#fbbf24;line-height:32px}
@@ -294,6 +294,9 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
     pointers = [obj for obj in scene.objects if obj.kind == "pointer" and obj.id in state.visible]
     inside = {obj_id: containers[obj_id] for obj_id in placed if containers.get(obj_id) in placed}
     drawn: dict[str, str] = {}
+    # What this scene puts on screen at some point: the camera frames these, not the whole
+    # lesson's map, whose other pieces keep their places off to the side.
+    in_scene = _shown_in_scene(scene) | state.visible
     for obj_id in sorted(placed, key=lambda item: item not in inside):   # members before their panel
         obj = objects[obj_id]
         payload = state.payloads[obj.id]
@@ -309,6 +312,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
             flags = ""
         if payload.get("placeholder"):
             flags += " is-placeholder"   # a dashed outline where a piece is about to go
+        if obj.id in in_scene:
+            flags += " in-scene"
         ident = f'data-object-id="{escape(obj.id)}"'
         if obj.kind == "array":
             discarded = set(payload.get("discarded_indices", []))
@@ -569,7 +574,7 @@ _SEMANTIC_LABEL_JS = (
     "*Math.max(0,Math.min(p.bottom,q.bottom)-Math.max(p.top,q.top));"
     "const others=[...svg.querySelectorAll('text.edge-label')].filter(e=>e!==label)"
     ".map(e=>e.getBoundingClientRect());"
-    "const solids=[...document.querySelectorAll('.semantic-object')]"
+    "const solids=[...document.querySelectorAll('.semantic-object:not(.is-hidden)')]"
     ".filter(e=>!e.classList.contains('semantic-panel')).map(e=>e.getBoundingClientRect());"
     "const hits=()=>{const own=label.getBoundingClientRect();"
     "return others.some(o=>overlap(o,own)>1)||solids.some(o=>overlap(o,own)>1)};"
@@ -600,22 +605,43 @@ const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');mar
         routing = r"""
 window.fitFlow=()=>{
   // Size the stage content to the frame: a flow grows up to 1.3x or shrinks until it fits, a
-  // stack only ever shrinks. Every object of the scene has a slot, so the size holds all scene.
+  // stack only ever shrinks.
   const stage=document.querySelector('.semantic-stage');
   const block=stage&&stage.querySelector('.semantic-flow,.semantic-stack');
   if(!block)return;
-  block.style.zoom=1;
+  block.style.zoom=1;block.style.left='';block.style.top='';
   const flow=block.classList.contains('semantic-flow');
   const sized=flow||block.classList.contains('semantic-split');   // these have a width of their own
-  const need=block.getBoundingClientRect(),room=stage.getBoundingClientRect();
-  // What the lines of text under the picture take, measured with their real gaps and margins:
-  // estimated, they came out short, and a recap scene's map was pushed up into the title.
-  const parts=[...stage.children].map(e=>e.getBoundingClientRect()).filter(r=>r.height>0);
-  const span=Math.max(...parts.map(r=>r.bottom))-Math.min(...parts.map(r=>r.top));
-  const lines=span-need.height;
-  const fit=Math.min(flow?1.3:1,sized?room.width*.96/need.width:1,(room.height*.96-lines)/need.height);
+  const room=stage.getBoundingClientRect();
+  // The lines of text under the picture, measured with their real gap: estimated, they came out
+  // short, and a recap scene's map was pushed up into the title.
+  const band=stage.querySelector(':scope > .semantic-captions');
+  const lines=band?band.getBoundingClientRect().height+parseFloat(getComputedStyle(stage).rowGap||0):0;
+  // A lesson keeps one map, every piece in one place for the whole lesson. Each scene is framed
+  // on the pieces it shows: framed on the whole map, a first scene's two pieces were drawn small
+  // in the middle of an empty frame (reviewed 2026-11-22). The scene's pieces never move within it.
+  const pieces=flow?[...block.querySelectorAll('.in-scene')].filter(e=>!e.parentElement.closest('.in-scene'))
+    .map(e=>e.getBoundingClientRect()).filter(r=>r.width>0):[];
+  const whole=block.getBoundingClientRect();
+  const frame=pieces.length?{left:Math.min(...pieces.map(r=>r.left)),top:Math.min(...pieces.map(r=>r.top)),
+    right:Math.max(...pieces.map(r=>r.right)),bottom:Math.max(...pieces.map(r=>r.bottom))}:whole;
+  // room around the framed pieces for their arrows' labels and the lanes outside a row
+  const pad=pieces.length&&pieces.length<block.querySelectorAll('.semantic-object').length?60:0;
+  const w=frame.right-frame.left+pad*2,h=frame.bottom-frame.top+pad*2;
+  const fit=Math.min(flow?1.3:1,sized?room.width*.96/w:1,(room.height*.96-lines)/h);
   block.style.zoom=fit;window.flowFit=fit;
   document.documentElement.style.setProperty('--fit',fit);
+  // Centre the picture (the framed pieces, or the whole block) in the room above the lines of
+  // text, which are pinned to the bottom so a large map cannot push them out of the frame.
+  const now=pieces.length&&pad?[...block.querySelectorAll('.in-scene')]
+      .filter(e=>!e.parentElement.closest('.in-scene')).map(e=>e.getBoundingClientRect()).filter(r=>r.width>0)
+    :[block.getBoundingClientRect()];
+  const cx=(Math.min(...now.map(r=>r.left))+Math.max(...now.map(r=>r.right)))/2;
+  const cy=(Math.min(...now.map(r=>r.top))+Math.max(...now.map(r=>r.bottom)))/2;
+  const bottom=band?band.getBoundingClientRect().top-parseFloat(getComputedStyle(stage).rowGap||0):room.bottom;
+  block.style.position='relative';
+  block.style.left=(pieces.length&&pad?((room.left+room.right)/2-cx)/fit:0)+'px';
+  block.style.top=((room.top+bottom)/2-cy)/fit+'px';
 };
 window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
   const box=stage.getBoundingClientRect();
