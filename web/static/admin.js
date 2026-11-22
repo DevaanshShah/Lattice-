@@ -251,7 +251,7 @@
       state.users.map(function (u) {
         return '<tr class="click" data-user="' + esc(u.id) + '">' +
           '<td><span class="a-dot ' + (u.online ? '' : 'off') + '"></span>' +
-          '<span class="mono">' + esc(u.label || shortId(u.id)) + '</span>' +
+          '<span class="mono">' + esc(u.label || u.name || u.email || shortId(u.id)) + '</span>' +
           (u.running ? ' <span class="chip accent">' + u.running + ' running</span>' : '') + '</td>' +
           '<td class="num">' + u.videos + '</td><td class="num">' + u.decks + '</td>' +
           '<td class="num">' + u.threads + '</td><td class="num">' + u.builds + '</td>' +
@@ -308,7 +308,7 @@
     if (!d) {
       inner = '<div class="empty">Loading…</div>';
     } else {
-      inner = '<div class="a-head"><h2 class="a-title">' + esc(u.label || shortId(u.id)) + '</h2>' +
+      inner = '<div class="a-head"><h2 class="a-title">' + esc(u.label || u.name || u.email || shortId(u.id)) + '</h2>' +
         '<div class="a-spacer"></div><button class="a-btn" id="dr-close">Close</button></div>' +
         '<div class="a-grid">' +
         tile('Spend', money(u.cost), u.calls + ' calls') +

@@ -48,6 +48,8 @@ class UserRecord:
     agent: str = ""                     # last User-Agent, trimmed — tells desktop from phone
     ip: str = ""                        # last client ip (proxy-aware), for the owner's own console
     label: str = ""                     # optional human name the admin can pin on a user
+    email: str = ""                     # signed-in users only (web/auth.py); empty for anonymous
+    name: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -94,7 +96,8 @@ class UserStore:
         except OSError:
             pass                        # a full disk must not take the product down
 
-    def touch(self, uid: str, *, ip: str = "", agent: str = "") -> UserRecord:
+    def touch(self, uid: str, *, ip: str = "", agent: str = "", email: str = "",
+              name: str = "") -> UserRecord:
         now = time.time()
         with self._lock:
             rec = self._users.get(uid)
@@ -108,6 +111,10 @@ class UserStore:
                 rec.ip = ip
             if agent:
                 rec.agent = agent[:180]
+            if email and email != rec.email:
+                rec.email, fresh = email[:254], True    # identity changed: persist now, not in 5s
+            if name:
+                rec.name = name[:120]
             self._dirty = True
             self._flush_locked(force=fresh)
             return rec
@@ -151,9 +158,24 @@ def dependency(store: UserStore):
     inside this factory they resolve to nothing and both get treated as required query params.
     """
     async def identify(request: Request, response: Response) -> str:
-        uid = request.cookies.get(COOKIE) or ""
         path = request.url.path
         skip = path.startswith(SKIP_PREFIXES)
+
+        # Signed in (web/auth.py resolved the session before routing): the Supabase user id IS the
+        # identity, stable across browsers and devices. No anonymous cookie is minted for them.
+        auth = getattr(request.state, "auth", None)
+        if auth is not None and auth.user is not None:
+            user = auth.user
+            if not skip:
+                store.touch(user.id, ip=_client_ip(request),
+                            agent=request.headers.get("user-agent", ""),
+                            email=user.email, name=user.name)
+            usage.set_current(usage.Attribution(user=user.id))
+            return user.id
+        if auth is not None and auth.enabled and auth.required:
+            return ""                   # signed out on a sign-in-only deploy: not a user yet
+
+        uid = request.cookies.get(COOKIE) or ""
         if not uid:
             if skip:
                 return ""               # infra/admin traffic is not a user

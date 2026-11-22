@@ -209,6 +209,7 @@ class JobQueue:
                  now: Callable[[], float] = time.time) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+        self.quota = None               # web.quota.Quota, set by create_app; None = no limits
         self._now = now
         self._synchronous = synchronous
         self._pool: ThreadPoolExecutor | None = (
@@ -223,6 +224,21 @@ class JobQueue:
         `fn` does the real work and may call `job.log(...)` / `job.set_scene(...)`. Its return
         value becomes `job.result`; any exception flips the job to FAILED (never propagates here).
         """
+        # The one gate every spending job passes (build, deck, lesson video, scene edits). Raises
+        # QuotaExceeded before a Job exists, so a refused request leaves nothing behind.
+        quota, who = self.quota, usage.current().user
+        receipt = quota.charge(who, kind) if quota else None
+        if receipt is not None:
+            inner = fn
+
+            def fn(job: Job) -> Any:                # noqa: F811 — the guarded replacement
+                try:
+                    return inner(job)
+                except cancel.Cancelled:
+                    raise                           # a stop is the user's choice: the slot stays spent
+                except Exception:
+                    quota.refund(who, kind, receipt)    # our failure is not the user's try
+                    raise
         job = Job(kind=kind, project_id=project_id, scene_index=scene_index, now=self._now)
         # Captured HERE, in the request thread: a worker thread starts with an empty context, so this
         # snapshot is what tells the usage ledger whose build the model calls underneath belong to.

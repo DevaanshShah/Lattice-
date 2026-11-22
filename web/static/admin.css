@@ -1,0 +1,41 @@
+/* Lattice — editorial/Swiss dark theme (amber accent, Bricolage/Geist/mono). */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+
+:root {
+  --bg:#0E0E12; --bg2:#101015; --raise:#16161B; --raise2:#1D1D23;
+  --line:rgba(255,255,255,0.08); --line2:rgba(255,255,255,0.14);
+  --text:#ECEAE3; --muted:#95948C; --faint:#5E5D57; --ink:#0E0E12;
+  --accent:#F2B441; --accent-deep:#E19A2C; --ok:#5FBF6A; --danger:#F0553B;
+}
+:root[data-theme="light"] {
+  --bg:#F4F2EC; --bg2:#FBFAF6; --raise:#FFFFFF; --raise2:#F0EEE7;
+  --line:rgba(20,18,12,0.12); --line2:rgba(20,18,12,0.18);
+  --text:#1A1917; --muted:#5A584F; --faint:#928F84; --ink:#1A1917;
+}
+
+::selection { background: rgba(242,180,65,0.30); color: #0E0E12; }
+.lt-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.lt-scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+.lt-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes lt-wave { 0% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(360deg); } }
+@keyframes lt-wave2 { 0% { transform: translateX(-50%) rotate(0deg); } 100% { transform: translateX(-50%) rotate(-360deg); } }
+@keyframes lt-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+@keyframes lt-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+@keyframes lt-fadeup { 0% { opacity: 0; transform: translateY(9px); } 100% { opacity: 1; transform: translateY(0); } }
+@keyframes lt-snap { 0% { opacity: 0; transform: scale(0.985) translateY(6px); } 60% { opacity: 1; } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes lt-spin { to { transform: rotate(360deg); } }
+.lt-fade { animation: lt-fadeup 0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.lt-snap { animation: lt-snap 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+.lt-link { transition: color .15s; }
+.lt-link:hover { color: var(--accent) !important; }
+.lt-btnp { transition: filter .15s; }
+.lt-btnp:hover { filter: brightness(1.06); }
+.lt-thumb { transition: transform .18s ease; }
+.lt-thumb:hover { transform: translateY(-2px); }
+.lt-row:hover { background: var(--raise); }
+.lt-act:hover { background: var(--raise2); }
+input, textarea, button { font-family: inherit; }
+#app { height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); overflow: hidden; }

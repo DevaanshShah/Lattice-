@@ -171,6 +171,7 @@ def per_user(rows: list[dict], *, users: list[dict], jobs_live: list[dict],
         s = slot(uid)
         out.append({
             "id": uid, "label": u.get("label") or "", "first_seen": u.get("first_seen"),
+            "email": u.get("email") or "", "name": u.get("name") or "",
             "last_seen": u.get("last_seen"), "requests": u.get("requests"),
             "agent": u.get("agent") or "", "ip": u.get("ip") or "",
             "cost": round(s["cost"], 4), "calls": s["calls"],

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from core import storage, usage
 from web import jobs as jobs_mod
+from web import ownership as own
 
 _MUSIC_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -113,9 +114,14 @@ def _music_path(name: str | None) -> Path | None:
     raise HTTPException(422, f"no music track named {name!r} in assets/music")
 
 
-def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
+def register(app, engine, queue: jobs_mod.JobQueue, *, owners: own.Ownership | None = None) -> DeckStore:
     """Mount the deck routes. Additive: no existing route or model is touched."""
     store = DeckStore(engine.root)
+    owners = owners or own.Ownership(engine.root, enforce=False)
+
+    def _load(did: str) -> DeckRecord:
+        owners.require(own.DECK, did)       # someone else's deck 404s like a missing one
+        return store.load(did)
 
     def _client():
         get = getattr(engine, "_client_or_default", None)
@@ -138,21 +144,22 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
         rec = DeckRecord(id=did, topic=body.topic, title=deck.title,
                          slides=[asdict(s) for s in deck.slides], created_at=time.time())
         store.save(rec)
+        owners.claim(own.DECK, rec.id)
         usage.record("create", surface="deck", project=rec.id, topic=body.topic)
         return deck_dto(rec)
 
     @app.get("/api/decks")
     def list_decks() -> dict:
-        return {"decks": store.list()}
+        return {"decks": owners.visible(own.DECK, store.list())}
 
     @app.get("/api/decks/{did}")
     def get_deck(did: str) -> dict:
-        return deck_dto(store.load(did))
+        return deck_dto(_load(did))
 
     @app.post("/api/decks/{did}/build")
     def build_deck_route(did: str, body: BuildDeck) -> dict:
         from generation.slide_deck import Slide
-        rec = store.load(did)
+        rec = _load(did)
         usage.tag(surface="deck")
         music = _music_path(body.music)              # validate BEFORE queueing, so it 422s not fails
         keep = body.keep if body.keep is not None else list(range(len(rec.slides)))
@@ -189,7 +196,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> DeckStore:
 
     @app.get("/api/decks/{did}/video")
     def deck_video(did: str):
-        rec = store.load(did)
+        rec = _load(did)
         if rec.mp4 and Path(rec.mp4).exists():
             return FileResponse(rec.mp4, media_type="video/mp4", filename=f"{did}.mp4")
         # Local copy gone (redeploy, or r2_delete_local) — hand the browser the object in R2.

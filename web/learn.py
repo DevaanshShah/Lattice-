@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from core import storage, usage
 from core.textutil import extract_json
 from web import jobs as jobs_mod
+from web import ownership as own
 from web import seed
 
 
@@ -138,9 +139,14 @@ def _msg(role: str, kind: str, **extra) -> dict:
 _SYSTEM_FALLBACK = {"answer": "", "offer": False, "offer_label": "", "video_prompt": ""}
 
 
-def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
+def register(app, engine, queue: jobs_mod.JobQueue, *, owners: own.Ownership | None = None) -> ThreadStore:
     """Mount the Learn routes. Additive: no existing route or model changes."""
     store = ThreadStore(engine.root)
+    owners = owners or own.Ownership(engine.root, enforce=False)
+
+    def _load(tid: str) -> ThreadRecord:
+        owners.require(own.THREAD, tid)     # someone else's thread 404s like a missing one
+        return store.load(tid)
 
     def _client():
         get = getattr(engine, "_client_or_default", None)
@@ -230,6 +236,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     def create_thread(body: NewThread) -> dict:
         rec = ThreadRecord(id=uuid4().hex[:8], title=body.message[:60], created_at=time.time())
         store.save(rec)                                  # so _append_reply's edit() can load it back
+        owners.claim(own.THREAD, rec.id)
         usage.tag(surface="learn", kind="chat", project=rec.id)
         usage.record("create", surface="learn", project=rec.id, topic=rec.title)
         rec = _append_reply(rec.id, body.message, body.image)
@@ -237,22 +244,22 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
 
     @app.get("/api/learn/threads")
     def list_threads() -> dict:
-        return {"threads": store.list()}
+        return {"threads": owners.visible(own.THREAD, store.list())}
 
     @app.get("/api/learn/threads/{tid}")
     def get_thread(tid: str) -> dict:
-        return thread_dto(store.load(tid))
+        return thread_dto(_load(tid))
 
     @app.post("/api/learn/threads/{tid}/messages")
     def add_message(tid: str, body: NewMessage) -> dict:
-        store.load(tid)                                    # 404s up front, before the LLM call
+        _load(tid)                                         # 404s up front, before the LLM call
         usage.tag(surface="learn", kind="chat", project=tid)
         rec = _append_reply(tid, body.message, body.image)
         return thread_dto(rec)
 
     @app.post("/api/learn/threads/{tid}/video")
     def make_video(tid: str, body: MakeVideo) -> dict:
-        rec = store.load(tid)
+        rec = _load(tid)
         usage.tag(surface="learn")
         prompt = (body.prompt or "").strip()
         if body.message_id:
@@ -268,7 +275,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
     def refine_video(tid: str, mid: str, body: Refine) -> dict:
         """Re-plans and re-renders the WHOLE deck with the instruction folded in — not a per-slide
         patch (the deck path has no slide-level edit yet). Honest about that in the version note."""
-        rec = store.load(tid)
+        rec = _load(tid)
         usage.tag(surface="learn")
         src = next((m for m in rec.messages if m["id"] == mid and m.get("kind") == "video"), None)
         if not src:
@@ -281,7 +288,7 @@ def register(app, engine, queue: jobs_mod.JobQueue) -> ThreadStore:
 
     @app.get("/api/learn/threads/{tid}/video/{mid}")
     def get_video(tid: str, mid: str):
-        rec = store.load(tid)
+        rec = _load(tid)
         msg = next((m for m in rec.messages if m["id"] == mid), None)
         if not msg or not msg.get("mp4"):
             raise HTTPException(409, "video is not ready yet")

@@ -21,19 +21,42 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from core import storage, usage
 from core.config import settings
+from web import auth as auth_mod
 from web import jobs as jobs_mod
+from web import ownership as own
+from web import quota as quota_mod
 from web import users as users_mod
 from web.engine import Engine, ProjectNotFound, project_dto
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+_HERE = Path(__file__).resolve().parent
+# The UI lives in frontend/ (deployable on its own, e.g. Vercel). When it is not beside the backend
+# (a backend-only deploy), fall back to nothing: the backend then serves no page and the API only.
+ADMIN_ASSETS = _HERE / "static"             # the owner's console is part of the backend, not the UI
+
+
+def resolve_frontend(here: Path = _HERE) -> tuple[Path, Path]:
+    """(directory holding index.html, directory served at /static).
+
+    New layout: `frontend/` beside the backend. Old layout: the UI sat next to the admin console in
+    `web/static/`. A server that received the new Python files but not the new folder must keep
+    serving the UI it already had rather than a blank page, so the old location is the fallback.
+    """
+    new = here.parent / "frontend"
+    legacy = here / "static"
+    if not (new / "index.html").exists() and (legacy / "index.html").exists():
+        return legacy, legacy
+    return new, new / "static"
+
+
+FRONTEND_DIR, STATIC_DIR = resolve_frontend()
 
 
 # --- request bodies -------------------------------------------------------------------------
@@ -48,12 +71,6 @@ class CreateProject(BaseModel):
 class FromCodeReq(BaseModel):
     code: str = Field(..., min_length=1, max_length=20_000)    # snippet -> segment-by-segment walkthrough
     language: str | None = None
-    target_seconds: int | None = Field(None, ge=15, le=600)
-
-
-class FromImageReq(BaseModel):
-    image: str = Field(..., min_length=1)                      # data:image/...;base64,... -> derived topic
-    max_scenes: int | None = None
     target_seconds: int | None = Field(None, ge=15, le=600)
 
 
@@ -92,9 +109,14 @@ class RollbackReq(BaseModel):
     version: int
 
 
-def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None = None) -> FastAPI:
+def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None = None,
+               auth: auth_mod.AuthService | None = None) -> FastAPI:
     engine = engine or Engine()
     queue = queue or jobs_mod.JobQueue(workers=settings.job_workers)
+    # Google sign-in via Supabase. OFF (a pass-through) until LATTICE_SUPABASE_URL + _ANON_KEY are set.
+    auth = auth or auth_mod.AuthService.from_settings(settings)
+    # Each account sees only what it made. Enforced only with sign-in on (shared, as before, without).
+    owners = own.Ownership(engine.root, enforce=auth.enabled)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -111,26 +133,70 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
             except Exception as e:  # noqa: BLE001
                 print(f"[startup] recovery skipped: {type(e).__name__}: {e}")
         yield
+        await auth.aclose()
 
     # Anonymous per-browser identity, applied to EVERY route as a global dependency: one place
     # decides who a request belongs to, so no endpoint has to remember to attribute itself.
     user_store = users_mod.UserStore(settings.out_dir)
+    # Per-account limits (web/quota.py). Jobs are charged inside JobQueue.submit; the guard below
+    # covers the model spend that never goes through the queue (planning, Learn chat).
+    quota = quota_mod.Quota(
+        settings.out_dir, enforce=auth.enabled, videos=settings.quota_videos_per_day,
+        edits=settings.quota_edits_per_day, spend_usd=settings.quota_spend_usd_per_day,
+        global_spend_usd=settings.quota_global_spend_usd_per_day,
+        exempt=settings.quota_exempt,
+        email_of=lambda uid: (user_store.get(uid).email if user_store.get(uid) else ""))
+    queue.quota = quota
+
+    async def spend_guard(request: Request) -> None:
+        path = request.url.path
+        if request.method == "POST" and not path.startswith(("/auth", "/api/admin"))                 and not path.endswith("/cancel"):
+            quota.check_spend(usage.current().user)     # runs after identity: it is a later dependency
+
     app = FastAPI(title="Lattice", version="0.1.0", lifespan=lifespan,
-                  dependencies=[Depends(users_mod.dependency(user_store))])
+                  dependencies=[Depends(users_mod.dependency(user_store)), Depends(spend_guard)])
+
+    @app.exception_handler(quota_mod.QuotaExceeded)
+    async def _over_quota(_request: Request, exc: quota_mod.QuotaExceeded):
+        return JSONResponse({"detail": exc.message}, status_code=429,
+                            headers={"Retry-After": str(exc.retry_after)})
+
+    @app.get("/api/quota")
+    def my_quota() -> dict:
+        return quota.status(usage.current().user)
+    # Sign-in resolves the session BEFORE routing, so the identity dependency above sees the user.
+    auth_mod.install(app, auth)
+    # A separately hosted frontend talks to this API cross-origin. Off unless configured, so a
+    # single-server deploy has no CORS surface at all. Added AFTER the auth middleware, which makes it
+    # the OUTER one: a preflight (which carries no cookies) is answered before the session gate sees it,
+    # and a 401 still carries the headers the browser needs to read it.
+    frontend_origins = [o.strip().rstrip("/") for o in settings.frontend_origins.split(",") if o.strip()]
+    if frontend_origins:
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(CORSMiddleware, allow_origins=frontend_origins, allow_credentials=True,
+                           allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+                           allow_headers=["Content-Type"], max_age=600)
 
     def _load_or_404(pid: str):
+        owners.require(own.VIDEO, pid)      # someone else's project 404s like a missing one
         try:
             return engine.load(pid)
         except ProjectNotFound:
             raise HTTPException(404, f"no project {pid!r}")
 
+    def _job_or_404(job_id: str) -> jobs_mod.Job:
+        job = queue.get(job_id)
+        if job is None or not owners.can_access_job(job):
+            raise HTTPException(404, f"no job {job_id!r}")
+        return job
+
     # --- slide decks (additive path: HTML slides + Manim only where the topic needs it) ----
     from web import decks as decks_mod
-    deck_store = decks_mod.register(app, engine, queue)
+    deck_store = decks_mod.register(app, engine, queue, owners=owners)
 
     # --- learn chat (additive path: fast text turns, a deck video only when it's asked for) ----
     from web import learn as learn_mod
-    learn_store = learn_mod.register(app, engine, queue)
+    learn_store = learn_mod.register(app, engine, queue, owners=owners)
 
     # --- admin console (usage, spend, per-user activity; token- or loopback-gated) ----------
     from web import admin as admin_mod
@@ -154,6 +220,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         if body.renderer == "browser_v2":
             kwargs.update(renderer="browser_v2", recipe=body.recipe or "auto")
         pid, project = engine.plan(body.topic, **kwargs)
+        owners.claim(own.VIDEO, pid)
         usage.record("create", surface="video", project=pid, topic=body.topic)
         return project_dto(pid, project)
 
@@ -167,25 +234,13 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
                                                  target_seconds=body.target_seconds, log=lambda _m: None)
         except (ValueError, CodeWalkthroughError) as e:   # empty snippet or an unparseable walkthrough
             raise HTTPException(422, str(e))
-        usage.record("create", surface="video", project=pid, topic=project.topic)
-        return project_dto(pid, project)
-
-    @app.post("/api/projects/from-image")
-    def create_from_image(body: FromImageReq) -> dict:
-        from web.seed import SeedError
-        pid = uuid4().hex[:8]
-        usage.tag(surface="video", kind="plan-image", project=pid)
-        try:
-            pid, project = engine.plan_from_image(body.image, max_scenes=body.max_scenes, pid=pid,
-                                                  target_seconds=body.target_seconds, log=lambda _m: None)
-        except SeedError as e:   # bad/unsupported/oversize image or empty vision reply
-            raise HTTPException(422, str(e))
+        owners.claim(own.VIDEO, pid)
         usage.record("create", surface="video", project=pid, topic=project.topic)
         return project_dto(pid, project)
 
     @app.get("/api/projects")
     def list_projects() -> dict:
-        return {"projects": engine.list_projects()}
+        return {"projects": owners.visible(own.VIDEO, engine.list_projects())}
 
     @app.get("/api/projects/{pid}")
     def get_project(pid: str) -> dict:
@@ -291,10 +346,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     # --- jobs: status + streaming (FR-24 / FR-29) -----------------------------------------
     @app.get("/api/jobs/{job_id}")
     def job_status(job_id: str) -> dict:
-        job = queue.get(job_id)
-        if job is None:
-            raise HTTPException(404, f"no job {job_id!r}")
-        return job.to_dict()
+        return _job_or_404(job_id).to_dict()
 
     @app.post("/api/jobs/{job_id}/cancel")
     def job_cancel(job_id: str) -> dict:
@@ -302,17 +354,13 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         next checkpoint — between model calls, repair attempts, critic rounds and scenes — so this
         returns "asked", not "already stopped". Worst case it finishes one in-flight render first.
         Idempotent, and a job that already ended reports accepted=False rather than erroring."""
-        job = queue.get(job_id)
-        if job is None:
-            raise HTTPException(404, f"no job {job_id!r}")
+        job = _job_or_404(job_id)
         accepted = job.cancel()
         return {"accepted": accepted, "status": job.status, "progress": job.progress()}
 
     @app.get("/api/jobs/{job_id}/events")
     def job_events(job_id: str, cursor: int = Query(0, ge=0)) -> dict:
-        job = queue.get(job_id)
-        if job is None:
-            raise HTTPException(404, f"no job {job_id!r}")
+        job = _job_or_404(job_id)
         evs = job.events_since(cursor)
         return {
             "status": job.status,
@@ -324,9 +372,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
 
     @app.get("/api/jobs/{job_id}/stream")
     def job_stream(job_id: str):
-        job = queue.get(job_id)
-        if job is None:
-            raise HTTPException(404, f"no job {job_id!r}")
+        job = _job_or_404(job_id)
 
         def gen():
             cursor = 0
@@ -423,14 +469,18 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
     # --- frontend -------------------------------------------------------------------------
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    if ADMIN_ASSETS.exists():
+        app.mount("/admin-assets", StaticFiles(directory=str(ADMIN_ASSETS)), name="admin-assets")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        idx = STATIC_DIR / "index.html"
-        return idx.read_text(encoding="utf-8") if idx.exists() else "<h1>Lattice</h1>"
+        idx = FRONTEND_DIR / "index.html"
+        return idx.read_text(encoding="utf-8") if idx.exists() else "<h1>Lattice API</h1>"
 
     app.state.engine = engine
     app.state.queue = queue
+    app.state.owners = owners
+    app.state.quota = quota
     return app
 
 

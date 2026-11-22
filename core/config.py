@@ -62,7 +62,27 @@ class Settings(BaseSettings):
     admin_token: str = ""
     job_workers: int = 2            # web/jobs.py::JobQueue thread pool (concurrent build jobs)
     scene_workers: int = 3          # composition.decoupled.build_video per-build scene fan-out
-    web_users: str = ""             # "alice:<sha256hex>,bob:<sha256hex>" — empty = auth OFF (local dev)
+
+    # --- sign-in: Google via Supabase Auth (web/auth.py) ---
+    # Empty URL or anon key = sign-in OFF: the app runs on the anonymous per-browser cookie
+    # exactly as before (local dev, tests). Fill both in and every /api route requires a session.
+    supabase_url: str = ""            # https://<project-ref>.supabase.co
+    supabase_anon_key: str = ""       # Project Settings -> API -> anon / publishable key
+    supabase_jwt_secret: str = ""     # optional: legacy HS256 secret; lets tokens verify offline.
+                                      # Unset + asymmetric keys -> JWKS; unset + HS256 -> asks Supabase.
+    auth_required: bool = True        # with sign-in ON: False keeps the app open to guests too
+    auth_allowed_emails: str = ""     # invite list, comma-separated: "a@x.com, @school.edu". Empty = open
+    frontend_origins: str = ""        # SPLIT DEPLOY: comma-separated origins of a separately hosted frontend,
+                                      # e.g. "https://lattice.example.com". Empty = the backend serves the UI itself.
+    public_url: str = ""              # e.g. https://lattice.example.com — the OAuth return address.
+                                      # Empty = derived from the request (fine locally; set it in prod)
+
+    # --- per-account limits (web/quota.py): a rolling 24 hours, enforced only with sign-in on ---
+    quota_videos_per_day: int = 5        # whole videos: build, deck, lesson video. 0 = unlimited
+    quota_edits_per_day: int = 40        # scene regenerate / tweak / narration / insert. 0 = unlimited
+    quota_spend_usd_per_day: float = 1.0   # model spend ceiling per account (also covers chat/plans)
+    quota_global_spend_usd_per_day: float = 3.0   # ALL accounts together; bounds the bill however many sign up. 0 = off
+    quota_exempt: str = ""               # comma-separated emails or user ids with no limit (the owner)
 
     # --- vision critic (M2) ---
     critic_frames: int = 2            # keyframes per critique (fewer frames = fewer image tokens)

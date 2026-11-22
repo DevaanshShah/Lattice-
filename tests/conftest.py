@@ -32,3 +32,14 @@ def jev_stays_offline(monkeypatch):
     wants a Jev answer switches it on itself and supplies the answer."""
     from core.config import settings
     monkeypatch.setattr(settings, "jev_enabled", False)
+
+
+@pytest.fixture(autouse=True)
+def sign_in_stays_off(monkeypatch):
+    """A developer's `.env` may hold real Supabase keys, which would put every `create_app()` in
+    the suite behind the sign-in gate (and reach for the network). Tests that exercise sign-in
+    build their own `AuthService` with a fake Supabase (tests/test_auth.py)."""
+    from core.config import settings
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_anon_key", "")
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "")
