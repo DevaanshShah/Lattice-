@@ -177,7 +177,7 @@
       </div>`;
     }
     return `<div style="${box}">
-      <video src="/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}"
+      <video src="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}"
         controls style="display:block;width:100%;aspect-ratio:16/9;background:#000;"></video>
       <div style="padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <div style="display:flex;align-items:baseline;gap:12px;min-width:0;">
@@ -185,7 +185,7 @@
           <span style="${MONO}font-size:10.5px;color:var(--faint);white-space:nowrap;">v${m.version || 1}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <a href="/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}" download
+          <a href="${U(`/api/learn/threads/${encodeURIComponent(L.tid)}/video/${encodeURIComponent(m.id)}`)}" download
             style="padding:8px 13px;border-radius:6px;border:1px solid var(--line);color:var(--muted);
             text-decoration:none;${MONO}font-size:11px;letter-spacing:0.06em;text-transform:uppercase;">Download</a>
           <div data-act="learn-refine-start" data-id="${m.id}" style="display:flex;align-items:center;gap:7px;
@@ -444,6 +444,16 @@
     // learn-input/gallery-search, without learn.js needing a parallel wiring system of its own.
     send, setSearch,
     reset() { L.tid = null; L.thread = null; L.refining = null; L.videoMode = false; },
+    // Reopen a remembered thread on return. Quiet on failure (deleted thread, other account): the
+    // user just lands on the empty start state instead of an alert they didn't ask for.
+    // L.tid is only set once the thread has loaded: a message typed in the meantime starts a new
+    // thread instead of posting into one that may turn out not to exist.
+    restore(tid) {
+      if (!tid) return;
+      api("GET", `/api/learn/threads/${encodeURIComponent(tid)}`)
+        .then(t => { if (!L.tid) { L.tid = t.id; L.thread = t; render(); } })
+        .catch(() => {});
+    },
     _state: L,
   };
 })();

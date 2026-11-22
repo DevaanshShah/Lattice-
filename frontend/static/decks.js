@@ -150,10 +150,10 @@
     return `<div style="max-width:900px;margin:0 auto;padding:40px 24px;">
       ${label("Done")}
       <div style="${DISPLAY}font-size:26px;font-weight:600;color:var(--text);margin-bottom:16px;">${esc(D.deck.title)}</div>
-      <video src="/api/decks/${encodeURIComponent(D.deck.id)}/video" controls autoplay
+      <video src="${U(`/api/decks/${encodeURIComponent(D.deck.id)}/video`)}" controls autoplay
         style="width:100%;border-radius:10px;border:1px solid var(--line2);background:#000;"></video>
       <div style="display:flex;gap:10px;margin-top:18px;">
-        <a href="/api/decks/${encodeURIComponent(D.deck.id)}/video" download
+        <a href="${U(`/api/decks/${encodeURIComponent(D.deck.id)}/video`)}" download
           style="padding:10px 18px;border-radius:7px;background:var(--accent);color:var(--ink);text-decoration:none;
           ${MONO}font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">Download</a>
         <button data-act="deck-back" style="padding:10px 18px;border-radius:7px;background:transparent;

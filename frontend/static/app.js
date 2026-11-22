@@ -19,6 +19,8 @@ const state = {
   editTab: "frames",              // frames | sound | motion  (video-editor edit mode)
   dragFrom: null,
   dev: { open: false, tab: "log", inspect: null, subtab: "code", source: null, loading: false, autoscroll: true },
+  auth: { enabled: false, required: false, user: null, error: "" },   // GET /api/auth/me (web/auth.py)
+  quota: null,                    // GET /api/quota (web/quota.py): this account's 24-hour allowance
 };
 
 const SUGGEST = ["the Fourier series", "how neural networks learn", "how RSA encryption works", "eigenvectors intuitively"];
@@ -37,21 +39,152 @@ const seedOf = (s) => 1.2 + (String(s).split("").reduce((a, c) => a + c.charCode
 async function api(method, url, body) {
   const opt = { method, headers: {} };
   if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
-  const r = await fetch(url, opt);
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  opt.credentials = "include";                         // split deploy: send the sign-in cookies cross-origin
+  const r = await fetch(U(url), opt);
+  const err = r.ok ? null : await r.json().catch(() => ({}));
+  // The gate's own 401 is the proof sign-in is on, even if /api/auth/me couldn't be read at boot.
+  if (r.status === 401 && (state.auth.enabled || err.detail === "sign in required")) {
+    state.auth.enabled = true; state.auth.required = true;
+    signedOut(); throw new Error("Please sign in to continue.");
+  }
+  if (r.status === 429) loadQuota();                  // over the limit: the meter should say so too
+  if (!r.ok) throw new Error(err.detail || r.statusText);
   return r.json();
 }
-async function loadProjects() { try { state.projects = (await api("GET", "/api/projects")).projects || []; } catch { state.projects = []; } }
 
+// ---- sign-in (Google via Supabase; the session lives in httponly cookies, never in JS) -------
+const signedIn = () => !!state.auth.user;
+const needsSignIn = () => state.auth.enabled && state.auth.required && !signedIn();
+async function loadAuth() {
+  try {
+    const r = await fetch(U("/api/auth/me"), { credentials: "include" });
+    if (r.ok) Object.assign(state.auth, await r.json());
+  } catch {}                                          // unreachable server: behave as sign-in OFF
+  // a failed round trip comes back as /?auth_error=… — show it once, then tidy the address bar
+  const q = new URLSearchParams(location.search), err = q.get("auth_error");
+  if (err) {
+    state.auth.error = err; q.delete("auth_error");
+    history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash);
+  }
+}
+function signedOut() {
+  state.auth.user = null;
+  if (state.auth.required) { state.screen = "signin"; render(); }
+}
+// On a split deploy the sign-in starts on the API's address, so it must be told to come back HERE (a full URL).
+function signInHref() { return `${U("/auth/login")}?next=${encodeURIComponent(window.LATTICE_API ? location.href : location.pathname + location.search)}`; }
+// Sign-in REPLACES this history entry rather than adding one. Otherwise the Back gesture after signing
+// in returns to Google's account page and replays a spent one-time token, which Supabase answers with
+// "bad_oauth_state" — a confusing error page for someone who was already signed in.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest('a[href*="/auth/login"]');
+  if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault(); location.replace(a.getAttribute("href"));
+});
+// ---- remember where the user was ---------------------------------------------------------
+// Coming back lands you where you left off: the tab, the open video or lesson thread, the theme.
+// Kept per account (guests share one slot) in this browser. Only ids are stored; the content is
+// re-fetched from the server, so nothing goes stale and nothing private sits in localStorage.
+// (Staying signed in is the server's job: the refresh cookie in web/auth.py.)
+const UI_VERSION = 1;
+const RESTORABLE = new Set(["landing", "studio", "learn", "slides", "gallery"]);
+const uiKey = () => `lattice:ui:v${UI_VERSION}:${state.auth.user ? state.auth.user.id : "guest"}`;
+let uiSaved = "";
+function rememberUI() {
+  if (state.screen === "signin") return;
+  const learn = window.LatticeLearn && window.LatticeLearn._state;
+  const snap = JSON.stringify({
+    screen: state.screen,
+    project: state.screen === "studio" && state.phase === "result" && state.project ? state.project.id : null,
+    thread: learn ? learn.tid : null,
+    theme: state.theme,
+  });
+  if (snap === uiSaved) return;                       // render() runs often; write only on change
+  uiSaved = snap;
+  try { localStorage.setItem(uiKey(), snap); } catch {}   // private mode / full storage: just forget
+}
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute("data-theme", theme);
+}
+async function restoreUI() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(uiKey()) || "null"); } catch {}
+  if (!saved || typeof saved !== "object") return;
+  if (saved.theme === "light" || saved.theme === "dark") applyTheme(saved.theme);
+  if (saved.thread && window.LatticeLearn) window.LatticeLearn.restore(saved.thread);
+  if (saved.project) {
+    try {
+      state.project = await api("GET", `/api/projects/${encodeURIComponent(saved.project)}`);
+      state.screen = "studio"; state.phase = "result"; state.selected = 0;
+      return;
+    } catch { saved.screen = "landing"; }             // gone or not ours any more: start fresh
+  }
+  if (RESTORABLE.has(saved.screen)) state.screen = saved.screen;
+}
+async function signOut() {
+  const who = state.auth.user && state.auth.user.email ? " of " + state.auth.user.email : "";
+  if (!confirm(`Sign out${who}?`)) return;
+  try { await fetch(U("/auth/logout"), { method: "POST", credentials: "include" }); } catch {}
+  location.href = "/";
+}
+async function loadProjects() { try { state.projects = (await api("GET", "/api/projects")).projects || []; } catch { state.projects = []; } loadQuota(); }
+// ---- the 24-hour allowance (web/quota.py) --------------------------------------------------
+// Painted in place rather than through render(), so a refresh never steals focus from an input.
+async function loadQuota() {
+  if (!state.auth.enabled || !signedIn()) { state.quota = null; paintQuota(); return; }
+  try { state.quota = await api("GET", "/api/quota"); } catch { return; }
+  paintQuota();
+}
+function paintQuota() { const el = $("quota-meter"); if (el) el.outerHTML = quotaMeter(); }
+function quotaMeter() {
+  const v = state.quota && state.quota.enforced && state.quota.video;
+  if (!v || !v.limit) return `<div id="quota-meter"></div>`;          // not limited: show nothing, not a fake "∞"
+  const left = Math.max(0, v.limit - v.used), full = left === 0, mins = Math.ceil((v.free_in_s || 0) / 60);
+  const when = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${Math.max(1, mins)}m`;
+  const hint = full ? `Your next video is free in ${when}` : `${left} left in any 24 hours`;
+  return `<div id="quota-meter" title="Videos you can make in a rolling 24 hours" style="padding:14px 16px;border-top:1px solid var(--line);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="${MONO}font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Videos · 24h</span><span style="font-size:12px;color:${full ? "var(--danger)" : "var(--text)"};font-weight:500;${MONO}">${v.used} / ${v.limit}</span></div>
+      <div style="height:4px;border-radius:4px;background:var(--raise2);overflow:hidden;"><div style="height:100%;width:${Math.min(100, Math.round(100 * v.used / v.limit))}%;border-radius:4px;background:${full ? "var(--danger)" : "var(--accent)"};"></div></div>
+      <div style="${MONO}font-size:10.5px;color:var(--faint);margin-top:6px;">${hint}</div>
+    </div>`;
+}
+
+// Follow a job to its end. The live stream (SSE) is the fast path, but it can be cut by a proxy, a
+// phone changing networks or a sleeping tab, and a cut stream used to read as "the build ended". So
+// when it drops BEFORE the job's own last word, fall back to polling the same events by cursor until
+// the job reports a terminal status. A stream that dies is not a job that finished.
+const JOB_TERMINAL = ["done", "failed", "cancelled"];
 function followJob(jobId, onProgress) {
   return new Promise((resolve) => {
-    let final = null;                                  // the job's own last word: done | failed | cancelled
-    const es = new EventSource(`/api/jobs/${jobId}/stream`);
+    let final = null, finished = false, cursor = 0;    // final = the job's own last word
+    const started = Date.now();
+    const log = (m) => { state.gen.log.push(m); if (state.gen.log.length > 3000) state.gen.log.splice(0, state.gen.log.length - 3000); appendDevLog(m); };
+    const finish = (job) => { if (finished) return; finished = true; resolve(job); };
+    const es = new EventSource(U(`/api/jobs/${jobId}/stream`), { withCredentials: true });
     es.addEventListener("progress", (e) => { try { const p = JSON.parse(e.data); onProgress(p); refreshDevStatus(p); } catch {} });
-    es.addEventListener("log", (e) => { try { const m = JSON.parse(e.data).message; state.gen.log.push(m); if (state.gen.log.length > 3000) state.gen.log.splice(0, state.gen.log.length - 3000); appendDevLog(m); } catch {} });
+    es.addEventListener("log", (e) => { try { const d = JSON.parse(e.data); cursor = Math.max(cursor, (d.seq == null ? -1 : d.seq) + 1); log(d.message); } catch {} });
     es.addEventListener("status", (e) => { try { final = JSON.parse(e.data); } catch {} });
-    es.addEventListener("done", () => { es.close(); resolve(final); });
-    es.onerror = () => { es.close(); resolve(final); };
+    es.addEventListener("done", () => { es.close(); finish(final); });
+    es.onerror = () => { es.close(); if (final) finish(final); else if (!finished) poll(); };
+
+    async function poll() {
+      let failures = 0;
+      while (!finished) {
+        try {
+          const d = await api("GET", `/api/jobs/${jobId}/events?cursor=${cursor}`);
+          failures = 0; cursor = d.next_cursor;
+          (d.events || []).forEach((ev) => log(ev.message));
+          if (d.progress) { onProgress(d.progress); refreshDevStatus(d.progress); }
+          if (JOB_TERMINAL.includes(d.status)) return finish(await api("GET", `/api/jobs/${jobId}`));
+        } catch {
+          // a lost job (server restarted) or a dead session will not recover: stop, don't spin forever
+          if (++failures >= 30 || (state.auth.required && !signedIn())) return finish(final);
+        }
+        if (Date.now() - started > 2 * 3600 * 1000) return finish(final);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
   });
 }
 // Ask a running build to stop. Cooperative on the server, so the UI says "Stopping…" and waits for
@@ -213,6 +346,8 @@ const label = (txt, mb = 16) => `<div style="${MONO}font-size:11px;letter-spacin
 
 function render() {
   const app = $("app");
+  if (needsSignIn()) state.screen = "signin";
+  if (state.screen === "signin") { app.innerHTML = signInScreen(); wire(); return; }
   app.innerHTML = topbar() + (
     state.screen === "landing" ? landing() :
     state.screen === "learn" ? window.LatticeLearn.screen() :
@@ -220,6 +355,7 @@ function render() {
     state.screen === "gallery" ? gallery() : studio()
   ) + devToggle() + devConsole();
   wire();
+  rememberUI();
   if (state.dev.open && state.dev.tab === "log") scrollDevLog();
 }
 
@@ -362,13 +498,7 @@ function topbar() {
   const tab = (id, txt, on) => `<div data-act="tab-${id}" style="${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;padding-bottom:3px;color:${on ? "var(--text)" : "var(--muted)"};border-bottom:1.5px solid ${on ? "var(--accent)" : "transparent"};">${txt}</div>`;
   return `<div style="height:56px;flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:var(--bg2);position:relative;z-index:40;">
     <div data-act="home" style="display:flex;align-items:center;gap:11px;cursor:pointer;">
-      <div style="width:24px;height:24px;position:relative;">
-        <div style="position:absolute;inset:0;border:1.5px solid var(--accent);border-radius:3px;"></div>
-        <div style="position:absolute;left:33%;top:0;bottom:0;width:1px;background:var(--accent);opacity:0.6;"></div>
-        <div style="position:absolute;left:66%;top:0;bottom:0;width:1px;background:var(--accent);opacity:0.6;"></div>
-        <div style="position:absolute;top:33%;left:0;right:0;height:1px;background:var(--accent);opacity:0.6;"></div>
-        <div style="position:absolute;top:66%;left:0;right:0;height:1px;background:var(--accent);opacity:0.6;"></div>
-      </div>
+      ${logoMark(24)}
       <span style="${DISPLAY}font-weight:600;font-size:18px;letter-spacing:-0.02em;color:var(--text);">Lattice</span>
     </div>
     <div style="display:flex;align-items:center;gap:26px;">
@@ -377,7 +507,53 @@ function topbar() {
     <div style="display:flex;align-items:center;gap:12px;">
       <div data-act="replay-intro" title="Replay intro" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);font-size:15px;">↺</div>
       <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);">${state.theme === "dark" ? ICON.moon : ICON.sun}</div>
-      <div style="width:26px;height:26px;border-radius:50%;background:var(--raise2);border:1px solid var(--line2);display:grid;place-items:center;font-size:11px;${MONO}color:var(--text);">AD</div>
+      ${accountChip()}
+    </div>
+  </div>`;
+}
+function logoMark(px) {
+  const bar = (pos) => `<div style="position:absolute;${pos}background:var(--accent);opacity:0.6;"></div>`;
+  return `<div style="width:${px}px;height:${px}px;position:relative;flex:0 0 ${px}px;">
+    <div style="position:absolute;inset:0;border:1.5px solid var(--accent);border-radius:3px;"></div>
+    ${bar("left:33%;top:0;bottom:0;width:1px;")}${bar("left:66%;top:0;bottom:0;width:1px;")}
+    ${bar("top:33%;left:0;right:0;height:1px;")}${bar("top:66%;left:0;right:0;height:1px;")}
+  </div>`;
+}
+function initials(u) {
+  const parts = (u.name || u.email || "?").trim().split(/[\s@._-]+/).filter(Boolean);
+  return ((parts[0] || "?")[0] + (parts.length > 1 ? parts[1][0] : "")).toUpperCase();
+}
+function accountChip() {
+  if (!state.auth.enabled) return "";
+  const u = state.auth.user;
+  if (!u) return `<a href="${esc(signInHref())}" style="${MONO}font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text);text-decoration:none;padding:8px 12px;border:1px solid var(--line2);border-radius:6px;">Sign in</a>`;
+  const label = esc(`${u.name || u.email} — sign out`);
+  // Google avatars refuse hotlinks that send a Referer, hence referrerpolicy. A broken image
+  // removes itself and the initials underneath show through.
+  const face = u.avatar
+    ? `<img src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">`
+    : "";
+  return `<div data-act="signout" title="${label}" aria-label="${label}" role="button" style="width:30px;height:30px;flex:0 0 30px;border-radius:50%;border:1px solid var(--line2);background:var(--raise2);display:grid;place-items:center;overflow:hidden;cursor:pointer;position:relative;font-size:11px;${MONO}color:var(--text);">
+    <span>${esc(initials(u))}</span>${face}
+  </div>`;
+}
+
+const GOOGLE_G = `<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+function signInScreen() {
+  const err = state.auth.error;
+  return `<div class="lt-scroll" style="flex:1;overflow-y:auto;position:relative;display:grid;place-items:center;padding:24px 16px;">
+    <canvas data-lattice style="position:absolute;inset:0;width:100%;height:100%;opacity:0.35;pointer-events:none;"></canvas>
+    <div class="lt-fade" style="position:relative;width:100%;max-width:400px;box-sizing:border-box;border:1px solid var(--line2);border-radius:14px;background:var(--raise);padding:36px 28px 30px;">
+      <div style="display:flex;align-items:center;gap:11px;margin-bottom:28px;">
+        ${logoMark(26)}
+        <span style="${DISPLAY}font-weight:600;font-size:19px;letter-spacing:-0.02em;color:var(--text);">Lattice</span>
+      </div>
+      <h1 style="${DISPLAY}font-size:30px;line-height:1.05;letter-spacing:-0.03em;font-weight:600;margin:0 0 10px;color:var(--text);">Sign in to start making videos</h1>
+      <p style="font-size:15px;line-height:1.5;color:var(--muted);margin:0 0 26px;">Use your Google account to continue to Lattice.</p>
+      <a href="${esc(signInHref())}" style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-size:15px;font-weight:500;text-decoration:none;">
+        ${GOOGLE_G}<span>Continue with Google</span>
+      </a>
+      ${err ? `<div role="alert" style="margin-top:16px;padding:10px 12px;border-radius:8px;border:1px solid rgba(248,113,113,0.4);background:rgba(248,113,113,0.08);color:#fca5a5;font-size:13.5px;line-height:1.45;">${esc(err)}</div>` : ""}
     </div>
   </div>`;
 }
@@ -412,7 +588,7 @@ function landing() {
         </div>
         <div class="lt-thumb" data-act="go-teach" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
           <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Teach</div>
-          <div style="font-size:14px;color:var(--muted);line-height:1.45;">Build a lesson from a topic, image, or code — then edit scenes, sound, and timing in the studio.</div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.45;">Build a lesson from a topic or code — then edit scenes, sound, and timing in the studio.</div>
         </div>
       </div>
       <div class="lt-fade" style="max-width:640px;">
@@ -460,10 +636,7 @@ function sidebar() {
     <div style="padding:0 16px 10px;"><div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:6px;background:var(--raise);"><span style="color:var(--faint);font-size:13px;">⌕</span><input id="side-search" value="${esc(state.sideSearch)}" placeholder="Search projects" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);min-width:0;" /></div></div>
     ${label("Recent", 6).replace("margin-bottom:6px", "margin:8px 16px 6px")}
     <div class="lt-scroll" style="flex:1;overflow-y:auto;padding:2px 10px 10px;min-height:0;">${rows}</div>
-    <div style="padding:14px 16px;border-top:1px solid var(--line);">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="${MONO}font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Credits</span><span style="font-size:12px;color:var(--text);font-weight:500;${MONO}">∞</span></div>
-      <div style="height:4px;border-radius:4px;background:var(--raise2);overflow:hidden;"><div style="height:100%;width:100%;border-radius:4px;background:var(--accent);"></div></div>
-    </div>
+    ${quotaMeter()}
   </div>`;
 }
 
@@ -697,7 +870,7 @@ function phaseResult() {
   const sel = scenes[state.selected] || scenes[0];
   const pid = state.project.id;
   const bust = Date.now();
-  const player = sel && sel.built ? `<video id="main-player" src="/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
+  const player = sel && sel.built ? `<video id="main-player" src="${U(`/api/projects/${pid}/scenes/${sel.index}/preview?t=${bust}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#0B0B10;"></video>` : `<div style="position:absolute;inset:0;display:grid;place-items:center;${MONO}font-size:12px;color:var(--faint);">Scene not rendered</div>`;
   return `<div class="lt-fade" style="max-width:1140px;margin:0 auto;padding:26px 26px 64px;">
     <div style="width:100%;max-width:calc(54vh * 16 / 9);margin:0 auto;border-radius:8px;overflow:hidden;background:#0B0B10;border:1px solid var(--line);"><div style="position:relative;aspect-ratio:16/9;">${player}</div></div>
     ${timeline(scenes)}
@@ -768,7 +941,7 @@ function editorPanel(sel) {
   const browserV2 = state.project && state.project.renderer === "browser_v2";
   return `<div class="lt-snap" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
     <div>
-      <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video src="/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
+      <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video src="${U(`/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
       <div style="${DISPLAY}font-size:19px;font-weight:600;color:var(--text);letter-spacing:-0.015em;margin-top:14px;">${esc(sel.title)}</div>
       <div style="${MONO}font-size:11px;color:var(--faint);margin-top:3px;">scene ${state.selected + 1} of ${state.project.scenes.length}</div>
     </div>
@@ -854,7 +1027,7 @@ function handle(act, el) {
     case "tab-studio": state.screen = "studio"; render(); break;
     case "tab-slides": state.screen = "slides"; render(); break;
     case "tab-gallery": state.screen = "gallery"; render(); break;
-    case "theme": state.theme = state.theme === "dark" ? "light" : "dark"; document.documentElement.setAttribute("data-theme", state.theme); break;
+    case "theme": applyTheme(state.theme === "dark" ? "light" : "dark"); rememberUI(); break;
     case "open": openProject(id); break;
     case "new": state.screen = "studio"; state.phase = "prompt"; state.project = null; state.outline = []; render(); break;
     case "landing-go": planTopic($("landing-input").value); break;
@@ -892,7 +1065,8 @@ function handle(act, el) {
     case "dl-toggle": state.downloadOpen = !state.downloadOpen; render(); break;
     case "sub-toggle": state.subtitles = !state.subtitles; render(); break;
     case "fmt": state.format = v; render(); break;
-    case "do-download": window.open(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}&format=${state.format}`, "_blank"); state.downloadOpen = false; render(); break;
+    case "do-download": window.open(U(`/api/projects/${pid}/download?subtitles=${state.subtitles ? "burn" : "none"}&format=${state.format}`), "_blank"); state.downloadOpen = false; render(); break;
+    case "signout": signOut(); break;
     case "dev-toggle": state.dev.open = !state.dev.open; render(); break;
     case "dev-tab": state.dev.tab = v; render(); break;
     case "dev-clear": state.gen.log = []; render(); break;
@@ -919,6 +1093,9 @@ function promptInsert(pos) {
   document.documentElement.setAttribute("data-theme", state.theme);
   demoStart = performance.now() / 1000;
   RAF = requestAnimationFrame(loop);
+  await loadAuth();
+  if (needsSignIn()) { render(); return; }
+  await restoreUI();
   render();
   await loadProjects();
   render();

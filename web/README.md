@@ -6,7 +6,7 @@ The browser skin over the engine, so a non-coder never sees Python. Built in **M
 - `engine.py` — the facade the HTTP layer talks to. Adds only MULTI-PROJECT workspaces (`out/web/<pid>/`); everything else delegates to planner / `composition.video` / `composition.regen` / `editing.*` / `composition.export`.
 - `app.py` — FastAPI app (`create_app(engine, queue)` is injectable for tests). Prompt → outline-approval gate → async build → per-scene preview/regenerate/tweak/narration/reorder/insert/delete → download (**FR-28**). Quality toggle preview|final on every render endpoint (**FR-26**).
 - `jobs.py` — `JobQueue`: render jobs are async on a bounded thread pool, status queued → running → done/failed with per-scene state; users don't block each other (**FR-24**). Append-only event log + replay cursor backs SSE streaming so the user reviews scene 1 while scene 8 renders (**FR-29**).
-- `static/` — the thin frontend (`index.html` + `app.js` + `style.css`).
+- `static/` — the owner's admin console only (`admin.html/js/css`). The UI is in `../frontend/`, which can be deployed on its own.
 - `export` — `composition/export.py`: download the final MP4, with merged captions as a burned-in track or a separate `.srt` (**FR-30**).
 
 Pairs with `render/sandbox` hardening (**FR-23**): resource caps (`--memory`/`--cpus`/`--pids-limit`), wall-clock container kill, opt-in read-only root FS + tmpfs, all on top of the day-one no-network + non-root + `--rm` guarantees. Containment harness: `lattice render-sandbox <file.py>`.

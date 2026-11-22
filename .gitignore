@@ -62,3 +62,8 @@ voices-v1.0.bin
 
 # graphify knowledge-graph tool output: machine-local paths to this Python and repo root
 graphify-out/
+site-out/
+frontend-out/
+
+# The landing video the UI plays on its home screen (everything else .mp4 is a render artifact).
+!frontend/static/fourier.mp4
