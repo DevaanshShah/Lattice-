@@ -10,5 +10,17 @@ __DOMAIN__ {
 	request_body {
 		max_size 12MB          # an attached image is a base64 data URL in the JSON body
 	}
+	# Browser-side hardening. HSTS pins https for a year; the rest stop the app being framed by another
+	# site, stop type-sniffing of uploads, and keep the sign-in URL out of outgoing Referer headers.
+	# No CSP on purpose: the UI is built from inline styles, so a strict one would break it, and a loose
+	# one is theatre. No includeSubDomains: on a shared domain (duckdns.org) it is not ours to claim.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
 	encode zstd gzip
 }

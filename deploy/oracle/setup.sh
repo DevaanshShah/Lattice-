@@ -20,8 +20,10 @@ say() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
 
 say "1/7  system packages"
 sudo apt-get update -qq
-sudo apt-get install -y -qq docker.io python3-venv python3-pip git curl ca-certificates
+sudo apt-get install -y -qq docker.io python3-venv python3-pip git curl ca-certificates ffmpeg wget
 sudo systemctl enable --now docker
+# Host-side Chrome: slides and browser scenes drive it through playwright (composition/slides.py:chrome_path).
+command -v google-chrome >/dev/null || { wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_$(dpkg --print-architecture).deb -O /tmp/chrome.deb && sudo apt-get install -y -qq /tmp/chrome.deb; }
 sudo usermod -aG docker "$USER"          # takes effect on next login; sudo is used below meanwhile
 
 say "2/7  source"

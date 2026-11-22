@@ -148,3 +148,71 @@ def test_run_returns_every_check_and_main_exit_code_counts_failures(monkeypatch,
 
     monkeypatch.setattr(pf, "run", lambda: [pf.Check("a", pf.FAIL), pf.Check("b", pf.OK)])
     assert pf.main() == 1
+
+
+# --- host tools and access (the gaps the first real deploy found) ---------------------------
+@pytest.mark.unit
+def test_a_box_without_ffmpeg_fails_even_in_docker_mode(monkeypatch):
+    """The first deploy passed preflight and could not build a video: slides and stitching call
+    ffmpeg on the HOST, which docker mode does not cover."""
+    monkeypatch.setattr(pf.shutil, "which", lambda name: None)
+    c = {x.name: x for x in pf.check_host_tools()}["ffmpeg"]
+    assert c.level == pf.FAIL and "ffmpeg" in c.detail and "ffprobe" in c.detail
+    monkeypatch.setattr(pf.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert {x.name: x for x in pf.check_host_tools()}["ffmpeg"].level == pf.OK
+
+
+@pytest.mark.unit
+def test_a_box_without_chrome_fails_and_says_how_to_fix_it(monkeypatch):
+    import composition.slides as slides
+
+    def none():
+        raise slides.SlideRenderError("no Chrome/Chromium found")
+    monkeypatch.setattr(slides, "chrome_path", none)
+    c = {x.name: x for x in pf.check_host_tools()}["chrome"]
+    assert c.level == pf.FAIL and "google-chrome-stable" in c.detail and "LATTICE_CHROME" in c.detail
+    monkeypatch.setattr(slides, "chrome_path", lambda: "/usr/bin/google-chrome")
+    assert {x.name: x for x in pf.check_host_tools()}["chrome"].level == pf.OK
+
+
+@pytest.mark.unit
+def test_a_box_without_the_playwright_package_fails(monkeypatch):
+    import builtins
+    real = builtins.__import__
+
+    def deny(name, *a, **k):
+        if name == "playwright":
+            raise ImportError("no playwright")
+        return real(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", deny)
+    c = {x.name: x for x in pf.check_host_tools()}["playwright"]
+    assert c.level == pf.FAIL and "requirements.txt" in c.detail
+
+
+@pytest.mark.unit
+def test_sign_in_off_is_a_warning_not_silence(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_url", "")
+    c = pf.check_access()
+    assert [x.name for x in c] == ["sign-in"] and c[0].level == pf.WARN
+
+
+@pytest.mark.unit
+def test_open_sign_in_without_a_global_ceiling_is_called_out(monkeypatch):
+    for k, v in dict(supabase_url="https://p.supabase.co", supabase_anon_key="k",
+                     public_url="https://x.example", auth_allowed_emails="",
+                     quota_global_spend_usd_per_day=0.0).items():
+        monkeypatch.setattr(settings, k, v)
+    c = {x.name: x for x in pf.check_access()}
+    assert c["spend ceiling"].level == pf.WARN and "LATTICE_QUOTA_GLOBAL_SPEND_USD_PER_DAY" in c["spend ceiling"].detail
+    monkeypatch.setattr(settings, "quota_global_spend_usd_per_day", 3.0)
+    c = {x.name: x for x in pf.check_access()}
+    assert "$3" in c["invite list"].detail and "spend ceiling" not in c
+    monkeypatch.setattr(settings, "auth_allowed_emails", "a@b.com")
+    assert {x.name: x for x in pf.check_access()}["invite list"].level == pf.OK
+
+
+@pytest.mark.unit
+def test_a_missing_public_url_with_sign_in_on_warns(monkeypatch):
+    for k, v in dict(supabase_url="https://p.supabase.co", supabase_anon_key="k", public_url="").items():
+        monkeypatch.setattr(settings, k, v)
+    assert {x.name: x for x in pf.check_access()}["public url"].level == pf.WARN

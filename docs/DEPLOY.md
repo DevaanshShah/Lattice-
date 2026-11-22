@@ -244,6 +244,34 @@ Hosting both costs nothing. Only the model calls cost, and only when someone act
 
 ---
 
+## 7b. Split deploy: UI on Vercel, API on your own server
+
+The default is one server serving both. You can instead host `frontend/` (static files) on Vercel and
+keep the backend where it is. It is off unless you configure it, so nothing above changes.
+
+**The one hard requirement: a domain you own.** Sign-in uses secure cookies, and a browser only sends
+them to an API that is on the same *site* as the page (the same registrable domain). So
+`app.example.com` + `api.example.com` works; `lattice.vercel.app` + `x.duckdns.org` does not (they are
+different sites, and the session would silently never arrive). Proxying the API through Vercel to avoid
+that is a bad idea here: builds stream progress for minutes over one connection.
+
+The backend still has to run on a host with a Docker daemon (your GCP/Oracle/Hetzner VM). Render, and
+other platforms without one, cannot keep the render sandbox.
+
+1. Point `api.example.com` at the server (A record), and `app.example.com` at Vercel (CNAME, as Vercel
+   shows you). Re-run `deploy/oracle/setup.sh api.example.com` so Caddy gets a certificate for the API name.
+2. On the server `.env`: `LATTICE_FRONTEND_ORIGINS=https://app.example.com` and
+   `LATTICE_PUBLIC_URL=https://api.example.com`. Restart. (CORS is enabled only for the origins listed.)
+3. Supabase: Site URL `https://app.example.com`; Redirect URLs add `https://api.example.com/auth/callback`.
+4. Build and upload the frontend: `powershell -File frontend\build.ps1 -Api https://api.example.com -Contact you@example.com`,
+   then upload `frontend-out\` to Vercel and attach the `app.example.com` domain.
+5. Google consent screen: homepage `https://app.example.com`, privacy `https://app.example.com/static/privacy.html`.
+
+Sign-in then starts on the API, and returns the browser to the frontend. Only addresses listed in
+`LATTICE_FRONTEND_ORIGINS` are ever returned to.
+
+---
+
 ## 8. Known limits — read before you promise uptime
 
 - **A restart loses running jobs.** The queue is in-memory; finished scene clips survive on disk and

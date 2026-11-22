@@ -227,9 +227,60 @@ def check_bounds() -> list[Check]:
                   f"one model call is bounded at {worst:.0f}s")]
 
 
+def check_host_tools() -> list[Check]:
+    """What the app itself shells out to on the HOST, whatever the exec mode.
+
+    Docker mode sandboxes the Manim render, but slides, stitching and browser scenes run in this
+    process: ffmpeg/ffprobe for video, a system Chrome driven through playwright for frames. None of
+    it is in requirements.txt or the render image, and a box without them starts fine and fails on the
+    first build, so preflight said "deployable" on a server that could not make a video.
+    """
+    out: list[Check] = []
+    missing = [t for t in ("ffmpeg", "ffprobe") if not shutil.which(t)]
+    out.append(Check("ffmpeg", FAIL if missing else OK,
+                     f"missing from PATH: {', '.join(missing)} — `sudo apt-get install -y ffmpeg`"
+                     if missing else "ffmpeg + ffprobe present"))
+    try:
+        import playwright  # noqa: F401
+        out.append(Check("playwright", OK, "installed"))
+    except ImportError:
+        out.append(Check("playwright", FAIL, "python package missing — `pip install -r requirements.txt`"))
+    try:
+        from composition.slides import chrome_path
+        out.append(Check("chrome", OK, chrome_path()))
+    except Exception as e:      # noqa: BLE001 — SlideRenderError, or anything odd while probing
+        out.append(Check("chrome", FAIL, f"{e} — install google-chrome-stable or set LATTICE_CHROME"))
+    return out
+
+
+def check_access() -> list[Check]:
+    """Who can use this instance, and what the most they can cost is. Sign-in OFF on a server is a
+    public app with no accounts and no limits, so that is a warning; open sign-in with no global
+    ceiling is a WARN too, because every Google account is free to make."""
+    if not (settings.supabase_url and settings.supabase_anon_key):
+        return [Check("sign-in", WARN, "off: anyone with the link can use the app with no accounts or "
+                                       "limits. Fine locally; set LATTICE_SUPABASE_URL/_ANON_KEY on a server")]
+    out = [Check("sign-in", OK, "on" + ("" if settings.auth_required else " (guests allowed)"))]
+    if not settings.public_url.strip():
+        out.append(Check("public url", WARN, "LATTICE_PUBLIC_URL is empty: the sign-in return address "
+                                             "is guessed from the request. Set it to your https address"))
+    if settings.auth_allowed_emails.strip():
+        out.append(Check("invite list", OK, "restricted to the listed emails/domains"))
+    elif not settings.quota_global_spend_usd_per_day:
+        out.append(Check("spend ceiling", WARN,
+                         "open to any Google account with NO global spend ceiling: the bill is bounded "
+                         "only by how many accounts show up. Set LATTICE_QUOTA_GLOBAL_SPEND_USD_PER_DAY"))
+    else:
+        out.append(Check("invite list", WARN,
+                         f"open to any Google account; worst case a day is "
+                         f"${settings.quota_global_spend_usd_per_day:g} in model spend"))
+    return out
+
+
 def run() -> list[Check]:
     checks: list[Check] = []
-    for fn in (check_model, check_execution, check_voice, check_storage, check_admin, check_bounds):
+    for fn in (check_model, check_execution, check_host_tools, check_voice, check_storage,
+               check_admin, check_access, check_bounds):
         checks.extend(fn())
     checks.append(memory_check(host_memory_gb()))
     return checks
