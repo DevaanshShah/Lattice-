@@ -181,7 +181,8 @@ def test_a_lesson_costs_one_call_and_an_undrawable_move_goes_back_to_that_call()
 
 
 @pytest.mark.unit
-def test_the_requested_length_reaches_the_lesson_and_a_short_lesson_is_sent_back():
+def test_the_requested_length_reaches_the_lesson_and_a_short_lesson_is_sent_back(monkeypatch):
+    monkeypatch.setattr(lesson_plan, "WORDS_PER_SECOND", 2.8)   # the pace these numbers were worked out at
     short = _answer()
     for scene in short["scenes"]:
         for beat in scene["beats"]:
@@ -360,7 +361,7 @@ def test_the_recipe_decides_the_board_and_only_that_prompt_is_sent():
     recipes = load_recipes()
     assert {name: recipe.board for name, recipe in recipes.items()} == {
         "architecture_explainer": "map", "workflow_explainer": "map", "before_after": "map",
-        "algorithm_explainer": "trace", "table_explainer": "trace", "funnel_explainer": "free",
+        "algorithm_explainer": "trace", "table_explainer": "trace", "graph_explainer": "trace", "funnel_explainer": "free",
         "metric_story": "free"}
     client = _Scripted([_answer()])
     lesson_plan.generate("An order's journey", SKILL, client=client, schema_version=2)
@@ -672,3 +673,51 @@ def test_removing_a_piece_that_is_on_screen_is_shown_and_accepted():
         ("highlight", ["cache"]), ("hide", ["cache"])]      # lit once, then it leaves
     assert lesson.scenes[1].beats[3].claim_requirements == {"s2_b4_c": ["state_change"]}
     assert "cache" not in second.closing_visible_ids
+
+
+def _shaped(shape: str, **brief) -> dict:
+    """The helper lesson with the question taken out of its first scene, so only the shape decides."""
+    answer = _answer()
+    answer["brief"].update(shape=shape, **brief)
+    answer["scenes"][0]["beats"] = [beat for beat in answer["scenes"][0]["beats"] if beat["move"]["do"] != "ask"]
+    return answer
+
+
+def _shape_faults(answer: dict) -> list[str]:
+    from planner.lesson_map import craft_problems
+    lesson = _lesson(answer)
+    return craft_problems(lesson, plan_map_scenes(lesson, SKILL))
+
+
+@pytest.mark.unit
+def test_a_lesson_is_checked_against_its_own_shape_not_one_frame():
+    """2026-11-22: nine live lessons across system design and web dev all opened on a question and
+    ended on a quiz, because code required both. A lesson now names its shape, and only what that
+    shape needs is checked; with no shape the older frame still applies."""
+    # a journey with no question first and no quiz: fine, it follows an order through four pieces
+    assert _shape_faults(_shaped("journey")) == []
+    # the same lesson naming no shape still needs the question in its first scene
+    unshaped = _shaped("journey")
+    unshaped["brief"].pop("shape")
+    assert any("question on screen" in fault for fault in _shape_faults(unshaped))
+    # one failure is not a cascade
+    assert any("at least two failures" in fault for fault in _shape_faults(_shaped("cascade")))
+    # a concept lesson ends on its catch
+    assert any("catch" in fault for fault in _shape_faults(_shaped("concept")))
+    assert _shape_faults(_shaped("concept", catch="A copy of the data can go stale.")) == []
+    # a comparison needs two different routes; a checklist three points
+    assert _shape_faults(_shaped("compare")) == []
+    assert any("three points" in fault for fault in _shape_faults(_shaped("checklist")))
+
+
+@pytest.mark.unit
+def test_a_brief_without_a_quiz_adds_no_question_at_the_end():
+    answer = _shaped("journey")
+    for field in ("check_question", "check_answer", "naive_attempt"):
+        answer["brief"].pop(field, None)
+    lesson = _lesson(answer)
+    assert [beat.move.do for beat in lesson.scenes[-1].beats][-2:] != ["ask", "answer"]
+    half = _shaped("journey")
+    half["brief"].pop("check_answer")
+    with pytest.raises(ValidationError, match="come together, or neither"):
+        _lesson(half)

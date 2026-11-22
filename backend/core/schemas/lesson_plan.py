@@ -100,13 +100,14 @@ LINE_LENGTH = 110
 
 MAP_MOVES = ("introduce", "send", "trouble", "fix", "measure", "point", "remove")
 TRACE_MOVES = ("show", "run", "look", "compare", "discard", "fill", "count", "clear",
-               "grow", "spot", "take", "group", "reveal", "remove")
+               "grow", "spot", "take", "group", "reveal", "remove", "explore", "found")
 LINE_MOVES = ("ask", "answer", "turn")    # a line of text under the picture, in any lesson
 
 # What each move may carry. Anything else on it is a mistake worth saying plainly.
 _TAKES = {
     "introduce": {"pieces"}, "point": {"pieces"}, "remove": {"pieces", "items", "lines"},
     "grow": {"tree", "depth", "lines"}, "spot": {"tree", "value", "lines"},
+    "explore": {"graph", "count", "lines"}, "found": {"graph", "lines"},
     "send": {"path", "count"}, "trouble": {"pieces", "meter", "value", "path", "count"},
     "fix": {"pieces", "meter", "value"}, "measure": {"meter", "value"},
     "ask": {"text"}, "answer": {"text"}, "turn": {"text"},
@@ -140,6 +141,8 @@ _NEEDS = {
     "clear": "a clear move needs the array whose marks it wipes",
     "grow": "a grow move needs the tree it reveals more of",
     "spot": "a spot move needs a tree and the value it picks out",
+    "explore": "an explore move needs the graph whose search takes its next node(s)",
+    "found": "a found move needs the graph whose path it draws",
     "remove": "a remove move needs what it takes off the screen",
 }
 
@@ -151,7 +154,7 @@ class BeatMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     do: Literal["introduce", "send", "trouble", "fix", "measure", "point", "remove",
                 "show", "run", "look", "compare", "discard", "fill", "count", "clear",
-                "grow", "spot", "take", "group", "reveal", "ask", "answer", "turn"]
+                "grow", "spot", "take", "group", "reveal", "explore", "found", "ask", "answer", "turn"]
     text: str | None = None                           # the line an ask or an answer shows
     # on a map
     pieces: list[str] = Field(default_factory=list)
@@ -173,6 +176,7 @@ class BeatMove(BaseModel):
     cell: int | None = Field(default=None, ge=0)
     counter: str | None = None
     tree: str | None = None
+    graph: str | None = None                          # the graph an explore or found move works on
     depth: int | None = Field(default=None, ge=0)     # how many levels down a grow reveals
     # The number the lesson says something comes to: a cell of a table (one number for each cell
     # named), or a counter's total. Code works the real value out and refuses a lesson whose
@@ -194,6 +198,7 @@ class BeatMove(BaseModel):
             "introduce": not self.pieces, "point": not self.pieces,
             "remove": not self.pieces and not self.items,
             "grow": self.tree is None, "spot": self.tree is None or self.value is None,
+            "explore": self.graph is None, "found": self.graph is None,
             "send": len(self.path) < 2, "measure": self.meter is None,
             "trouble": not self.pieces and self.meter is None,
             "fix": not self.pieces and self.meter is None,
@@ -326,7 +331,7 @@ class TraceItem(BaseModel):
     into an array, a fixed value such as a target, or a counter."""
     model_config = ConfigDict(extra="forbid")
     id: str = Field(..., pattern=r"^[a-z][a-z0-9_]{0,23}$")
-    kind: Literal["array", "pointer", "value", "counter", "tree"]
+    kind: Literal["array", "pointer", "value", "counter", "tree", "graph"]
     label: str = Field(..., min_length=1, max_length=22)
     items: list[int | float | str] = Field(default_factory=list, max_length=12)   # an array's values
     size: int | None = Field(default=None, ge=2, le=12)     # an array that starts empty, to be filled
@@ -346,14 +351,22 @@ class TraceItem(BaseModel):
     start: int | None = Field(default=None, ge=1, le=12)    # a tree: the value the recursion is asked for
     steps: list[int] = Field(default_factory=list, max_length=3)   # how much each call steps down by
     stop: int = Field(default=1, ge=0)                      # the value at which a call asks no further
+    # a graph to search: code runs the search (core/graph_search.py) and builds every step
+    nodes: list[str] = Field(default_factory=list, max_length=10)
+    edges: list[list[str]] = Field(default_factory=list, max_length=14)
+    source: str | None = None                               # where the search starts
+    goal: str | None = None                                 # what it looks for, if anything
+    order: Literal["bfs", "dfs"] | None = None              # a queue (breadth-first) or a stack
 
     @model_validator(mode="after")
     def _shape(self) -> "TraceItem":
         mine = {"array": {"items", "size", "rule", "first", "shown_at_first", "numbered"}, "pointer": {"on"},
                 "value": {"value"},
-                "counter": {"counts"}, "tree": {"start", "steps"}}
+                "counter": {"counts"}, "tree": {"start", "steps"},
+                "graph": {"nodes", "edges", "source", "goal", "order"}}
         stray = sorted(name for name in ("items", "size", "rule", "first", "shown_at_first", "numbered", "on",
-                                         "value", "counts", "start", "steps")
+                                         "value", "counts", "start", "steps", "nodes", "edges",
+                                         "source", "goal", "order")
                        if getattr(self, name) not in (None, []) and name not in mine[self.kind])
         if stray:
             raise ValueError(f"trace item {self.id!r}: a {self.kind} has no {stray[0]}")
@@ -386,7 +399,21 @@ class TraceItem(BaseModel):
                                  "too many to read; start from a smaller value")
             if calls < 3:
                 raise ValueError(f"trace tree {self.id!r} makes no calls below its start")
+        if self.kind == "graph":
+            from core.graph_search import problems
+            if not self.nodes or not self.source or self.order is None:
+                raise ValueError(f"trace graph {self.id!r} needs its 'nodes', 'edges', the node "
+                                 "the search starts from in 'source', and 'order': bfs or dfs")
+            faults = problems(self.nodes, self.edges, self.source, self.goal)
+            if faults:
+                raise ValueError(f"trace graph {self.id!r}: " + "; ".join(faults))
         return self
+
+    @property
+    def search(self) -> dict:
+        """A graph's search, worked out by code: every step, and the path found."""
+        from core.graph_search import search
+        return search(self.nodes, self.edges, self.source, self.goal, self.order)
 
     @property
     def calls(self) -> list[dict]:
@@ -415,15 +442,15 @@ class LessonTrace(BaseModel):
         kinds = {item.id: item.kind for item in self.data}
         if len(kinds) != len(self.data) or "code" in kinds or "working" in kinds:
             raise ValueError("trace item ids must be unique, and 'code' and 'working' are taken")
-        if not {"array", "tree"} & set(kinds.values()):
-            raise ValueError("a trace needs at least one array or tree")
+        if not {"array", "tree", "graph"} & set(kinds.values()):
+            raise ValueError("a trace needs at least one array, tree or graph")
         labels = [item.label.casefold() for item in self.data]
         twice = sorted({label for label in labels if labels.count(label) > 1})
         if twice:
             raise ValueError(f"trace items share the label {twice[0]!r}; name each one so a viewer "
                              "can tell them apart, such as 'Checks, one by one' and 'Checks, binary'")
         # Arrays, values and counters are stacked on the data side; pointers sit on their array.
-        room = {"array": 2, "value": 2, "counter": 3, "pointer": 4, "tree": 1}
+        room = {"array": 2, "value": 2, "counter": 3, "pointer": 4, "tree": 1, "graph": 1}
         for kind, most in room.items():
             if list(kinds.values()).count(kind) > most:
                 raise ValueError(f"a trace has room for at most {most} {kind}s")
@@ -431,9 +458,9 @@ class LessonTrace(BaseModel):
             if item.kind == "pointer" and kinds.get(item.on) != "array":
                 raise ValueError(f"trace pointer {item.id!r} points into {item.on!r}, which is "
                                  "not an array of the trace")
-            if item.counts is not None and kinds.get(item.counts) not in {"pointer", "tree", "array"}:
+            if item.counts is not None and kinds.get(item.counts) not in {"pointer", "tree", "array", "graph"}:
                 raise ValueError(f"trace counter {item.id!r} counts {item.counts!r}, which is "
-                                 "not a pointer, a tree or an array of the trace")
+                                 "not a pointer, a tree, an array or a graph of the trace")
         return self
 
 
@@ -445,18 +472,25 @@ class LessonBrief(BaseModel):
     can_do: str = Field(..., min_length=1)            # the one thing they can do afterwards
     question: str = Field(..., min_length=1)          # the learner's own question
     problem: str = Field(..., min_length=1)           # a concrete situation where it matters
-    naive_attempt: str = Field(..., min_length=1)     # what a beginner tries, and why it falls short
     turning_point: str = Field(..., min_length=1)     # the idea that resolves it
-    check_question: str = Field(..., min_length=1)    # tests whether they understood
-    check_answer: str = Field(..., min_length=1)
+    # Optional since 2026-11-22: every lesson was forced into one frame (a naive attempt, then a
+    # quiz at the end), and an outside reference (KodeKloud) uses neither. A lesson says its
+    # `shape`; a check question is kept for lessons that want one.
+    naive_attempt: str | None = Field(default=None, min_length=1)   # what a beginner tries first
+    check_question: str | None = Field(default=None, min_length=1)  # tests whether they understood
+    check_answer: str | None = Field(default=None, min_length=1)
+    shape: Literal["cascade", "journey", "concept", "compare", "checklist"] | None = None
+    catch: str | None = Field(default=None, min_length=1)   # the trade-off the idea brings
 
     @model_validator(mode="after")
     def _questions_are_questions(self) -> "LessonBrief":
+        if (self.check_question is None) != (self.check_answer is None):
+            raise ValueError("brief.check_question and brief.check_answer come together, or neither")
         for name in ("question", "check_question"):
-            if not getattr(self, name).rstrip().endswith("?"):
+            if getattr(self, name) is not None and not getattr(self, name).rstrip().endswith("?"):
                 raise ValueError(f"brief.{name} is written as a question, ending in '?'")
         for name in ("question", "check_question", "check_answer"):
-            if len(getattr(self, name)) > LINE_LENGTH:
+            if getattr(self, name) is not None and len(getattr(self, name)) > LINE_LENGTH:
                 raise ValueError(f"brief.{name} is shown on screen: at most {LINE_LENGTH} "
                                  f"characters, not {len(getattr(self, name))}")
         return self

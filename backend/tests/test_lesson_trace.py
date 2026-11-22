@@ -322,7 +322,7 @@ def test_a_move_that_does_not_fit_the_trace_is_refused(change, message):
 @pytest.mark.parametrize("change, message", [
     (lambda t: t["data"][0].update(size=5), "either its items, or a size"),
     (lambda t: t["data"][2].update(on="target"), "which is not an array"),
-    (lambda t: t["data"][4].update(counts="target"), "not a pointer, a tree or an array"),
+    (lambda t: t["data"][4].update(counts="target"), "not a pointer, a tree, an array or a graph"),
     (lambda t: t["data"][1].update(items=[1, 2]), "a value has no items"),
     (lambda t: t["code"].update(source="x = 1\n" * 15), "at most 14 lines"),
     (lambda t: t["data"].__setitem__(0, {"id": "target", "kind": "value", "label": "T", "value": 1}),
@@ -408,7 +408,8 @@ def test_a_fill_names_its_cell_and_the_number_expected_and_nothing_else(move, me
 
 
 @pytest.mark.unit
-def test_the_data_side_has_room_by_kind_and_a_trace_lesson_gets_more_shorter_beats():
+def test_the_data_side_has_room_by_kind_and_a_trace_lesson_gets_more_shorter_beats(monkeypatch):
+    monkeypatch.setattr(lesson_plan, "WORDS_PER_SECOND", 2.8)   # the pace these numbers were worked out at
     trace = _as_written("taught_search")["trace"]
     trace["data"] += [{"id": f"more{n}", "kind": "array", "label": f"More {n}", "items": [1, 2]} for n in (1, 2)]
     with pytest.raises(ValidationError, match="room for at most 2 arrays"):
@@ -1113,3 +1114,46 @@ def test_a_number_in_a_sentence_is_read_off_the_picture():
         "move": {"do": "count", "counter": "fast", "expect": 2}})
     with pytest.raises(ValueError, match=r"does not say the total it points at. Write the number as \{fast\}"):
         plan_trace_scenes(_lesson(silent), SKILL)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("words, passes", [(337, True), (168, True), (370, False), (150, False)])
+def test_a_lesson_a_little_off_its_length_is_accepted(words, passes, monkeypatch):
+    """2026-11-21/22, live: binary search at 337 words for a 328 cap and a rate limiter at 168 for
+    a 176 floor were each sent back five times, so the client got no video. The model is still
+    asked for 176 to 328 words (90 s); a lesson is refused only well outside that."""
+    monkeypatch.setattr(lesson_plan, "WORDS_PER_SECOND", 2.8)   # the pace these numbers were worked out at
+    answer = _as_written("taught_search")
+    beats = [beat for scene in answer["scenes"] for beat in scene["beats"]]
+    have = sum(len(beat["spoken_text"].split()) for beat in beats)
+    client = _Scripted([answer])
+    # the check question and its answer are appended by code; measure what the plan comes to
+    probe = _Scripted([copy.deepcopy(answer)] * 5)
+    try:
+        plan = lesson_plan.generate("Why binary search needs so few checks", SKILL, client=probe,
+                                    schema_version=2)
+        added = sum(len(b.spoken_text.split()) for s in plan.scenes for b in s.beats) - have
+    except lesson_plan.LessonPlanError:
+        added = 0
+    beats[-1]["spoken_text"] += " " + " ".join(["more"] * (words - have - added))
+    client = _Scripted([answer] * 5)
+    if passes:
+        lesson_plan.generate("Why binary search needs so few checks", SKILL, client=client,
+                             schema_version=2, target_seconds=90)
+    else:
+        with pytest.raises(lesson_plan.LessonPlanError, match="write between 176 and 328"):
+            lesson_plan.generate("Why binary search needs so few checks", SKILL, client=client,
+                                 schema_version=2, target_seconds=90)
+
+
+@pytest.mark.unit
+def test_the_word_budget_follows_the_voice_speed():
+    """2026-11-22: the voice was slowed from about 168 to about 146 words a minute (a reference
+    explainer speaks 142). A lesson asked for 90 seconds must then be asked for fewer words, or it
+    runs long."""
+    import importlib
+
+    from core.config import settings
+    assert lesson_plan.WORDS_PER_SECOND == pytest.approx(2.8 * settings.kokoro_speed)
+    assert settings.kokoro_speed < 1
+    assert round(90 * lesson_plan.WORDS_PER_SECOND) < 252

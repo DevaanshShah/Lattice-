@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.lesson_plan import LessonPlan
 from core.textutil import extract_json
@@ -31,8 +32,16 @@ class LessonPlanError(RuntimeError):
 
 # Narration pace of the local voice, in words per second, and how far a lesson may be from the
 # length the user asked for before it is sent back.
-WORDS_PER_SECOND = 2.8    # measured on two rendered lessons: 154 and 174 words, 57 s each
-LENGTH_TOLERANCE = .3
+# 2.8 words a second measured on two rendered lessons at voice speed 1.0 (154 and 174 words, 57 s
+# each); the voice now speaks at settings.kokoro_speed, and the budget follows it.
+WORDS_PER_SECOND = 2.8 * settings.kokoro_speed
+LENGTH_TOLERANCE = .3     # the band the model is asked to write within
+# The band a lesson is refused outside of. Wider than the one asked for: a good lesson a few words
+# off the band was sent back five times and the client got no video (binary search at 337 words
+# for a 328 cap, a rate limiter at 168 for a 176 floor, 2026-11-21/22). Inside it, the narration
+# is simply paced to its words. Longer is allowed further than shorter: a long lesson only runs a
+# little over, a short one leaves a ninety-second request at under a minute.
+LENGTH_SHORT, LENGTH_LONG = .35, .45
 PLAYBOOK_ATTEMPTS = 5     # tries for a lesson with a playbook; each rejection carries its reason
 WORDS_PER_BEAT = 17       # one spoken sentence; a lesson's size is given to the model in beats
 BEATS_PER_SCENE = 3.5
@@ -80,6 +89,15 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
         except (LessonPlanError, ValueError) as exc:     # a fault in the plan, not the network
             if on_reject is not None:
                 on_reject(f"the staged table lesson could not be planned, so the one-call "
+                          f"lesson is used: {exc}")
+    if schema_version == 2 and skill.planner == "staged_graph":
+        # A graph search: code runs it and builds every step (planner/lesson_graph.py).
+        from planner import lesson_graph
+        try:
+            return lesson_graph.generate(topic, skill, client=client)
+        except (LessonPlanError, ValueError) as exc:
+            if on_reject is not None:
+                on_reject(f"the staged graph lesson could not be planned, so the one-call "
                           f"lesson is used: {exc}")
     # The recipe decides the board, and the board its playbook: a prompt of its own, a menu of
     # moves, and the code that draws them. A board without a playbook gets the general prompt.
@@ -154,7 +172,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             if missing_anchors:
                 raise ValueError(f"visual_anchors required for beat(s): {missing_anchors}")
             spoken = sum(len(beat.spoken_text.split()) for scene in plan.scenes for beat in scene.beats)
-            if words and not low <= spoken <= high:
+            if words and not words * (1 - LENGTH_SHORT) <= spoken <= words * (1 + LENGTH_LONG):
                 raise ValueError(f"the narration has {spoken} words; write between {low} and {high} "
                                  "by adding or removing beats, not by padding sentences")
             if max_scenes and schema_version == 2 and len(plan.scenes) > max_scenes:

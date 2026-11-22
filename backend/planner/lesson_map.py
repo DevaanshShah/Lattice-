@@ -200,16 +200,51 @@ def lesson_map_problems(lesson: LessonPlan, icons: list[str]) -> list[str]:
     return problems
 
 
+def _shape_problems(brief, moves: list[BeatMove]) -> list[str]:
+    """What the lesson's chosen shape needs to be that shape, and nothing more: lessons were all
+    forced into one frame (question first, a quiz last), and the reference explainers vary theirs
+    by topic. Each rule says what is missing in words the lesson step can act on."""
+    kinds = [move.do for move in moves]
+    paths = [tuple(move.path) for move in moves if move.do == "send" and move.path]
+    if brief.shape == "cascade":
+        if kinds.count("trouble") < 2 or kinds.count("fix") < 2:
+            return ["a cascade shows at least two failures, each followed by the fix it needs: "
+                    "trouble, fix, then the next trouble and its fix"]
+        if kinds[-1 - kinds[::-1].index("trouble"):].count("fix") == 0:
+            return ["the last failure of the cascade is never fixed; follow it with a fix move"]
+    elif brief.shape == "journey":
+        if not any(len(path) >= 3 for path in paths):
+            return ["a journey follows one thing through at least three pieces; give a send move "
+                    "whose path has three or more pieces"]
+    elif brief.shape == "compare":
+        if len({frozenset(path) for path in paths}) < 2:
+            return ["a comparison sends something along two different routes; give two send "
+                    "moves whose paths differ"]
+    elif brief.shape == "checklist":
+        if kinds.count("point") < 3:
+            return ["a checklist goes through at least three points one by one; give a point "
+                    "move for each"]
+    elif brief.shape == "concept" and not brief.catch:
+        return ['a concept lesson ends on its catch, the trade-off the idea brings: write it in '
+                'brief.catch and say it in the last scene']
+    return []
+
+
 def craft_problems(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
     """Where a newly planned map lesson falls short as teaching, in words the lesson step can act
     on. These test craft, never a plot: a lesson may take any shape that passes them."""
     problems = []
     if lesson.brief is None:
         return ['the lesson starts with a "brief": decide the teaching before the scenes']
-    if not any(beat.move.do == "ask" for beat in lesson.scenes[0].beats):
-        problems.append("the first scene never puts the learner's question on screen; give one of "
-                        'its beats the move {"do":"ask"}, with the question '
-                        f"({lesson.brief.question!r}) as its sentence")
+    moves = [beat.move for scene in lesson.scenes for beat in scene.beats]
+    if lesson.brief.shape is None:
+        # a lesson that names no shape keeps the older frame: the question on screen first
+        if not any(beat.move.do == "ask" for beat in lesson.scenes[0].beats):
+            problems.append("the first scene never puts the learner's question on screen; give one of "
+                            'its beats the move {"do":"ask"}, with the question '
+                            f"({lesson.brief.question!r}) as its sentence")
+    else:
+        problems += _shape_problems(lesson.brief, moves)
     kinds = {piece.id: piece.kind for piece in lesson.map.pieces}
     for scene in scenes:
         for beat in scene.beats:
@@ -219,7 +254,6 @@ def craft_problems(lesson: LessonPlan, scenes: list[BrowserScene]) -> list[str]:
                 problems.append(f"beat {beat.narration_beat_id} brings {len(new)} new pieces on "
                                 "screen at once; bring a piece on when the story first needs it, "
                                 "at most three in a beat")
-    moves = [beat.move for scene in lesson.scenes for beat in scene.beats]
     acted = {item for move in moves if move.do != "introduce" for item in [*move.pieces, *move.path]}
     idle = sorted(piece for piece, kind in kinds.items() if kind == "piece" and piece not in acted)
     if idle:

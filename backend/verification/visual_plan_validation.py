@@ -82,6 +82,13 @@ def _visible_labels_by_beat(scene: BrowserScene, *, require_v2: bool = False,
                                       for item in payload["series"])
                     elif obj.kind == "tree":
                         labels.extend(repeats(payload))
+                    elif obj.kind == "graph":
+                        from core.graph_search import frontier_line
+                        labels.append(frontier_line(payload))
+                        if payload.get("current"):
+                            labels.append(str(payload["current"]))
+                        if payload.get("path"):
+                            labels.append(" -> ".join(payload["path"]))
                 labels.extend(relation.label for relation in scene.relationships
                               if relation.label and relation.source_id in view.visible
                               and relation.target_id in view.visible)

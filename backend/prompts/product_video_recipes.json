@@ -60,6 +60,36 @@
     "board": "trace",
     "planner": "staged_table"
   },
+  "graph_explainer": {
+    "visual_pattern": "workflow_flow",
+    "allowed_patterns": [
+      "workflow",
+      "decision",
+      "comparison",
+      "transformation"
+    ],
+    "required_roles": [
+      "input",
+      "operation",
+      "result"
+    ],
+    "keywords": [
+      "breadth-first",
+      "breadth first",
+      "depth-first",
+      "depth first",
+      "bfs",
+      "dfs",
+      "graph search",
+      "shortest path",
+      "maze",
+      "graph traversal"
+    ],
+    "outline_guidance": "Teach searching a graph, breadth-first (a queue) or depth-first (a stack), on one small real graph such as the rooms of a maze: the search takes nodes one at a time, what waits is shown, and the path found is drawn.",
+    "scene_guidance": "Use the actual data structure, pointers, values, and changing state. Keep the input visible across steps. A new method gets its own pointer and check counter; do not reset or rename a carried object. Each array state must agree with the narration: when a binary-search target exceeds the middle value, discard the middle cell and every smaller cell before showing the remaining subarray. Show comparisons through values and expressions, never a generic algorithm box.",
+    "board": "trace",
+    "planner": "staged_graph"
+  },
   "architecture_explainer": {
     "visual_pattern": "architecture_map",
     "allowed_patterns": [

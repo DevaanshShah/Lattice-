@@ -32,8 +32,9 @@ class Recipe:
     # lesson, planned in a single call; "free" lets the visual step choose forms scene by scene.
     board: str = "free"
     # How the lesson is planned: "single" is one model call through the board's playbook;
-    # "staged_table" is the staged table planner (`planner.lesson_recurrence`), which falls back
-    # to the single call when it cannot plan the topic.
+    # "staged_table" is the staged table planner (`planner.lesson_recurrence`) and "staged_graph"
+    # the graph-search one (`planner.lesson_graph`); each falls back to the single call when it
+    # cannot plan the topic.
     planner: str = "single"
 
 

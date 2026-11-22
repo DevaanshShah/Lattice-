@@ -51,6 +51,15 @@ _SEMANTIC_CSS = """
 .tree-edge{stroke:#5b6474;stroke-width:2}.tree-node circle{fill:#1a2633;stroke:#61758c;stroke-width:2}
 .tree-node text{fill:#f4f4f5;font:650 20px/1 Segoe UI,system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
 .tree-edge.is-waiting,.tree-node.is-waiting{opacity:0}
+.semantic-graph .semantic-caption{margin-bottom:6px}.graph-map{display:block;margin:0 auto;overflow:visible}
+.graph-edge{stroke:#4b5563;stroke-width:2.5}.graph-edge.is-path{stroke:#4ade80;stroke-width:5}
+.graph-node circle{fill:#141922;stroke:#61758c;stroke-width:2.5}.graph-node text{fill:#f4f4f5;font:700 22px/1 Segoe UI,system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+.graph-node.is-waiting circle{stroke:#fbbf24;stroke-dasharray:6 5;stroke-width:3}
+.graph-node.is-visited circle{fill:#0f3b3a;stroke:#2dd4bf}
+.graph-node.is-current circle{fill:#4a3507;stroke:#fbbf24;stroke-width:4;filter:drop-shadow(0 0 10px #fbbf24)}
+.graph-node.is-path circle{fill:#123d22;stroke:#4ade80;stroke-width:4}
+.graph-node.is-goal circle{stroke-width:4}.graph-node.is-goal:not(.is-path):not(.is-current) circle{stroke:#f472b6}
+.graph-frontier{margin-top:12px;text-align:center;color:#fbbf24;font:650 22px/1.3 Cascadia Code,Consolas,monospace}
 .tree-node.is-marked circle{fill:#3a1518;stroke:#f87171;stroke-width:3}.tree-node.is-marked text{fill:#fecaca}
 .tree-note{margin-top:8px;min-height:30px;color:#f87171;font:650 22px/1.3 Segoe UI,system-ui,sans-serif}
 .semantic-cell.is-empty{border-style:dashed;border-color:#3a4656;background:transparent}
@@ -166,6 +175,40 @@ def _tree_html(obj, payload: dict, flags: str, ident: str, label: str) -> str:
             f'<svg class="tree-calls" width="{width:.0f}" height="{height:.0f}" '
             f'viewBox="0 0 {width:.0f} {height:.0f}">{"".join(parts)}</svg>'
             f'<div class="tree-note">{escape(note) or "&nbsp;"}</div></section>')
+
+
+def _graph_html(obj, payload: dict, flags: str, ident: str, label: str) -> str:
+    """A graph being searched. Every node has its place from the first frame (its column is its
+    distance from the start); taken nodes are filled, the node just taken is lit, nodes waiting in
+    the queue or on the stack are outlined, and the path found is drawn last."""
+    from core.graph_search import frontier_line, layout
+    nodes, edges = payload["nodes"], payload.get("edges") or []
+    places = layout(nodes, edges, payload.get("start", nodes[0]))
+    columns = max(column for column, _ in places.values()) + 1
+    rows = max(row for _, row in places.values()) + 1
+    width, height = 150 * columns, 112 * rows
+    where = {node: (75 + 150 * column, 56 + 112 * row) for node, (column, row) in places.items()}
+    visited, waiting = set(payload.get("visited") or []), set(payload.get("frontier") or [])
+    current, path = payload.get("current"), list(payload.get("path") or [])
+    on_path = {frozenset(pair) for pair in zip(path, path[1:])}
+    parts = []
+    for a, b in edges:
+        (x1, y1), (x2, y2) = where[a], where[b]
+        state = " is-path" if frozenset((a, b)) in on_path else ""
+        parts.append(f'<line class="graph-edge{state}" data-visual-key="{escape(obj.id)}:edge:{escape(a)}-{escape(b)}" '
+                     f'x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>')
+    for node in nodes:
+        x, y = where[node]
+        state = (" is-current" if node == current else " is-path" if node in path
+                 else " is-visited" if node in visited else " is-waiting" if node in waiting else "")
+        goal = " is-goal" if node == payload.get("goal") else ""
+        parts.append(f'<g class="graph-node{state}{goal}" data-visual-key="{escape(obj.id)}:node:{escape(node)}">'
+                     f'<circle cx="{x}" cy="{y}" r="28"/><text x="{x}" y="{y}">{escape(node)}</text></g>')
+    return (f'<section class="semantic-object{flags} semantic-graph" {ident}>'
+            f'<div class="semantic-caption">{label}</div>'
+            f'<svg class="graph-map" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+            f'{"".join(parts)}</svg>'
+            f'<div class="graph-frontier">{escape(frontier_line(payload))}</div></section>')
 
 
 def _tone(obj, payload: dict) -> str:
@@ -378,6 +421,8 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
         elif obj.kind == "formula":
             html = (f'<div class="semantic-object{flags} semantic-formula" {ident}>'
                     f'{escape(str(payload["expression"]))}</div>')
+        elif obj.kind == "graph":
+            html = _graph_html(obj, payload, flags, ident, label)
         elif obj.kind == "tree":
             html = _tree_html(obj, payload, flags, ident, label)
         elif obj.kind == "code":
@@ -612,6 +657,8 @@ window.fitFlow=()=>{
   block.style.zoom=1;block.style.left='';block.style.top='';
   const flow=block.classList.contains('semantic-flow');
   const sized=flow||block.classList.contains('semantic-split');   // these have a width of their own
+  // a graph being searched is the whole picture: it grows to fill the frame like a map
+  const drawing=!flow&&!!block.querySelector(':scope > .semantic-graph');
   const room=stage.getBoundingClientRect();
   // The lines of text under the picture, measured with their real gap: estimated, they came out
   // short, and a recap scene's map was pushed up into the title.
@@ -620,15 +667,16 @@ window.fitFlow=()=>{
   // A lesson keeps one map, every piece in one place for the whole lesson. Each scene is framed
   // on the pieces it shows: framed on the whole map, a first scene's two pieces were drawn small
   // in the middle of an empty frame (reviewed 2026-11-22). The scene's pieces never move within it.
-  const pieces=flow?[...block.querySelectorAll('.in-scene')].filter(e=>!e.parentElement.closest('.in-scene'))
-    .map(e=>e.getBoundingClientRect()).filter(r=>r.width>0):[];
+  const pieces=(drawing?[block.querySelector(':scope > .semantic-graph')]
+      :flow?[...block.querySelectorAll('.in-scene')].filter(e=>!e.parentElement.closest('.in-scene')):[])
+    .map(e=>e.getBoundingClientRect()).filter(r=>r.width>0);
   const whole=block.getBoundingClientRect();
   const frame=pieces.length?{left:Math.min(...pieces.map(r=>r.left)),top:Math.min(...pieces.map(r=>r.top)),
     right:Math.max(...pieces.map(r=>r.right)),bottom:Math.max(...pieces.map(r=>r.bottom))}:whole;
   // room around the framed pieces for their arrows' labels and the lanes outside a row
   const pad=pieces.length&&pieces.length<block.querySelectorAll('.semantic-object').length?60:0;
   const w=frame.right-frame.left+pad*2,h=frame.bottom-frame.top+pad*2;
-  const fit=Math.min(flow?1.3:1,sized?room.width*.96/w:1,(room.height*.96-lines)/h);
+  const fit=Math.min(flow?1.3:drawing?1.7:1,sized||drawing?room.width*.96/w:1,(room.height*.96-lines)/h);
   block.style.zoom=fit;window.flowFit=fit;
   document.documentElement.style.setProperty('--fit',fit);
   // Centre the picture (the framed pieces, or the whole block) in the room above the lines of

@@ -16,7 +16,7 @@ VisualRole = Literal[
 ObjectKind = Literal[
     "message", "node", "document", "card", "gate", "tool", "metric", "group",
     "array", "pointer", "counter", "value", "formula", "code", "chart", "image", "icon",
-    "caption", "tree",
+    "caption", "tree", "graph",
 ]
 RelationKind = Literal[
     "flows_to", "connects_to", "checks", "branches_to", "returns_to", "compares_to",
@@ -44,7 +44,7 @@ class VisualObject(BaseModel):
         required = {
             "array": "items", "pointer": "target_id", "counter": "value", "value": "value",
             "formula": "expression", "code": "source", "chart": "series",
-            "image": "asset_id", "icon": "asset_id", "tree": "nodes",
+            "image": "asset_id", "icon": "asset_id", "tree": "nodes", "graph": "nodes",
         }
         key = required.get(self.kind)
         if key and key not in self.payload:

@@ -14,7 +14,8 @@ _DRAWN_KEYS = {"array": ("items", "discarded_indices", "checked_results", "lit_i
                "pointer": ("target_id", "index"), "counter": ("value",), "metric": ("value",),
                "value": ("value",), "formula": ("expression",), "code": ("source", "active_lines"),
                "chart": ("series",), "image": ("asset_id",), "icon": ("asset_id", "count"),
-               "tree": ("shown", "marked")}
+               "tree": ("shown", "marked"),
+               "graph": ("visited", "current", "frontier", "path")}
 
 
 # Payload keys that say HOW a piece is drawn, not what it holds. They are never shown as rows.

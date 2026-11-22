@@ -17,6 +17,7 @@ from core.call_tree import repeats, shown_to_depth
 from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import LessonPlan, LessonScene, LessonTrace, TableRule, TraceItem
 from core.visual_state import VisualState, closing_state
+from core.graph_search import frontier_line
 from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, gather_the_move,
                                    line_id, line_objects, number, plain_id, say_the_line,
                                    stage_the_takeaway)
@@ -25,7 +26,8 @@ from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, g
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
          "discard": "state_change", "fill": "state_change", "count": "state_change",
          "clear": "state_change", "grow": "state_change", "spot": "state_change",
-         "take": "state_change", "group": "state_change", "reveal": "state_change", "remove": "state_change", "ask": "label", "answer": "label",
+         "take": "state_change", "group": "state_change", "reveal": "state_change", "remove": "state_change",
+         "explore": "state_change", "found": "state_change", "ask": "label", "answer": "label",
          "turn": "label"}
 CODE = "code"           # the editor window
 WORKING = "working"     # the line under a table that shows how a cell was worked out
@@ -43,7 +45,7 @@ _SPENT = "#spent"       # and, for each array, the values its takes have used up
 # The least time a viewer needs to follow one step. A beat lasts at least as long as its steps
 # need: when the sentence is shorter, the picture goes on in silence.
 _DWELL = {"fill": 1.8, "point": 1.2, "take": 1.8, "compare": 0.9, "call": 0.3}
-_NAMES = ("pointer", "against", "out_of", "array", "counter", "tree")   # where a move names one item
+_NAMES = ("pointer", "against", "out_of", "array", "counter", "tree", "graph")   # where a move names one item
 
 
 def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list[dict]:
@@ -70,6 +72,11 @@ def trace_objects(trace: LessonTrace, scene: LessonScene, working: bool) -> list
         elif item.kind == "tree":
             # every call is in the picture from the start; `shown` says how many are revealed
             payload, role = {"nodes": item.calls, "shown": 1, "marked": []}, "input"
+        elif item.kind == "graph":
+            # every node is in the picture from the start, the search's state drawn on it
+            payload, role = {"nodes": item.nodes, "edges": item.edges, "start": item.source,
+                             "goal": item.goal, "order": item.order, "visited": [],
+                             "current": None, "frontier": [item.source], "path": []}, "input"
         else:
             payload, role = {"value": 0}, "metric"
         objects.append({"id": item.id, "kind": item.kind, "role": role, "label": item.label,
@@ -167,6 +174,11 @@ def trace_facts(data: dict) -> str:
             cells = ", ".join(f"cell {index + item.base} holds {value}"
                               for index, (value, _) in enumerate(table_by_rule(item)))
             facts.append(f"in the table {item.id!r} {cells}")
+        elif item.kind == "graph":
+            found = item.search
+            facts.append(f"the {item.order} search of {item.id!r} takes the nodes in this order: "
+                         + ", ".join(step["node"] for step in found["steps"])
+                         + (f", and the path it finds is {' -> '.join(found['path'])}" if found["path"] else ""))
         elif item.kind == "tree":
             seen = Counter(call["value"] for call in item.calls)
             again = ", ".join(f"{value} is worked out {times} times"
@@ -557,6 +569,41 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             anchors.append(items[move.tree].label)
             anchors += [f"{items[tally].label}: {reach}" for tally in tallies]
             shown += [move.tree, *tallies]
+        elif move.do == "explore":
+            # the search takes its next node(s); which, and what waits, is worked out by code
+            show([move.graph])
+            steps = items[move.graph].search["steps"]
+            held = payloads[move.graph]
+            done = len(held["visited"]) + (1 if held["current"] else 0)
+            if done + move.count > len(steps):
+                end = (f"it reaches the goal {items[move.graph].goal!r} after {len(steps)}"
+                       if items[move.graph].goal else f"it takes {len(steps)} nodes in all")
+                raise ValueError(f"beat {beat.id}: the search of {move.graph!r} has taken {done} "
+                                 f"node(s) and {end}; explore at most {len(steps) - done} more")
+            now = steps[done + move.count - 1]
+            changed = change(move.graph, {
+                "visited": [step["node"] for step in steps[:done + move.count - 1]],
+                "current": now["node"], "frontier": list(now["frontier"])})
+            needs += 1.2 * move.count
+            tallies = [item.id for item in trace.data if item.counts == move.graph]
+            for tally in tallies:
+                show([tally])
+                change(tally, {"value": done + move.count})
+            anchors += [now["node"], frontier_line(payloads[move.graph])]
+            anchors += [f"{items[tally].label}: {done + move.count}" for tally in tallies]
+            shown += [move.graph, *tallies]
+        elif move.do == "found":
+            # the route the search found to its goal, drawn once the goal has been taken
+            show([move.graph])
+            found = items[move.graph].search
+            held = payloads[move.graph]
+            taken = [*held["visited"], *([held["current"]] if held["current"] else [])]
+            if not items[move.graph].goal or items[move.graph].goal not in taken:
+                raise ValueError(f"beat {beat.id}: the path to {items[move.graph].goal!r} is found "
+                                 "only once the search has taken it; explore until it does")
+            changed = change(move.graph, {"path": found["path"], "current": None, "visited": taken})
+            anchors.append(" -> ".join(found["path"]))
+            shown.append(move.graph)
         elif move.do == "spot":
             # pick out every call for one value: the same work, done more than once
             show([move.tree])

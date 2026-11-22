@@ -60,7 +60,7 @@ def _synth_kokoro(text: str, out_path: Path, *, lang: str = "en") -> None:
     global _KOKORO
     if _KOKORO is None:
         _KOKORO = Kokoro(settings.kokoro_model, settings.kokoro_voices)
-    samples, sr = _KOKORO.create(text, voice=settings.kokoro_voice, speed=1.0,
+    samples, sr = _KOKORO.create(text, voice=settings.kokoro_voice, speed=settings.kokoro_speed,
                                  lang="en-us" if lang == "en" else lang)
     sf.write(str(out_path), samples, sr)
 

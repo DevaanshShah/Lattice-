@@ -8,12 +8,18 @@ The video is drawn on ONE map: named pieces that pass something to each other. Y
   "can_do": the one thing they will be able to do or explain after this video,
   "question": the question this learner would actually ask, in their own words, ending in "?", at most fifteen words because it is shown on screen,
   "problem": one concrete real-life situation, with specifics, in which that question matters,
-  "naive_attempt": what a beginner would expect or try first, and exactly why it falls short,
+  "shape": the shape the topic needs, one of:
+     "cascade": something real fails, is fixed, and the fix brings the next failure (two or three rounds),
+     "journey": one thing travels through the pieces, and each stop explains why it exists,
+     "concept": a problem, the piece that solves it, how it works, then its catch,
+     "compare": two routes or two designs side by side, and when each wins,
+     "checklist": a few numbered points, each shown on the map in turn,
   "turning_point": the idea that resolves it, in one plain sentence,
-  "check_question": a question that tests whether they understood, ending in "?", at most fifteen words,
-  "check_answer": its answer in one sentence of at most fifteen words
+  "catch": the trade-off or new problem the idea brings, in one plain sentence (every design has one),
+  "naive_attempt": only when the shape uses one: what a beginner would try first, and why it falls short
 }
 Everything after this serves the brief. If a scene does not move the learner from the question toward the turning point, leave it out.
+Add "check_question" and "check_answer" (a question that tests understanding, ending in "?", at most fifteen words, and its one-sentence answer) only when the topic asks for a quiz or a test question; otherwise leave both out.
 
 2. THE MAP.
 "map": {"pieces": [...], "arrows": [...]}
@@ -35,10 +41,11 @@ Each beat is one spoken sentence and exactly one move, which is what the viewer 
 "takeaway" is optional: one line of at most ten words shown as the scene closes.
 
 HOW TO TELL IT.
-- Open on the question. The first scene puts the learner inside the concrete problem, and then one beat asks the brief's question with the ask move. Do not open by listing the parts of a system.
+- Open inside a real situation with real numbers: a shop's flash sale with 10,000 shoppers at once, a page that took 200 milliseconds and now takes 10 seconds. You may then ask the brief's question with the ask move, but the ask is not required. Do not open by listing the parts of a system.
+- Tell it in the brief's shape, and only that shape. Do not force a breakdown and a fix onto a journey, and do not add a quiz the topic did not ask for.
 - Bring a piece on only when the story first needs it, at most three new pieces in one beat. A piece that is shown must later do something.
-- Need before name. Let the naive attempt run on screen and fall short before the better idea appears, so the idea arrives as the answer to something the learner has just seen.
+- Need before name. Let the problem be seen before the piece that solves it appears, so the piece arrives as the answer to something the learner has just watched.
+- Be concrete. Use real numbers (users, milliseconds, sizes) where they make the point, and real names for real tools where they help (Redis for a cache, Postgres for a database, S3 for stored files, Nginx in front). Keep one running example through the whole lesson.
 - Each sentence says what the viewer is watching at that moment, in plain words, 15 to 25 words.
-- Choose the shape the topic needs. Some ideas are a failure and its repair. Others are a journey where each stop explains why it exists, a signal that goes out and comes back changed, two routes compared, or a small thing repeated until a pattern shows. Do not force a breakdown and a fix onto a topic that has none.
-- Close the loop. The last scene answers the opening question in plain words. Do not write the check question or its answer as beats: they are added after your last beat from the brief, shown on screen with a pause for the viewer to think.
-- Keep to the number of beats and scenes the user message gives. Without one, write about twelve beats in three or four scenes. A short video tells one tight story; cut a side point before you cut the question, the naive attempt or the check.
+- Close on the catch. The last scene answers the opening problem in plain words and then names the trade-off the idea brings, the way a good teacher ends: every fix has a price. If the brief has a check question, do not write it or its answer as beats: they are added after your last beat.
+- Keep to the number of beats and scenes the user message gives. Without one, write about twelve beats in three or four scenes. A short video tells one tight story; cut a side point before you cut the problem, the piece that solves it or the catch.

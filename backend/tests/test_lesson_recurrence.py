@@ -360,7 +360,7 @@ def test_a_staged_failure_falls_back_to_the_one_call_lesson():
 
 @pytest.mark.unit
 def test_other_recipes_keep_the_one_call_planner():
-    assert {rid for rid, r in load_recipes().items() if r.planner != "single"} == {"table_explainer"}
+    assert {rid for rid, r in load_recipes().items() if r.planner != "single"} == {"table_explainer", "graph_explainer"}
 
 
 @pytest.mark.unit
