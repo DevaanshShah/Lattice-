@@ -20,7 +20,7 @@ from core.visual_state import VisualState, closing_state
 from core.graph_search import frontier_line
 from planner.lesson_shared import (LINES, apply_brief, carried, compiled_beat, gather_the_move,
                                    line_id, line_objects, number, plain_id, say_the_line,
-                                   stage_the_takeaway)
+                                   stage_the_takeaway, let_the_line_go)
 
 # The proof each move owes the viewer.
 PROOF = {"show": "label", "run": "label", "look": "value", "compare": "state_change",
@@ -701,6 +701,7 @@ def compile_trace_scene(lesson: LessonPlan, scene: LessonScene,
             beat.claim_requirements = {claim: [PROOF[move.do]] for claim in beat.claim_ids}
         # the texts that must be readable while this is spoken, read off the state just produced
         beat.visual_anchors = list(dict.fromkeys(anchors))[:4]
+        let_the_line_go(scene, position, actions, visible)
         beats.append(compiled_beat(scene, position, actions, list(dict.fromkeys(shown)), needs))
     memory.update({item.id: dict(payloads[item.id]) for item in trace.data})
     if working:

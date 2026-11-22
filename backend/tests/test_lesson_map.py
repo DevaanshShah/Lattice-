@@ -574,14 +574,15 @@ def test_lines_of_text_follow_their_rules(beats, message):
 
 
 @pytest.mark.unit
-def test_a_question_line_is_drawn_larger_with_its_own_mark():
+def test_a_question_line_is_drawn_larger_with_no_badge():
+    """Owner review, 2026-11-22: a "?" or "!" badge on every such line read as a fixed template."""
     from generation.browser_scene import _semantic_html
 
     first, _ = plan_map_scenes(_lesson(), SKILL)
     html = _semantic_html(first, closing_state(first))
-    assert ('semantic-caption-line is-question tone-white" data-object-id="s1_b5_line"' in html
-            and '<span class="ask-mark">?</span>' + BRIEF["question"].replace("'", "&#x27;") in html)
-    assert html.count("ask-mark") == 1                      # the takeaway keeps its own look
+    assert ('semantic-caption-line is-question tone-white" data-object-id="s1_b5_line">'
+            + BRIEF["question"].replace("'", "&#x27;") in html)
+    assert "ask-mark" not in html
 
 
 @pytest.mark.integration

@@ -128,7 +128,7 @@
               "id": "s1_b3_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.2067
+              "end_fraction": 0.1857
             },
             {
               "kind": "set_state",
@@ -141,8 +141,8 @@
                   3
                 ]
               },
-              "start_fraction": 0.2067,
-              "end_fraction": 0.3533
+              "start_fraction": 0.1857,
+              "end_fraction": 0.3114
             },
             {
               "kind": "set_state",
@@ -154,8 +154,8 @@
                 "lit_indices": [],
                 "new_index": 0
               },
-              "start_fraction": 0.3533,
-              "end_fraction": 0.5
+              "start_fraction": 0.3114,
+              "end_fraction": 0.4371
             },
             {
               "kind": "set_state",
@@ -166,8 +166,8 @@
               "params": {
                 "expression": "Ways[0] = 1"
               },
-              "start_fraction": 0.5,
-              "end_fraction": 0.6467
+              "start_fraction": 0.4371,
+              "end_fraction": 0.5629
             },
             {
               "kind": "appear",
@@ -176,8 +176,8 @@
               ],
               "id": "s1_b3_5",
               "params": {},
-              "start_fraction": 0.6467,
-              "end_fraction": 0.7933
+              "start_fraction": 0.5629,
+              "end_fraction": 0.6886
             },
             {
               "kind": "set_state",
@@ -195,7 +195,17 @@
                   null
                 ]
               },
-              "start_fraction": 0.7933,
+              "start_fraction": 0.6886,
+              "end_fraction": 0.8143
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "s1_b2_line"
+              ],
+              "id": "s1_b3_7",
+              "params": {},
+              "start_fraction": 0.8143,
               "end_fraction": 0.94
             }
           ],
@@ -216,7 +226,8 @@
                 "s1_b3_3",
                 "s1_b3_4",
                 "s1_b3_5",
-                "s1_b3_6"
+                "s1_b3_6",
+                "s1_b3_7"
               ]
             }
           ],
@@ -312,8 +323,7 @@
       "closing_visible_ids": [
         "code",
         "ways",
-        "working",
-        "s1_b2_line"
+        "working"
       ],
       "carryover_ids": [],
       "layout_ids": []
@@ -439,7 +449,7 @@
                 ]
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.28
+              "end_fraction": 0.236
             },
             {
               "kind": "set_state",
@@ -454,8 +464,8 @@
                 ],
                 "new_index": 2
               },
-              "start_fraction": 0.28,
-              "end_fraction": 0.5
+              "start_fraction": 0.236,
+              "end_fraction": 0.412
             },
             {
               "kind": "set_state",
@@ -466,8 +476,8 @@
               "params": {
                 "expression": "Ways[2] = 1 + 1 = 2"
               },
-              "start_fraction": 0.5,
-              "end_fraction": 0.72
+              "start_fraction": 0.412,
+              "end_fraction": 0.588
             },
             {
               "kind": "set_state",
@@ -485,7 +495,17 @@
                   null
                 ]
               },
-              "start_fraction": 0.72,
+              "start_fraction": 0.588,
+              "end_fraction": 0.764
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "s2_b1_line"
+              ],
+              "id": "s2_b2_5",
+              "params": {},
+              "start_fraction": 0.764,
               "end_fraction": 0.94
             }
           ],
@@ -504,7 +524,8 @@
                 "s2_b2_1",
                 "s2_b2_2",
                 "s2_b2_3",
-                "s2_b2_4"
+                "s2_b2_4",
+                "s2_b2_5"
               ]
             }
           ],
@@ -604,7 +625,6 @@
         "code",
         "ways",
         "working",
-        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [

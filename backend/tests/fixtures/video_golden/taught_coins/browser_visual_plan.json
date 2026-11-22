@@ -586,7 +586,7 @@
               "id": "s2_b2_1",
               "params": {},
               "start_fraction": 0.06,
-              "end_fraction": 0.28
+              "end_fraction": 0.236
             },
             {
               "kind": "appear",
@@ -595,8 +595,8 @@
               ],
               "id": "s2_b2_2",
               "params": {},
-              "start_fraction": 0.28,
-              "end_fraction": 0.5
+              "start_fraction": 0.236,
+              "end_fraction": 0.412
             },
             {
               "kind": "set_state",
@@ -609,8 +609,8 @@
                   2
                 ]
               },
-              "start_fraction": 0.5,
-              "end_fraction": 0.72
+              "start_fraction": 0.412,
+              "end_fraction": 0.588
             },
             {
               "kind": "appear",
@@ -619,7 +619,17 @@
               ],
               "id": "s2_b2_4",
               "params": {},
-              "start_fraction": 0.72,
+              "start_fraction": 0.588,
+              "end_fraction": 0.764
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "s2_b1_line"
+              ],
+              "id": "s2_b2_5",
+              "params": {},
+              "start_fraction": 0.764,
               "end_fraction": 0.94
             }
           ],
@@ -637,7 +647,8 @@
                 "s2_b2_1",
                 "s2_b2_2",
                 "s2_b2_3",
-                "s2_b2_4"
+                "s2_b2_4",
+                "s2_b2_5"
               ]
             }
           ],
@@ -999,7 +1010,6 @@
         "used",
         "best",
         "working",
-        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [

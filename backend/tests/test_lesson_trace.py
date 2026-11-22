@@ -138,7 +138,7 @@ def test_the_turning_point_is_said_in_the_briefs_words_and_the_first_attempt_is_
     assert _steps(second, 1) == [                                       # then the stage is cleared
         ("set_state", ["numbers"], {"checked_results": {}}), ("hide", ["scan", "working"], {}),
         ("appear", ["code"], {}), ("set_state", ["code"], {"active_lines": [4]}),
-        ("move", ["mid"], {"index": 3}), ("appear", ["mid"], {})]
+        ("move", ["mid"], {"index": 3}), ("appear", ["mid"], {}), ("hide", ["s2_b1_line"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert (end.payloads["slow"]["value"], end.payloads["fast"]["value"]) == (6, 2)    # both costs kept
     # a tree leaves the same way, with no remove move, and its counter keeps the calls
@@ -196,7 +196,7 @@ def test_a_table_is_filled_by_code_from_its_rule():
         ("set_state", ["code"], {"active_lines": [6]}),
         ("set_state", ["ways"], {"lit_indices": [1, 0], "new_index": 2}),
         ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"}),
-        ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None]})]
+        ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None]}), ("hide", ["s2_b1_line"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
     assert end.payloads["working"]["expression"] == "Ways[5] = 5 + 3 = 8"
@@ -237,7 +237,7 @@ def test_filling_a_cell_fills_every_empty_cell_before_it_in_order():
     assert _steps(second, 1) == [
         ("set_state", ["code"], {"active_lines": [6]}),
         ("set_state", ["ways"], {"lit_indices": [1, 0], "new_index": 2}),
-        ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"})]
+        ("set_state", ["working"], {"expression": "Ways[2] = 1 + 1 = 2"}), ("hide", ["s2_b1_line"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
 
@@ -593,7 +593,7 @@ def test_a_table_with_no_rule_holds_the_numbers_it_is_given():
     assert _steps(second, 1)[1:] == [
         ("set_state", ["ways"], {"lit_indices": [], "new_index": 2}),
         ("set_state", ["working"], {"expression": "Ways[2] = 2"}),
-        ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None]})]
+        ("set_state", ["ways"], {"items": [1, 1, 2, None, None, None]}), ("hide", ["s2_b1_line"], {})]
     end = closing_state(third, closing_state(second, closing_state(first)))
     assert end.payloads["ways"]["items"] == [1, 1, 2, 3, 5, 8]
 
@@ -1069,7 +1069,7 @@ def test_a_group_move_shows_which_cases_belong_together():
     lesson = _lesson(_stairs_with_its_routes())
     first, second, third = plan_trace_scenes(lesson, SKILL)
     assert _steps(second, 1) == [("set_state", ["routes"], {
-        "groups": [{"label": "end in a 1-step", "cells": [0, 2, 3, 4, 7]}]})]
+        "groups": [{"label": "end in a 1-step", "cells": [0, 2, 3, 4, 7]}]}), ("hide", ["s2_b1_line"], {})]
     assert lesson.scenes[1].beats[1].visual_anchors == ["end in a 1-step: 5"]
     assert lesson.scenes[1].beats[2].visual_anchors == ["end in a 2-step: 3"]
     assert lesson.scenes[1].beats[1].claim_requirements == {"s2_b2_c": ["state_change"]}
@@ -1157,3 +1157,27 @@ def test_the_word_budget_follows_the_voice_speed():
     assert lesson_plan.WORDS_PER_SECOND == pytest.approx(2.8 * settings.kokoro_speed)
     assert settings.kokoro_speed < 1
     assert round(90 * lesson_plan.WORDS_PER_SECOND) < 252
+
+
+@pytest.mark.unit
+def test_the_idea_line_is_shown_while_it_is_said_and_then_gives_way():
+    """Owner review of the BFS video, 2026-11-22: the idea line sat under the picture for the whole
+    scene and read as a template. It is shown on its beat and hidden on the next."""
+    lesson = _saved("taught_search")
+    _, second, _ = plan_trace_scenes(lesson, SKILL)
+    assert _steps(second, 0) == [("appear", ["s2_b1_line"], {})]
+    assert ("hide", ["s2_b1_line"], {}) in _steps(second, 1)
+    assert "s2_b1_line" not in second.closing_visible_ids
+
+
+@pytest.mark.unit
+def test_a_question_stays_over_its_answer():
+    from planner.lesson_shared import let_the_line_go
+    lesson = _saved("taught_search")
+    scene = next(scene for scene in lesson.scenes
+                 if any(b.move.do == "ask" for b in scene.beats[:-1]))
+    asked = next(i for i, b in enumerate(scene.beats) if b.move.do == "ask")
+    assert scene.beats[asked + 1].move.do == "answer"
+    actions, visible = [], {f"{scene.beats[asked].id}_line"}
+    let_the_line_go(scene, asked + 1, actions, visible)
+    assert actions == [] and visible == {f"{scene.beats[asked].id}_line"}

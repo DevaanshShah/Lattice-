@@ -14,7 +14,7 @@ from core.schemas.browser_visual_plan import BrowserScene
 from core.schemas.lesson_plan import BeatMove, LessonMap, LessonPlan, LessonScene
 from core.visual_state import VisualState, closing_state
 from planner.lesson_shared import (LINES, apply_brief, carried, plain_id, say_the_line,
-                                   stage_the_takeaway,
+                                   stage_the_takeaway, let_the_line_go,
                                    compiled_beat, line_id, line_objects, story_shape, takeaway_id)
 from planner.lesson_shared import number as _number
 
@@ -365,6 +365,7 @@ def compile_map_scene(lesson: LessonPlan, scene: LessonScene,
             beat.claim_requirements = {claim: ["label"] for claim in beat.claim_ids}
         shown = ([line_id(beat)] if beat.move.do in LINES
                  else [item for item in _involved(beat.move.model_dump())])
+        let_the_line_go(scene, position, actions, visible)
         beats.append(compiled_beat(scene, position, actions, shown))
     return {"lesson_scene_id": scene.id, "pattern": "architecture", "render_mode": "browser",
             "objects": objects, "relationships": relationships,

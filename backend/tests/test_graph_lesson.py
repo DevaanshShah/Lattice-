@@ -141,3 +141,74 @@ def test_a_turning_point_too_long_for_the_screen_is_sent_back_at_the_first_step(
     long["brief"]["turning_point"] = "Take " + "rooms " * 25
     with pytest.raises(ValueError, match="at most 110 characters"):
         GraphConcept.model_validate(long)
+
+
+@pytest.mark.unit
+def test_a_sentence_opening_on_the_node_a_is_sent_back():
+    """2026-11-22 BFS video: 'A comes out next' was read 'uh comes out next'. The voice reads a
+    sentence-opening 'A' as the article, so a sentence may not open on that node."""
+    from planner import lesson_plan
+    from planner.lesson_graph import GraphConcept, build_run
+
+    skill = load_recipes()["graph_explainer"]
+    _, shown = build_run(GraphConcept.model_validate(CONCEPT))
+    sentences = [f"Sentence {n} explains it." for n in range(1, len(shown) + 1)]
+    bad = {"scenes": [{"title": f"Part {n}", "takeaway": "A point."} for n in (1, 2, 3)],
+           "sentences": ["A comes out next."] + sentences[1:]}
+    good = {**bad, "sentences": sentences}
+    client = _Scripted([CONCEPT, bad, good])
+    lesson_plan.generate("BFS shortest path in a maze", skill, client=client, schema_version=2)
+    assert len(client.asked) == 3
+    assert "starts a sentence with the node 'A'" in client.asked[2][-1]["content"]
+
+
+@pytest.mark.unit
+def test_node_names_written_in_lower_case_are_sent_back():
+    """Live 2026-11-22: told not to open a sentence on 'A', the model wrote 'Room a ... adds c',
+    and the voice read 'a' as the article again."""
+    from planner import lesson_plan
+    from planner.lesson_graph import GraphConcept, build_run
+
+    skill = load_recipes()["graph_explainer"]
+    _, shown = build_run(GraphConcept.model_validate(CONCEPT))
+    sentences = [f"Sentence {n} explains it." for n in range(1, len(shown) + 1)]
+    bad = {"scenes": [{"title": f"Part {n}", "takeaway": "A point."} for n in (1, 2, 3)],
+           "sentences": ["Room a comes out next and adds c."] + sentences[1:]}
+    good = {**bad, "sentences": ["Room A comes out next and adds C, a new room."] + sentences[1:]}
+    client = _Scripted([CONCEPT, bad, good])
+    lesson_plan.generate("BFS shortest path in a maze", skill, client=client, schema_version=2)
+    assert len(client.asked) == 3
+    assert "writes the node 'C' as 'c'" in client.asked[2][-1]["content"]
+
+
+@pytest.mark.unit
+def test_a_narration_that_leaves_out_the_steps_code_speaks_is_placed_by_code():
+    """Live 2026-11-22: the model gave one sentence for each step it had to write and left out the
+    two that code says; the lesson was refused three times and lost."""
+    from planner import lesson_plan
+    from planner.lesson_graph import GraphConcept, build_run
+
+    skill = load_recipes()["graph_explainer"]
+    _, shown = build_run(GraphConcept.model_validate(CONCEPT))
+    written = [f"Sentence {n} explains it." for n, entry in enumerate(shown, 1)
+               if entry["the sentence must"] != "said by code"]
+    narration = {"scenes": [{"title": f"Part {n}", "takeaway": "A point."} for n in (1, 2, 3)],
+                 "sentences": written}
+    client = _Scripted([CONCEPT, narration])
+    plan = lesson_plan.generate("BFS shortest path in a maze", skill, client=client, schema_version=2)
+    assert len(client.asked) == 2
+    beats = [beat for scene in plan.scenes for beat in scene.beats]
+    assert beats[0].spoken_text == "Sentence 1 explains it."
+    assert beats[3].spoken_text == "Sentence 4 explains it."      # after the ask and the turn
+
+
+@pytest.mark.unit
+def test_the_steps_that_must_say_several_things_get_more_words():
+    """Live 2026-11-22: the opening and the path, each asked for two or three things, were refused
+    three times at forty words."""
+    from planner.lesson_graph import WORDS_ONE, WORDS_SEVERAL, GraphConcept, build_run
+
+    _, shown = build_run(GraphConcept.model_validate(CONCEPT))
+    assert shown[0]["at most words"] == shown[-1]["at most words"] == WORDS_SEVERAL
+    assert {entry["at most words"] for entry in shown[3:-1]} == {WORDS_ONE}
+    assert all("at most words" not in entry for entry in shown if entry["the sentence must"] == "said by code")

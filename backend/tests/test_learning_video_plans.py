@@ -470,7 +470,7 @@ def test_browser_video_uses_measured_beat_audio_and_final_scene_hold(monkeypatch
     skill = product_recipe.load_recipes()["workflow_explainer"]
     calls = []
 
-    def fake_synthesize(text, *, out_dir, engine):
+    def fake_synthesize(text, *, out_dir, engine, names=frozenset()):
         path = tmp_path / f"{len(calls)}.mp3"
         path.write_bytes(b"audio")
         return Clip(text, path, 2.0)
@@ -517,7 +517,7 @@ def test_browser_video_records_layout_failure_and_retries_compact(monkeypatch, t
     skill = product_recipe.load_recipes()["workflow_explainer"]
     layouts = []
 
-    def fake_synthesize(text, *, out_dir, engine):
+    def fake_synthesize(text, *, out_dir, engine, names=frozenset()):
         path = tmp_path / "audio.mp3"
         path.write_bytes(b"audio")
         return Clip(text, path, 1.0)

@@ -36,12 +36,61 @@ _PRONUNCIATION: list[tuple[str, str]] = [
 ]
 
 
-def _for_speech(text: str) -> str:
-    """Phonetic rewrite of terms gTTS mispronounces (audio only, not the displayed script)."""
+# A name on screen that is also an English word is read as the word: Kokoro reads the room "A"
+# as the article ("uh", phoneme ɐ) while "S" or "C" come out as letters (2026-11-22 BFS video).
+# So when such a name is on screen, the audio gets a spelling that phonemizes to the letter:
+# "eigh" -> eɪ. "I" needs none: the pronoun already sounds like the letter.
+_LETTER_SPOKEN = {"A": "eigh"}
+
+
+def spoken_names(payloads) -> set[str]:
+    """Short capitalised names drawn on screen (graph nodes, cells, labels): 'A', 'S', 'NYC'."""
+    found: set[str] = set()
+
+    def walk(value) -> None:
+        if isinstance(value, str):
+            if 1 <= len(value) <= 3 and value.isalnum() and value.isupper():
+                found.add(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    walk(list(payloads))
+    return found
+
+
+def _for_speech(text: str, names: frozenset[str] | set[str] = frozenset()) -> str:
+    """Phonetic rewrite for the audio only; the displayed script keeps its spelling.
+
+    `names` are the names on screen. Inside a sentence, a capital "A" standing alone is that name:
+    the article is written "a" there. At the start of a sentence it stays the article ("A small
+    maze..."); planners refuse a sentence that opens on the name (`opens_on_name`)."""
     out = text
     for pat, rep in _PRONUNCIATION:
         out = re.sub(pat, rep, out, flags=re.IGNORECASE)
+    for name, spoken in _LETTER_SPOKEN.items():
+        if name in names:
+            out = re.sub(rf"(?<![\w'’-]){name}(?![\w'’-])",
+                         lambda m: m.group(0) if _sentence_start(out, m.start()) else spoken, out)
     return out
+
+
+def _sentence_start(text: str, at: int) -> bool:
+    before = text[:at].rstrip(" \"'“‘(")
+    return not before or before[-1] in ".!?:;"
+
+
+def opens_on_name(text: str, names) -> str | None:
+    """The name a sentence opens on that the voice would read as a word ("A comes out next")."""
+    for name in _LETTER_SPOKEN:
+        if name in names:
+            for found in re.finditer(rf"(?<![\w'’-]){name}(?![\w'’-])", text):
+                if _sentence_start(text, found.start()):
+                    return name
+    return None
 
 
 def _synth_gtts(text: str, out_path: Path, *, lang: str = "en") -> None:
@@ -75,12 +124,13 @@ def _duration(path: Path) -> float:
 
 
 def synthesize(text: str, *, out_dir: str | Path, engine: str | None = None,
-               lang: str = "en", cache: bool = True) -> Clip:
-    """Synthesize one line to an MP3 (cached by content hash) and measure its duration."""
+               lang: str = "en", cache: bool = True, names: frozenset[str] | set[str] = frozenset()) -> Clip:
+    """Synthesize one line to an MP3 (cached by content hash) and measure its duration.
+    `names` are the names drawn on screen, so a name that is also a word is read as the name."""
     engine = engine or settings.tts_engine
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    speech = _for_speech(text)  # phonetic rewrite for the audio; display text stays original
+    speech = _for_speech(text, names)  # phonetic rewrite for the audio; display text stays original
     key = content_hash("tts-v2", engine, lang, settings.kokoro_voice if engine == "kokoro" else "", speech)
     ext = "wav" if engine == "kokoro" else "mp3"     # kokoro emits raw samples -> WAV; gtts -> MP3
     path = out_dir / f"{key}.{ext}"

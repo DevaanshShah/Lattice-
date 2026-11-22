@@ -59,6 +59,26 @@ def stage_the_takeaway(scene: LessonScene, position: int, actions: list[dict], v
         visible.add(mine)
 
 
+def let_the_line_go(scene: LessonScene, position: int, actions: list[dict], visible: set[str]) -> None:
+    """A question or a turning point is shown while it is said, then gives the picture its room
+    back. Left under the picture for the whole scene it read as a fixed template (owner review of
+    the BFS video, 2026-11-22). A question stays over its answer, which is the pair the viewer reads.
+
+    Called once a beat's own actions are settled, so clearing a line never counts as the change a
+    move must make."""
+    if position == 0:
+        return
+    before, now = scene.beats[position - 1], scene.beats[position]
+    if before.move is None or before.move.do not in _SAYS:
+        return
+    if before.move.do == "ask" and now.move is not None and now.move.do == "answer":
+        return
+    line = line_id(before)
+    if line in visible:
+        actions.append({"kind": "hide", "target_ids": [line], "params": {}})
+        visible.discard(line)
+
+
 def line_objects(scene: LessonScene) -> list[dict]:
     """The lines of text a scene shows under its picture: a question, an answer, a takeaway."""
     objects = []

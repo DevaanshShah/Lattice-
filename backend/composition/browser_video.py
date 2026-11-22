@@ -12,7 +12,7 @@ from core.schemas.lesson_plan import LessonPlan
 from core.visual_state import VisualState, apply_action, closing_state, opening_state
 from generation.manim_visual_scene import compile_scene
 from generation.browser_scene import ball_after, render_scene, render_animated_beat
-from narration.tts import synthesize
+from narration.tts import spoken_names, synthesize
 from planner.product_recipe import Recipe
 from planner import browser_visual_plan, lesson_plan, product_recipe
 from render.sandbox import render as render_manim
@@ -59,6 +59,8 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
         frames: list[Path] = []
         scene_mp4s: list[Path] = []
         audio_dir = out / "audio"
+        # the names drawn anywhere in the lesson, so the voice reads the room "A" as a letter
+        names = spoken_names(obj.payload for scene in plan.scenes for obj in scene.objects)
         previous_state: VisualState | None = None
         ball: list[str] | None = None    # the arrow the travelling ball last moved along
         for scene_index, lesson_scene in enumerate(lesson.scenes):
@@ -75,7 +77,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                 for beat_index, beat in enumerate(lesson_scene.beats):
                     beat_id = beat.id
                     report.event(stage, "start", scene=scene_id, beat=beat_id)
-                    clip = synthesize(beat.spoken_text, out_dir=audio_dir, engine=tts_engine)
+                    clip = synthesize(beat.spoken_text, out_dir=audio_dir, engine=tts_engine, names=names)
                     rel = f"audio/beat_{beat_index:02d}{clip.path.suffix}"
                     shutil.copyfile(clip.path, work / rel)
                     audio_clips.append((rel, clip.duration))
@@ -105,7 +107,7 @@ def build(lesson: LessonPlan, plan: BrowserVisualPlan, skill: Recipe, *, out_dir
                 beat_id = lesson_beat.id
                 stage = "narration"
                 report.event(stage, "start", scene=scene_id, beat=beat_id)
-                audio = synthesize(lesson_beat.spoken_text, out_dir=audio_dir, engine=tts_engine)
+                audio = synthesize(lesson_beat.spoken_text, out_dir=audio_dir, engine=tts_engine, names=names)
                 report.event(stage, "passed", scene=scene_id, beat=beat_id,
                              detail=f"{audio.duration:.3f}s")
                 if state is not None:

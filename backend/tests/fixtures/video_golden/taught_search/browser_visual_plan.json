@@ -694,7 +694,7 @@
                 "checked_results": {}
               },
               "start_fraction": 0.06,
-              "end_fraction": 0.2067
+              "end_fraction": 0.1857
             },
             {
               "kind": "hide",
@@ -704,8 +704,8 @@
               ],
               "id": "s2_b2_2",
               "params": {},
-              "start_fraction": 0.2067,
-              "end_fraction": 0.3533
+              "start_fraction": 0.1857,
+              "end_fraction": 0.3114
             },
             {
               "kind": "appear",
@@ -714,8 +714,8 @@
               ],
               "id": "s2_b2_3",
               "params": {},
-              "start_fraction": 0.3533,
-              "end_fraction": 0.5
+              "start_fraction": 0.3114,
+              "end_fraction": 0.4371
             },
             {
               "kind": "set_state",
@@ -728,8 +728,8 @@
                   4
                 ]
               },
-              "start_fraction": 0.5,
-              "end_fraction": 0.6467
+              "start_fraction": 0.4371,
+              "end_fraction": 0.5629
             },
             {
               "kind": "move",
@@ -740,8 +740,8 @@
               "params": {
                 "index": 3
               },
-              "start_fraction": 0.6467,
-              "end_fraction": 0.7933
+              "start_fraction": 0.5629,
+              "end_fraction": 0.6886
             },
             {
               "kind": "appear",
@@ -750,7 +750,17 @@
               ],
               "id": "s2_b2_6",
               "params": {},
-              "start_fraction": 0.7933,
+              "start_fraction": 0.6886,
+              "end_fraction": 0.8143
+            },
+            {
+              "kind": "hide",
+              "target_ids": [
+                "s2_b1_line"
+              ],
+              "id": "s2_b2_7",
+              "params": {},
+              "start_fraction": 0.8143,
               "end_fraction": 0.94
             }
           ],
@@ -771,7 +781,8 @@
                 "s2_b2_3",
                 "s2_b2_4",
                 "s2_b2_5",
-                "s2_b2_6"
+                "s2_b2_6",
+                "s2_b2_7"
               ]
             }
           ],
@@ -958,7 +969,6 @@
         "slow",
         "fast",
         "working",
-        "s2_b1_line",
         "takeaway_s2"
       ],
       "carryover_ids": [

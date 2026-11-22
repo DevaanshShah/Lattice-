@@ -462,13 +462,12 @@ def _semantic_html(scene: BrowserScene, state: VisualState, active: set[str] | N
                     f'<div class="piece-label">{label}</div></div>')
         elif obj.kind == "caption":
             tick = "✓ " if payload.get("tick") else ""
-            # a question is the line the viewer is asked to think about: larger, with its own mark
-            # the turning point is the line the lesson hinges on: marked as the idea
+            # a question is the line the viewer is asked to think about, the turning point the line
+            # the lesson hinges on: each larger than a caption, shown while it is said. No "?" or
+            # "!" badge: on every such line they read as a fixed template (owner review, 2026-11-22).
             asks = " is-question" if payload.get("ask") else " is-idea" if payload.get("idea") else ""
-            mark = ('<span class="ask-mark">?</span>' if payload.get("ask") else
-                    '<span class="ask-mark idea-mark">!</span>' if payload.get("idea") else "")
             html = (f'<div class="semantic-object{flags} semantic-caption-line{asks}{tone}" {ident}>'
-                    f'{mark}{tick}{label}</div>')
+                    f'{tick}{label}</div>')
         elif obj.kind == "group" and any(holder == obj.id for holder in inside.values()):
             # a panel: its members are drawn inside it
             members = "".join(drawn[member] for member in placed if inside.get(member) == obj.id)
