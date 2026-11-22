@@ -1,0 +1,19 @@
+# Build context for deploy/Dockerfile.app is the REPO ROOT (it needs backend/ and frontend/).
+# Keep it small, and never bake secrets in: supply them at RUN time (-e / --env-file / secrets).
+.git/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.pytest_cache/
+backend/out/
+backend/tests/
+backend/.env
+backend/.env.*
+!backend/.env.example
+**/*.mp3
+**/node_modules/
+frontend-out/
+deploy/vercel-site/
+
+# NOT ignored on purpose: backend/kokoro-v1.0.onnx and backend/voices-v1.0.bin: the app image bakes them in.
+# frontend/static/fourier.mp4 is the UI's landing video and is needed too.

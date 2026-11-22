@@ -5,7 +5,7 @@
 # inside this container, sharing its filesystem and network — fine for a public demo, not the
 # shape you want for real users' work. The Oracle path keeps the sandbox; see docs/DEPLOY.md.
 #
-# It is a separate file from ../../Dockerfile.app for one reason: a Space builds the file named
+# It is a separate file from ../Dockerfile.app for one reason: a Space builds the file named
 # `Dockerfile` at its repo root, and it needs HF-specific bits (uid 1000, /data writability,
 # port 7860) that do not belong in the general image.
 FROM manimcommunity/manim:v0.18.1
@@ -16,14 +16,23 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg curl ca-certificates && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Host-side Chrome: slides and browser scenes drive it through playwright (composition/slides.py).
+# Google publishes the .deb for amd64 only; on arm64 set LATTICE_CHROME to a chromium you provide.
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+        curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/chrome.deb \
+        && apt-get update && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+        && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*; \
+    fi
+
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # The voice files travel with the Space repo via git-lfs (push-space.sh sets that up). Without
 # them narration raises and every scene ships silent — there is no gtts fallback.
-COPY kokoro-v1.0.onnx voices-v1.0.bin /app/
+COPY backend/kokoro-v1.0.onnx backend/voices-v1.0.bin /app/
 
-COPY . .
+COPY backend/ /app/
+COPY frontend/ /frontend/
 
 # Spaces run the container as uid 1000 and only $HOME and /data are writable.
 RUN mkdir -p /data && chown -R 1000:1000 /app /data

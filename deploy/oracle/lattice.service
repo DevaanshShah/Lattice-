@@ -1,5 +1,5 @@
 # Lattice web app. Runs on the HOST (not in a container) so it can drive the docker daemon for
-# sandboxed renders without a socket mount. __APP_DIR__/__USER__ are filled in by setup.sh.
+# sandboxed renders without a socket mount. __BACKEND_DIR__/__USER__ are filled in by setup.sh.
 [Unit]
 Description=Lattice
 After=network-online.target docker.service
@@ -9,10 +9,10 @@ Requires=docker.service
 [Service]
 Type=simple
 User=__USER__
-WorkingDirectory=__APP_DIR__
+WorkingDirectory=__BACKEND_DIR__
 # A misconfiguration should be visible in the journal at boot, not in a user's failed build.
-ExecStartPre=-__APP_DIR__/.venv/bin/python -m scripts.preflight
-ExecStart=__APP_DIR__/.venv/bin/python -m scripts.serve --host 127.0.0.1 --port 8080
+ExecStartPre=-__BACKEND_DIR__/.venv/bin/python -m scripts.preflight
+ExecStart=__BACKEND_DIR__/.venv/bin/python -m scripts.serve --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 # A restart loses in-flight jobs (the queue is in memory); finished scene clips survive on disk

@@ -1,3 +1,7 @@
+# The repository has three parts: backend/ (the API and the video engine), frontend/ (the UI) and
+# deploy/ (Docker, server and hosting files). Everything else here is local working material and is
+# not published.
+
 # --- Python ---
 __pycache__/
 *.py[cod]
@@ -18,22 +22,28 @@ build/
 .env.local
 *.key
 
-# --- Lattice render artifacts (regenerated; never commit) ---
+# --- Render artifacts and local data (regenerated; never commit) ---
 out/
-media/            # Manim default output dir
+media/
 renders/
-cache/            # content-hash render + TTS cache
+cache/
 *.mp4
 *.mkv
 *.wav
 *.mp3
 *.srt
-# keep tiny checked-in sample fixtures if any are added under tests/fixtures/
-!tests/fixtures/**
+# tiny sample fixtures that are checked in
+!backend/tests/fixtures/**
+# the landing video the UI plays on its home screen
+!frontend/static/fourier.mp4
 
-# --- Claude Code runtime (keep settings.json; ignore transient locks) ---
-.claude/scheduled_tasks.lock
-.claude/*.lock
+# --- Kokoro TTS model files (large, downloaded locally) ---
+kokoro-v1.0.onnx
+voices-v1.0.bin
+
+# --- Build output of the publish scripts ---
+frontend-out/
+site-out/
 
 # --- OS / editor ---
 .DS_Store
@@ -42,28 +52,32 @@ Thumbs.db
 .vscode/
 *.swp
 
-# --- local reference clones / scratch (NOT Lattice code) ---
-# (gitignore has no inline comments — keep patterns on their own line)
-# external manim-from-prompt repo, kept locally for reference
-manimator/
-# scratch probe of Manim's bbox API
-/test_manim_api.py
-# accidental output-redirect artifact
-*scratchpadtest_manim_api.py
-
-# Kokoro TTS model files (large, local)
-kokoro-v1.0.onnx
-voices-v1.0.bin
-
-# another agent session config, and stray root copies of the static landing page
-.codex/
+# --- Local working material: kept on disk, not part of the published tree ---
+/.claude/
+/.agents/
+/.codex/
+/CLAUDE.md
+/AGENTS.md
+/MEMORY.md
+/DECISIONS.md
+/PRODUCT.md
+/BUILD_PLAN.md
+/MILESTONES.md
+/IDEAS.md
+/RESUME.md
+/AGENT_TICKETS.md
+/PHASE_AB_STATUS.md
+/CLAUDE_CODE_HANDOFF.md
+/docs/
+/prds/
+/reference/
+/examples/
+/reports/
+/research_notes/
+/graphify-out/
+/decks/
+/learn/
+/manimator/
 /index.html
 /intro.js
-
-# graphify knowledge-graph tool output: machine-local paths to this Python and repo root
-graphify-out/
-site-out/
-frontend-out/
-
-# The landing video the UI plays on its home screen (everything else .mp4 is a render artifact).
-!frontend/static/fourier.mp4
+/test_manim_api.py

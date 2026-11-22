@@ -8,5 +8,5 @@ After=network-online.target
 [Service]
 Type=oneshot
 User=__USER__
-WorkingDirectory=__APP_DIR__
-ExecStart=__APP_DIR__/.venv/bin/python -m scripts.r2 backup
+WorkingDirectory=__BACKEND_DIR__
+ExecStart=__BACKEND_DIR__/.venv/bin/python -m scripts.r2 backup

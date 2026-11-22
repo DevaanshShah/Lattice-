@@ -13,7 +13,8 @@
 set -euo pipefail
 
 DOMAIN="${1:-}"
-APP_DIR="${APP_DIR:-$HOME/lattice}"
+APP_DIR="${APP_DIR:-$HOME/lattice}"          # the repo root: backend/, frontend/, deploy/
+BACKEND_DIR="$APP_DIR/backend"
 REPO="${REPO:-}"
 
 say() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
@@ -34,9 +35,10 @@ fi
 cd "$APP_DIR"
 
 say "3/7  render sandbox image (arm64 — the pinned base publishes one)"
-sudo docker build -t lattice-render:0.2 .
+sudo docker build -f "$APP_DIR/deploy/Dockerfile.render" -t lattice-render:0.2 "$BACKEND_DIR"
 
 say "4/7  python environment"
+cd "$BACKEND_DIR"
 python3 -m venv .venv
 ./.venv/bin/pip install -q --upgrade pip
 ./.venv/bin/pip install -q -r requirements.txt
@@ -49,12 +51,12 @@ sudo iptables -I INPUT 7 -m state --state NEW -p tcp --dport 443 -j ACCEPT
 sudo netfilter-persistent save 2>/dev/null || sudo apt-get install -y -qq iptables-persistent
 
 say "6/7  systemd service"
-sudo cp deploy/oracle/lattice.service /etc/systemd/system/lattice.service
-sudo sed -i "s|__APP_DIR__|$APP_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice.service
+sudo cp "$APP_DIR/deploy/oracle/lattice.service" /etc/systemd/system/lattice.service
+sudo sed -i "s|__BACKEND_DIR__|$BACKEND_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice.service
 # ...and a daily snapshot of the admin ledger + user registry into R2. The videos upload
 # themselves after every build; this data does not, and it is on the same mortal disk.
-sudo cp deploy/oracle/lattice-backup.service deploy/oracle/lattice-backup.timer /etc/systemd/system/
-sudo sed -i "s|__APP_DIR__|$APP_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice-backup.service
+sudo cp "$APP_DIR/deploy/oracle/lattice-backup.service" "$APP_DIR/deploy/oracle/lattice-backup.timer" /etc/systemd/system/
+sudo sed -i "s|__BACKEND_DIR__|$BACKEND_DIR|g; s|__USER__|$USER|g" /etc/systemd/system/lattice-backup.service
 sudo systemctl daemon-reload
 sudo systemctl enable lattice
 sudo systemctl enable --now lattice-backup.timer
@@ -68,7 +70,7 @@ if [ -n "$DOMAIN" ]; then
 https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" \
     | sudo tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
   sudo apt-get update -qq && sudo apt-get install -y -qq caddy
-  sudo sed "s|__DOMAIN__|$DOMAIN|" deploy/oracle/Caddyfile | sudo tee /etc/caddy/Caddyfile > /dev/null
+  sudo sed "s|__DOMAIN__|$DOMAIN|" "$APP_DIR/deploy/oracle/Caddyfile" | sudo tee /etc/caddy/Caddyfile > /dev/null
   sudo systemctl restart caddy
 else
   echo "no domain given — skipping Caddy. Re-run with the domain once DNS points here."
@@ -78,14 +80,14 @@ cat <<EOF
 
 Done. Three things left, and they are the two this script deliberately did not do:
 
-  1. cp .env.example .env && nano .env
+  1. cd $BACKEND_DIR && cp .env.example .env && nano .env
        LATTICE_LLM_API_KEY, LATTICE_ADMIN_TOKEN (32+ random chars), the four LATTICE_R2_* vars,
-       LATTICE_OUT_DIR=$APP_DIR/out
+       LATTICE_OUT_DIR=$BACKEND_DIR/out
        Sizing for 4 OCPU / 24 GB:
        LATTICE_JOB_WORKERS=1  LATTICE_SCENE_WORKERS=3  LATTICE_RENDER_MEMORY=3g  LATTICE_RENDER_CPUS=1.0
 
   2. From your own machine (the voice files are gitignored, ~338 MB):
-       scp kokoro-v1.0.onnx voices-v1.0.bin $USER@<this-ip>:$APP_DIR/
+       scp kokoro-v1.0.onnx voices-v1.0.bin $USER@<this-ip>:$BACKEND_DIR/
 
   3. ./.venv/bin/python -m scripts.preflight     # must print 0 failing
      sudo systemctl start lattice

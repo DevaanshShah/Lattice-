@@ -27,14 +27,14 @@ cp "$ROOT/deploy/huggingface/Dockerfile" "$STAGE/Dockerfile"     # replaces the 
 cp "$ROOT/deploy/huggingface/README.md" "$STAGE/README.md"        # HF reads its frontmatter
 
 for f in kokoro-v1.0.onnx voices-v1.0.bin; do
-  [ -f "$ROOT/$f" ] || { echo "missing $f — the Space would ship silent video"; exit 1; }
-  cp "$ROOT/$f" "$STAGE/$f"
+  [ -f "$ROOT/backend/$f" ] || { echo "missing backend/$f — the Space would ship silent video"; exit 1; }
+  cp "$ROOT/backend/$f" "$STAGE/backend/$f"
 done
 
 echo "==> git + lfs"
 cd "$STAGE"
 git init -q && git lfs install --local > /dev/null
-git lfs track "kokoro-v1.0.onnx" "voices-v1.0.bin" > /dev/null
+git lfs track "backend/kokoro-v1.0.onnx" "backend/voices-v1.0.bin" > /dev/null
 git add -A && git -c user.email=deploy@local -c user.name=deploy commit -qm "deploy $(date -u +%FT%TZ)"
 git remote add space "https://huggingface.co/spaces/$SPACE"
 
