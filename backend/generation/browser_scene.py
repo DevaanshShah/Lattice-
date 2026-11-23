@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from html import escape
 import json
+import re
 from pathlib import Path
 from copy import deepcopy
 from math import ceil
@@ -60,6 +61,7 @@ _SEMANTIC_CSS = """
 .graph-node.is-path circle{fill:#123d22;stroke:#4ade80;stroke-width:4}
 .graph-node.is-goal circle{stroke-width:4}.graph-node.is-goal:not(.is-path):not(.is-current) circle{stroke:#f472b6}
 .graph-scout{fill:#fbbf24;filter:drop-shadow(0 0 6px #fbbf24)}.graph-walker{fill:#f4f4f5;stroke:#4ade80;stroke-width:4;filter:drop-shadow(0 0 10px #4ade80)}
+.is-mentioned{transform-box:fill-box;transform-origin:center;z-index:3}
 .map-ring{border:4px solid;border-radius:50%;pointer-events:none;box-shadow:0 0 18px currentColor}
 /* a broken piece is crossed out while it stays broken */
 .semantic-piece.tone-red .piece-icons{position:relative}.semantic-piece.tone-red:not(.is-placeholder) .piece-icons::before{content:'✕';position:absolute;top:-12px;right:-16px;width:30px;height:30px;border-radius:50%;background:#f87171;color:#0a0a0a;font:800 18px/30px Segoe UI,system-ui,sans-serif;text-align:center;z-index:2}.flow-packet{filter:drop-shadow(0 0 6px currentColor)}
@@ -873,9 +875,52 @@ def ball_after(scene: BrowserScene, beat: VisualBeat, ball: list[str] | None) ->
     return ball
 
 
+# A spoken name lights the thing it names (owner review, 2026-11-23: "if the speaker is talking
+# about S, S should increase in size or glow"). The voice speaks at an even pace, so a word's place
+# in the sentence is close to its moment in the audio.
+MENTION_SECONDS = 1.4
+
+
+def mentions(scene: BrowserScene, spoken: str | None, speech: float) -> list[dict]:
+    """[{"keys": [element keys], "at": seconds}] for each name on screen said in `spoken`."""
+    if not spoken or speech <= 0:
+        return []
+    exact: dict[str, list[str]] = {}       # case matters: the room "A" is not the article "a"
+    loose: dict[str, list[str]] = {}       # pointer and piece names, any case
+    for obj in scene.objects:
+        payload = obj.payload or {}
+        if obj.kind == "graph":
+            for node in payload.get("nodes") or []:
+                exact.setdefault(str(node), []).append(f"{obj.id}:node:{node}")
+        elif obj.kind == "array":
+            for index, item in enumerate(payload.get("items") or []):
+                if isinstance(item, (int, float)) and not isinstance(item, bool):
+                    exact.setdefault(str(int(item) if float(item).is_integer() else item), []).append(
+                        f"{obj.id}:cell:{index}")
+        elif obj.kind == "pointer" and obj.label:
+            loose.setdefault(obj.label.lower(), []).append(obj.id)
+        elif obj.kind in {"icon", "node"} and obj.label and len(obj.label.split()) <= 3:
+            loose.setdefault(obj.label.lower(), []).append(obj.id)
+    found = []
+    words = list(re.finditer(r"[A-Za-z0-9]+(?:\.[0-9]+)?", spoken))
+    taken: set[int] = set()
+    for size in (3, 2, 1):                 # the longest name first: "load balancer" before "load"
+        for start in range(len(words) - size + 1):
+            if any(index in taken for index in range(start, start + size)):
+                continue
+            phrase = " ".join(word.group(0) for word in words[start:start + size])
+            keys = (exact.get(phrase) if size == 1 else None) or loose.get(phrase.lower())
+            if not keys:
+                continue
+            taken.update(range(start, start + size))
+            found.append({"keys": keys, "at": round(speech * words[start].start() / len(spoken), 3)})
+    return sorted(found, key=lambda item: item["at"])
+
+
 def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
                    opening: VisualState, duration: float, layout_mode: str = "auto",
-                   ball: list[str] | None = None) -> str:
+                   ball: list[str] | None = None,
+                   spoken: str | None = None, speech: float | None = None) -> str:
     windows = beat.timeline(duration)
     state = deepcopy(opening)
     # what holds a place during this beat: what is on screen as it opens, and what this beat or a
@@ -895,6 +940,7 @@ def animation_html(scene: BrowserScene, beat: VisualBeat, *, title: str,
         ball = _ball_step(scene, action, ball)
         rest.append(ball)
     data = json.dumps({"snapshots": snapshots, "windows": windows, "rest": rest,
+                       "mentions": mentions(scene, spoken, speech if speech is not None else duration),
                        "actions": [action.model_dump() for action in beat.actions],
                        "relations": [relation.model_dump() for relation in scene.relationships]},
                       ensure_ascii=False).replace("</", "<\\/")
@@ -904,6 +950,7 @@ const plan=JSON.parse(document.getElementById('animation-plan').textContent);
 const stage=document.querySelector('.semantic-stage');
 let current=-2, animations=[], fresh=new Set();
 const BRISK=.6, DRAW=.7, HOP=1.1, EASE='cubic-bezier(.45,0,.2,1)';
+const MENTION=__MENTION__;
 const ease=t=>t<.5?2*t*t:1-(2-2*t)*(2-2*t)/2;
 const edges=()=>[...document.querySelectorAll('.connections line,.connections path.edge')];
 const edgeKey=e=>e.dataset.sourceId+'>'+e.dataset.targetId;
@@ -1101,6 +1148,7 @@ window.seekAnimation=seconds=>{
     plan.windows[index][1]-plan.windows[index][0]));
     for(const animation of animations)animation.currentTime=elapsed*1000;
   }
+  glowMentions(seconds);
   window.drawConnections();
   if(index>=0&&fresh.size){
     const span=Math.min(DRAW,plan.windows[index][1]-plan.windows[index][0]);
@@ -1115,6 +1163,23 @@ window.seekAnimation=seconds=>{
     }
   }
 };
+// What the voice names swells and glows for a moment, rising and settling with the word.
+function glowMentions(seconds){
+  for(const element of document.querySelectorAll('.is-mentioned')){
+    element.classList.remove('is-mentioned');element.style.scale='';element.style.filter='';}
+  for(const mention of plan.mentions||[]){
+    const t=(seconds-mention.at)/MENTION;
+    if(t<0||t>1)continue;
+    const g=Math.sin(Math.PI*t);
+    for(const key of mention.keys){
+      const element=stage.querySelector(`[data-visual-key="${CSS.escape(key)}"],[data-object-id="${CSS.escape(key)}"]`);
+      if(!element||element.closest('.is-hidden'))continue;
+      element.classList.add('is-mentioned');
+      element.style.scale=String(1+.16*g);
+      element.style.filter=`drop-shadow(0 0 ${Math.round(18*g)}px #fde68a) brightness(${1+.35*g})`;
+    }
+  }
+}
 window.animationReady=async()=>{
   await document.fonts.ready;
   const sources=new Set(plan.snapshots.flatMap(html=>[...new DOMParser()
@@ -1123,6 +1188,7 @@ window.animationReady=async()=>{
   current=-2;window.seekAnimation(0);
 };
 """
+    script = script.replace("__MENTION__", str(MENTION_SECONDS))
     return document.replace("</body>",
         f'<script id="animation-plan" type="application/json">{data}</script>'
         f'<script>{script}</script></body>')
@@ -1137,7 +1203,8 @@ CAPTURE_ARGS = ["--disable-gpu"]
 def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | Path, *,
                          title: str, opening: VisualState, duration: float,
                          audio: str | Path, fps: int = 30,
-                         layout_mode: str = "auto", ball: list[str] | None = None) -> list[Path]:
+                         layout_mode: str = "auto", ball: list[str] | None = None,
+                         spoken: str | None = None, speech: float | None = None) -> list[Path]:
     if type(fps) is not int or not 1 <= fps <= 60:
         raise ValueError("animation fps must be an integer from 1 to 60")
     for action, (start, end) in zip(beat.actions, beat.timeline(duration)):
@@ -1148,7 +1215,8 @@ def render_animated_beat(scene: BrowserScene, beat: VisualBeat, out_mp4: str | P
     deadline = time.monotonic() + 300
     cancel.check()
     document = animation_html(scene, beat, title=title, opening=opening,
-                              duration=duration, layout_mode=layout_mode, ball=ball)
+                              duration=duration, layout_mode=layout_mode, ball=ball,
+                              spoken=spoken, speech=speech)
     out_mp4 = Path(out_mp4)
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
     out_mp4.with_suffix(f".{layout_mode}.html").write_text(document, encoding="utf-8")

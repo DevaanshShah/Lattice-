@@ -283,3 +283,47 @@ def test_the_search_moves_dots_to_the_rooms_found_and_a_walker_along_the_path():
         browser.close()
     assert early and later and later[0]["x"] > early[0]["x"] + 20       # it walks toward the goal
     assert gone[0]["opacity"] < .2                                       # and fades there
+
+
+@pytest.mark.unit
+def test_a_name_said_aloud_is_found_on_screen_at_its_place_in_the_sentence():
+    """Owner review, 2026-11-23: "if the speaker is talking about S, S should glow". The room 'A'
+    is matched only as a capital (not the article), and each name at its share of the sentence."""
+    from generation.browser_scene import mentions
+
+    first, _ = plan_trace_scenes(_lesson(ANSWER), SKILL)
+    said = "We start at S, and a queue takes A then C."
+    found = mentions(first, said, speech=10.0)
+    keys = [item["keys"] for item in found]
+    assert keys == [["maze:node:S"], ["maze:node:A"], ["maze:node:C"]]
+    assert found[0]["at"] == round(10 * said.index("S,") / len(said), 3)
+    assert mentions(first, "a queue holds a room", 5.0) == []
+
+
+@pytest.mark.integration
+def test_the_room_the_voice_names_glows_while_it_is_named():
+    from playwright.sync_api import sync_playwright
+    from composition.slides import chrome_path
+    from core.visual_state import closing_state
+    from generation.browser_scene import CAPTURE_ARGS, animation_html, mentions
+
+    first, _ = plan_trace_scenes(_lesson(ANSWER), SKILL)
+    beat, said = first.beats[1], "We start at S, and S adds A and C."
+    opening = closing_state(first.model_copy(update={"beats": first.beats[:1]}), None)
+    html = animation_html(first, beat, title="t", opening=opening, duration=6.0, spoken=said, speech=5.0)
+    named = mentions(first, said, 5.0)[0]["at"]
+    probe = """() => { const e = document.querySelector('[data-visual-key="maze:node:S"]');
+        return [e.classList.contains('is-mentioned'), parseFloat(e.style.scale || '1')]; }"""
+    with sync_playwright() as play:
+        browser = play.chromium.launch(executable_path=chrome_path(), args=CAPTURE_ARGS)
+        results = []
+        for t in (named + .7, named + 3.0):
+            page = browser.new_page(viewport={"width": 1920, "height": 1080})
+            page.set_content(html)
+            page.evaluate("window.animationReady()")
+            page.evaluate(f"window.seekAnimation({t})")
+            results.append(page.evaluate(probe))
+        browser.close()
+    (lit, grown), (later, size) = results
+    assert lit and grown > 1.1                 # named: it swells and glows
+    assert not later and size == 1             # and settles once the word has passed
