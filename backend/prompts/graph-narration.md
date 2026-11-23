@@ -13,6 +13,6 @@ How to write a sentence:
 - Call the waiting list by the name the step gives it: "Queue" for breadth-first search, "Stack" for depth-first search. Never call a stack a queue.
 - Write every node name exactly as given, in capitals ("A", "C", "G"), never "a" or "c".
 - When a node is named A, never start a sentence with that node: write "Room A comes out next", not "A comes out next". Inside a sentence the article is always "a" in lower case.
-- About fifteen words; a reason may take up to twenty-two. Never more than the step's "at most words"; a step that must say several things may use two short sentences.
+- About twenty words; a reason may take up to thirty. Talk like a teacher at a whiteboard: say what the learner sees happen and why it matters, not just what moved. Never more than the step's "at most words"; a step that must say several things may use two short sentences.
 - Do not reveal the path before the step that draws it.
 - Say the technique's name once, after the viewer has seen it work.

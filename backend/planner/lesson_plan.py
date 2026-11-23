@@ -94,7 +94,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
         # A graph search: code runs it and builds every step (planner/lesson_graph.py).
         from planner import lesson_graph
         try:
-            return lesson_graph.generate(topic, skill, client=client)
+            return lesson_graph.generate(topic, skill, client=client, target_seconds=target_seconds)
         except (LessonPlanError, ValueError) as exc:
             if on_reject is not None:
                 on_reject(f"the staged graph lesson could not be planned, so the one-call "

@@ -18,7 +18,8 @@ You are a teacher designing a short learning video about searching a graph: brea
     "goal": the node it looks for,
     "order": "bfs" or "dfs", the search the topic asks about,
     "name": the usual name of the technique, such as "breadth-first search"
-  }
+  },
+  "uses": where this search is used in real life and when to pick it over the other, in one or two plain sentences of at most 200 characters, such as "Maps use it for fewest-stops routes; pick it when every step costs the same."
 }
 
-Make a graph where the order of the search matters: at least two routes from the start to the goal, one shorter than the other, and the goal not a neighbour of the start. Every node must be reachable from the start. Keep it small enough to follow: six to eight nodes is best.
+Make a graph where the order of the search matters: at least two routes from the start to the goal, one shorter than the other, and the goal not a neighbour of the start. Every node must be reachable from the start. Keep it small enough to follow: seven to nine nodes is best, so the search takes enough steps to follow.

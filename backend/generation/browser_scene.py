@@ -59,6 +59,7 @@ _SEMANTIC_CSS = """
 .graph-node.is-current circle{fill:#4a3507;stroke:#fbbf24;stroke-width:4;filter:drop-shadow(0 0 10px #fbbf24)}
 .graph-node.is-path circle{fill:#123d22;stroke:#4ade80;stroke-width:4}
 .graph-node.is-goal circle{stroke-width:4}.graph-node.is-goal:not(.is-path):not(.is-current) circle{stroke:#f472b6}
+.graph-scout{fill:#fbbf24;filter:drop-shadow(0 0 6px #fbbf24)}.graph-walker{fill:#f4f4f5;stroke:#4ade80;stroke-width:4;filter:drop-shadow(0 0 10px #4ade80)}
 .graph-frontier{margin-top:12px;text-align:center;color:#fbbf24;font:650 22px/1.3 Cascadia Code,Consolas,monospace}
 .tree-node.is-marked circle{fill:#3a1518;stroke:#f87171;stroke-width:3}.tree-node.is-marked text{fill:#fecaca}
 .tree-note{margin-top:8px;min-height:30px;color:#f87171;font:650 22px/1.3 Segoe UI,system-ui,sans-serif}
@@ -990,6 +991,56 @@ function display(index){
       if(k<count-1)frames.push({...frames[frames.length-1],opacity:0,offset:1});
       svg.append(dot);animate(dot,frames,HOP*hops*(1+gap*(count-1)),count>1?'linear':EASE);
     }
+  }
+  if(action.kind==='set_state')searchMotion(action,before,animate);
+}
+// A graph search moves, not only changes colour (owner review, 2026-11-22: "the components are
+// dynamic"). When a node is taken, a dot runs down each doorway to the nodes it has just found;
+// when the path is found, a walker goes from the start to the goal and the path draws behind it.
+function searchMotion(action,before,animate){
+  const holder=stage.querySelector(`[data-object-id="${CSS.escape(action.target_ids[0])}"]`);
+  const map=holder&&holder.querySelector('svg.graph-map');
+  if(!map)return;
+  const nodeOf=n=>map.querySelector(`[data-visual-key="${CSS.escape(action.target_ids[0]+':node:'+n)}"] circle`);
+  const at=n=>{const c=nodeOf(n);return c&&[+c.getAttribute('cx'),+c.getAttribute('cy')];};
+  const dot=(r,cls)=>{const d=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    d.setAttribute('r',r);d.setAttribute('class','flow-packet '+cls);map.append(d);return d;};
+  const p=action.params||{};
+  if(Array.isArray(p.path)&&p.path.length>1){
+    // the walk takes .85 of the time; then the walker fades at the goal, so its name shows again
+    const stops=p.path.map(at).filter(Boolean),hop=.7,total=hop*(stops.length-1)/.85,last=stops[stops.length-1];
+    const walker=dot(13,'graph-walker');
+    animate(walker,[...stops.map((s,i)=>({transform:`translate(${s[0]}px,${s[1]}px)`,opacity:1,
+      offset:.85*i/(stops.length-1)})),{transform:`translate(${last[0]}px,${last[1]}px)`,opacity:0,offset:1}],
+      total,'linear');
+    for(let i=1;i<p.path.length;i++){
+      const a=p.path[i-1],b=p.path[i],id=action.target_ids[0]+':edge:';
+      const forward=map.querySelector(`[data-visual-key="${CSS.escape(id+a+'-'+b)}"]`);
+      const edge=forward||map.querySelector(`[data-visual-key="${CSS.escape(id+b+'-'+a)}"]`);
+      if(!edge)continue;
+      // a line's own endpoints: getTotalLength throws on a line not yet rendered
+      const length=Math.hypot(edge.x2.baseVal.value-edge.x1.baseVal.value,edge.y2.baseVal.value-edge.y1.baseVal.value),
+        from=forward?length:-length;
+      edge.style.strokeDasharray=length;
+      const start=.85*(i-1)/(stops.length-1),end=.85*i/(stops.length-1);
+      animate(edge,[{strokeDashoffset:from,offset:0},{strokeDashoffset:from,offset:start},
+        {strokeDashoffset:0,offset:end},{strokeDashoffset:0,offset:1}],total,'linear');
+    }
+    return;
+  }
+  if(!p.current||!Array.isArray(p.frontier))return;
+  const was=new Set([...before].filter(([,old])=>old.element.classList&&
+    old.element.classList.contains('is-waiting')).map(([id])=>id.split(':node:')[1]));
+  const from=at(p.current);
+  if(!from)return;
+  for(const n of p.frontier){
+    const to=at(n);
+    if(!to||was.has(n)||n===p.current)continue;
+    animate(dot(10,'graph-scout'),[
+      {transform:`translate(${from[0]}px,${from[1]}px)`,opacity:0,offset:0},
+      {transform:`translate(${from[0]}px,${from[1]}px)`,opacity:1,offset:.2},
+      {transform:`translate(${to[0]}px,${to[1]}px)`,opacity:1,offset:.85},
+      {transform:`translate(${to[0]}px,${to[1]}px)`,opacity:0,offset:1}],HOP*1.3);
   }
 }
 window.seekAnimation=seconds=>{

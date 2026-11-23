@@ -64,10 +64,18 @@ class GraphSpec(BaseModel):
                              "big enough that the order of the search matters")
 
 
+# A target at or over this many seconds gets the full lesson: every step of the search on its own
+# beat, and a closing scene on the catch and where the technique is used. A lesson asked for no
+# length is a full one: the one-minute lessons the owner saw on 2026-11-22 were "really short".
+FULL_FROM_SECONDS = 100
+DEFAULT_SECONDS = 150
+
+
 class GraphConcept(BaseModel):
     model_config = ConfigDict(extra="forbid")
     brief: LessonBrief
     graph: GraphSpec
+    uses: str | None = Field(None, min_length=1, max_length=200)    # where it is used in real life
 
     def model_post_init(self, _) -> None:
         # the turning point is shown on screen; found here, it is repaired with the rest of the brief
@@ -76,8 +84,9 @@ class GraphConcept(BaseModel):
                              f"characters, not {len(self.brief.turning_point)}; say it in fewer words")
 
 
-def build_run(concept: GraphConcept) -> tuple[dict, list[dict]]:
-    """The whole lesson as code decides it, and the steps the narration step is shown."""
+def build_run(concept: GraphConcept, full: bool = True) -> tuple[dict, list[dict]]:
+    """The whole lesson as code decides it, and the steps the narration step is shown.
+    `full` is the long lesson: one node a step to the end, then the catch and the uses."""
     graph, brief = concept.graph, concept.brief
     found = search(graph.nodes, graph.edges, graph.source, graph.goal, graph.order)
     trace = {"data": [
@@ -97,10 +106,17 @@ def build_run(concept: GraphConcept) -> tuple[dict, list[dict]]:
          WORDS_SEVERAL)
     step(0, {"do": "ask"}, f"the question on screen: {brief.question}", "said by code")
     step(1, {"do": "turn"}, f"the idea on screen: {brief.turning_point}", "said by code")
+    if full:
+        step(1, {"do": "show", "items": ["graph"]},
+             f"the graph again, with the {waiting} holding only {graph.source}",
+             f"Explain the {waiting} before the search starts: what it is (a waiting list of rooms "
+             f"found but not yet visited), the rule for which room leaves it first "
+             f"({'the one that has waited longest' if graph.order == 'bfs' else 'the one added last'}), "
+             f"and that the search starts by putting {graph.source} in it.", WORDS_SEVERAL)
     # one node per step while the rule is new, then two at a time
     taken, index = 0, 0
     while taken < len(found["steps"]):
-        count = 1 if index < 3 else min(2, len(found["steps"]) - taken)
+        count = 1 if full or index < 3 else min(2, len(found["steps"]) - taken)
         batch = found["steps"][taken:taken + count]
         taken += count
         last = batch[-1]
@@ -114,12 +130,25 @@ def build_run(concept: GraphConcept) -> tuple[dict, list[dict]]:
               if count == 1 else f"Say these come out of the {waiting} in turn, and what they add.")
              + (f" This is {graph.goal}, the goal: say the search stops here." if last["node"] == graph.goal else ""))
         index += 1
+        if full and index == 4 and taken < len(found["steps"]) - 1:
+            step(2, {"do": "show", "items": ["graph"]},
+                 f"the search part way through: {taken} rooms taken, {len(graph.nodes) - taken} to go",
+                 f"Pause to say, in your own words, the one rule the learner has now seen work "
+                 f"({taken} rooms in), and what to watch for in the next step.")
     step(2, {"do": "found", "graph": "graph"},
          f"the path found is drawn: {' -> '.join(found['path'])}, {len(found['path']) - 1} edges",
          "Say how the path is read back from where each node was first found, and how long it is"
          + (", and why breadth-first search makes it the shortest." if graph.order == "bfs"
             else ", and that depth-first search does not promise the shortest."), WORDS_SEVERAL)
-    titles = ("The problem", "The search", "The way through")
+    if full:
+        step(3, {"do": "count", "counter": "taken", "expect": len(found["steps"])},
+             f"the count reads {len(found['steps'])}: every room the search took",
+             f"Say the catch: {brief.catch} Say the number as {{taken}}, the rooms the search had to take.")
+        if concept.uses:
+            step(3, {"do": "show", "items": ["graph"]}, "the whole graph again, with the path lit",
+                 f"Say where {graph.name} is used in real life ({concept.uses}) and when to pick it.",
+                 WORDS_SEVERAL)
+    titles = ("The problem", "The search", "The way through", "What to remember")[:4 if full else 3]
     scenes = [{"title": title, "learning_goal": title,
                "beats": [{"move": move, "spoken_text": ""} for scene, move, *_ in steps if scene == number]}
               for number, title in enumerate(titles)]
@@ -130,13 +159,15 @@ def build_run(concept: GraphConcept) -> tuple[dict, list[dict]]:
     return lesson, shown
 
 
-def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None) -> LessonPlan:
+def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None,
+             target_seconds: float | None = None) -> LessonPlan:
     """Plan a graph-search lesson in two model calls with code between them."""
     client = client or get_client()
+    full = (target_seconds or DEFAULT_SECONDS) >= FULL_FROM_SECONDS
     concept = _ask(client, [{"role": "system", "content": load("graph-concept")},
                             {"role": "user", "content": f"Topic: {topic}\n\nReturn the JSON now."}],
                    GraphConcept.model_validate)
-    lesson, shown = build_run(concept)
+    lesson, shown = build_run(concept, full)
 
     def narrated(answer: dict) -> dict:
         sentences, scenes = answer.get("sentences"), answer.get("scenes")
@@ -160,6 +191,11 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None) -> L
                    if entry["the sentence must"] != "said by code" and not str(text).strip()]
         if missing:
             raise ValueError(f"step(s) {missing} have no sentence")
+        unsaid = [index + 1 for index, (text, entry) in enumerate(zip(sentences, shown))
+                  if "{taken}" in entry["the sentence must"] and "{taken}" not in str(text)]
+        if unsaid:
+            raise ValueError(f"step {unsaid[0]} must say the count as the slot {{taken}}, which code "
+                             "fills in with the number on screen, such as 'it took {taken} rooms'")
         # A name is read by what is written: "c" is not the room C, and a lower-case "a" is the
         # article. Live 2026-11-22 the model, told not to open on "A", wrote every room in lower case.
         lowered = [(index + 1, node) for index, text in enumerate(sentences) for node in concept.graph.nodes
