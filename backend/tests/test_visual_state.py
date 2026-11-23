@@ -219,7 +219,7 @@ def test_saved_v2_plan_renders_action_frames_and_video(monkeypatch, tmp_path, ti
                     "anullsrc=channel_layout=stereo:sample_rate=44100",
                     "-t", "6", str(audio)], check=True, capture_output=True)
     monkeypatch.setattr(browser_video, "synthesize",
-                        lambda text, out_dir, engine: Clip(text, audio, 6.0))
+                        lambda text, out_dir, engine, names=frozenset(): Clip(text, audio, 6.0))
     result = browser_video.build(lesson, plan, load_recipes()["workflow_explainer"],
                                  out_dir=tmp_path / "render", fps=10)
     assert result.mp4.exists()
@@ -453,7 +453,7 @@ def test_v2_manim_scene_renders_with_the_existing_sandbox(monkeypatch, tmp_path,
                     "anullsrc=channel_layout=stereo:sample_rate=44100",
                     "-t", "2", str(audio)], check=True, capture_output=True)
     monkeypatch.setattr(browser_video, "synthesize",
-                        lambda text, out_dir, engine: Clip(text, audio, 2.0))
+                        lambda text, out_dir, engine, names=frozenset(): Clip(text, audio, 2.0))
     result = browser_video.build(lesson, plan, load_recipes()["workflow_explainer"],
                                  out_dir=tmp_path / "manim-render")
     assert result.mp4.exists()
