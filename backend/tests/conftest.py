@@ -52,3 +52,6 @@ def public_defaults(monkeypatch):
     from core.config import settings
     monkeypatch.setattr(settings, "dev_console", False)
     monkeypatch.setattr(settings, "api_docs", False)
+    # The suite fires many requests from one address in well under a minute; tests of the limiter set it.
+    for k in ("rate_limit_auth_per_min", "rate_limit_writes_per_min", "rate_limit_reads_per_min"):
+        monkeypatch.setattr(settings, k, 0)

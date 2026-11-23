@@ -216,3 +216,19 @@ def test_a_missing_public_url_with_sign_in_on_warns(monkeypatch):
     for k, v in dict(supabase_url="https://p.supabase.co", supabase_anon_key="k", public_url="").items():
         monkeypatch.setattr(settings, k, v)
     assert {x.name: x for x in pf.check_access()}["public url"].level == pf.WARN
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("free_gb,total_gb,level", [
+    (50, 100, pf.OK), (4, 100, pf.WARN), (8, 100, pf.WARN), (12, 100, pf.OK), (0.5, 100, pf.FAIL), (6, 50, pf.OK),
+])
+def test_disk_space_warns_before_it_runs_out(free_gb, total_gb, level):
+    c = pf.disk_check(int(free_gb * 1024 ** 3), int(total_gb * 1024 ** 3), "/data")
+    assert c.level == level and "GiB free" in c.detail
+
+
+@pytest.mark.unit
+def test_disk_check_runs_against_the_data_directory(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "out_dir", tmp_path)
+    [c] = pf.check_disk()
+    assert c.name == "disk space" and str(tmp_path) in c.detail

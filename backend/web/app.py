@@ -34,6 +34,7 @@ from web import errors as errors_mod
 from web import jobs as jobs_mod
 from web import ownership as own
 from web import quota as quota_mod
+from web import ratelimit as ratelimit_mod
 from web import users as users_mod
 from web.engine import Engine, ProjectNotFound, project_dto
 
@@ -170,6 +171,13 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         return quota.status(usage.current().user)
     # Sign-in resolves the session BEFORE routing, so the identity dependency above sees the user.
     auth_mod.install(app, auth)
+    # Per-address request ceiling. Added after the sign-in middleware so it runs BEFORE it (cheap refusals
+    # first), and before CORS so a refusal still carries the headers a separately hosted UI needs.
+    app.add_middleware(ratelimit_mod.RateLimitMiddleware, limiter=ratelimit_mod.RateLimiter({
+        "auth": settings.rate_limit_auth_per_min,
+        "write": settings.rate_limit_writes_per_min,
+        "read": settings.rate_limit_reads_per_min,
+    }))
     # A separately hosted frontend talks to this API cross-origin. Off unless configured, so a
     # single-server deploy has no CORS surface at all. Added AFTER the auth middleware, which makes it
     # the OUTER one: a preflight (which carries no cookies) is answered before the session gate sees it,
@@ -483,9 +491,17 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         app.mount("/admin-assets", StaticFiles(directory=str(ADMIN_ASSETS)), name="admin-assets")
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
+    def index(request: Request) -> str:
         idx = FRONTEND_DIR / "index.html"
-        return idx.read_text(encoding="utf-8") if idx.exists() else "<h1>Lattice API</h1>"
+        if not idx.exists():
+            return "<h1>Lattice API</h1>"
+        # Link-preview crawlers need an absolute image URL, and the public address differs per deploy.
+        base = (settings.public_url or str(request.base_url)).rstrip("/")
+        return idx.read_text(encoding="utf-8").replace('content="/static/og.png"', f'content="{base}/static/og.png"')
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> RedirectResponse:
+        return RedirectResponse("/static/favicon.svg", status_code=301)
 
     app.state.engine = engine
     app.state.queue = queue

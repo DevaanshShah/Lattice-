@@ -119,6 +119,15 @@ class UserStore:
             self._flush_locked(force=fresh)
             return rec
 
+    def forget(self, uid: str) -> bool:
+        """Delete one account's record (scripts/delete_user.py). True if it existed."""
+        with self._lock:
+            if self._users.pop(uid, None) is None:
+                return False
+            self._dirty = True
+            self._flush_locked(force=True)
+            return True
+
     def get(self, uid: str) -> UserRecord | None:
         with self._lock:
             return self._users.get(uid)

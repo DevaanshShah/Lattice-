@@ -115,12 +115,12 @@ def _synth_kokoro(text: str, out_path: Path, *, lang: str = "en") -> None:
 
 
 def _duration(path: Path) -> float:
-    if path.suffix.lower() == ".wav":
-        import soundfile as sf  # pure-python, no network
-        info = sf.info(str(path))
-        return float(info.frames) / float(info.samplerate)
-    from mutagen.mp3 import MP3  # pure-python, no network
-    return float(MP3(str(path)).info.length)
+    """Exact length of a WAV (Kokoro) or MP3 (gTTS) clip. libsndfile >= 1.1 reads MP3 natively, and it
+    reports the true sample count: mutagen, used here before, counted the encoder's padding and ran about
+    60 ms long per clip. It was also the project's only GPL dependency."""
+    import soundfile as sf  # no network
+    info = sf.info(str(path))
+    return float(info.frames) / float(info.samplerate)
 
 
 def synthesize(text: str, *, out_dir: str | Path, engine: str | None = None,

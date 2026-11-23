@@ -67,6 +67,9 @@ class Ownership:
         self._seen_mtime = None         # force a fresh read: merge onto what is on disk NOW
         self._sync_locked()
         self._owners[kind].update(changes)
+        self._save_locked()
+
+    def _save_locked(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")   # per process: no clash
         tmp.write_text(json.dumps(self._owners, indent=2, sort_keys=True), encoding="utf-8")
@@ -75,6 +78,24 @@ class Ownership:
             self._seen_mtime = self.path.stat().st_mtime_ns
         except OSError:
             self._seen_mtime = None
+
+    # --- account deletion (scripts/delete_user.py) ---
+    def owned_by(self, uid: str) -> dict[str, list[str]]:
+        with self._lock:
+            self._seen_mtime = None
+            self._sync_locked()
+            return {k: sorted(r for r, u in self._owners[k].items() if u == uid) for k in KINDS}
+
+    def forget(self, kind: str, ids: Iterable[str]) -> None:
+        """Remove ownership rows for items that are being deleted. Reads the file first, so a row
+        written by the running server a moment ago is not lost."""
+        drop = set(ids)
+        with self._lock:
+            self._seen_mtime = None
+            self._sync_locked()
+            for rid in drop:
+                self._owners[kind].pop(rid, None)
+            self._save_locked()
 
     # --- writes ---
     def claim(self, kind: str, rid: str, uid: str | None = None) -> None:

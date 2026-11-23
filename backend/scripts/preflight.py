@@ -253,6 +253,28 @@ def check_host_tools() -> list[Check]:
     return out
 
 
+def disk_check(free_bytes: int, total_bytes: int, where: str) -> Check:
+    """Finished videos, scene clips and the ledger all accumulate on this disk. A full one fails builds
+    in confusing ways (a half-written MP4, a ledger line lost), so warn well before it is full."""
+    gb, pct = free_bytes / 1024 ** 3, 100.0 * free_bytes / max(total_bytes, 1)
+    detail = f"{gb:.1f} GiB free ({pct:.0f}%) at {where}"
+    if gb < 1:
+        return Check("disk space", FAIL, f"{detail}: builds will fail. Delete old projects or grow the disk")
+    if gb < 5 or pct < 10:
+        return Check("disk space", WARN, f"{detail}: running low. Clean up old projects soon")
+    return Check("disk space", OK, detail)
+
+
+def check_disk() -> list[Check]:
+    out_dir = Path(settings.out_dir)
+    probe = out_dir if out_dir.exists() else out_dir.parent
+    try:
+        usage = shutil.disk_usage(probe)
+    except OSError as e:
+        return [Check("disk space", WARN, f"could not read free space at {probe}: {e}")]
+    return [disk_check(usage.free, usage.total, str(probe))]
+
+
 def check_access() -> list[Check]:
     """Who can use this instance, and what the most they can cost is. Sign-in OFF on a server is a
     public app with no accounts and no limits, so that is a warning; open sign-in with no global
@@ -279,7 +301,7 @@ def check_access() -> list[Check]:
 
 def run() -> list[Check]:
     checks: list[Check] = []
-    for fn in (check_model, check_execution, check_host_tools, check_voice, check_storage,
+    for fn in (check_model, check_execution, check_host_tools, check_voice, check_storage, check_disk,
                check_admin, check_access, check_bounds):
         checks.extend(fn())
     checks.append(memory_check(host_memory_gb()))

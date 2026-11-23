@@ -1,29 +1,28 @@
 # Lattice runtime deps (host side). The heavy toolchain (Manim CE + LaTeX + FFmpeg)
 # lives in the Docker render image, NOT here — see Dockerfile / scripts/setup_env.py.
-pydantic>=2.5
-pydantic-settings>=2.1
-python-dotenv>=1.0
-openai>=1.10
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+openai==3.6.0
 # M4 narration (host-side TTS so the render stays no-net)
-gtts>=2.5
-mutagen>=1.47
+gtts==2.5.4
 # M7 web UI (thin HTTP skin over the engine; renders still run in the Docker sandbox)
-fastapi>=0.109
-uvicorn>=0.27
+fastapi==0.141.1
+uvicorn==0.52.4
 # httpx backs fastapi.testclient in the unit tests
-httpx>=0.26
+httpx==0.28.1
 # Google sign-in via Supabase (web/auth.py): verifies access tokens locally (JWKS / HS256).
 # httpx above is also the runtime client for the Supabase Auth API.
-PyJWT[crypto]>=2.8
+PyJWT[crypto]==2.15.1
 # Local neural TTS (LATTICE_TTS_ENGINE=kokoro). Missing these does NOT fall back to gtts —
 # narration raises and the build ships the scene SILENT — which is why they belong here rather
 # than in a "nice to have" note. onnxruntime is the heavy one (~200 MB in the image).
-kokoro-onnx>=0.4
-soundfile>=0.12
+kokoro-onnx==0.6.1
+soundfile==0.14.0
 # Browser-rendered scenes (generation/browser_scene.py, verification/browser_layout.py). Only the
 # Python driver: it launches the SYSTEM Chrome (composition/slides.py:chrome_path), so the host
 # also needs google-chrome installed (or LATTICE_CHROME pointing at one) — no `playwright install`.
-playwright>=1.40
+playwright==1.62.0
 # Object storage (Cloudflare R2, S3-compatible). Only needed when the R2_* settings are
 # filled in — core/storage.py degrades to local disk without it.
-boto3>=1.34
+boto3>=1.34,<2

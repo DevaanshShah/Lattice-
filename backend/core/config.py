@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # The developer console: each scene's generated code, the exact model prompts, and the raw job log.
     # That is the product's prompt engineering, so it is for the owner's own machine, not for users.
     dev_console: bool = False
+    # Requests per minute from one client address (web/ratelimit.py). 0 turns that bucket off.
+    rate_limit_auth_per_min: int = 20      # sign-in attempts
+    rate_limit_writes_per_min: int = 60    # POST/PUT/PATCH/DELETE under /api/
+    rate_limit_reads_per_min: int = 600    # other /api/ requests (status polling, video streaming)
 
     # --- per-account limits (web/quota.py): a rolling 24 hours, enforced only with sign-in on ---
     quota_videos_per_day: int = 5        # whole videos: build, deck, lesson video. 0 = unlimited

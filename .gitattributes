@@ -1,3 +1,10 @@
 # Keep bundled icon SVGs as LF regardless of platform — they're baked into the render image and
 # checked out on Windows would otherwise become CRLF, which can trip SVG parsers on rebuild.
 *.svg text eol=lf
+
+# Scripts and unit files run on Linux: keep LF line endings whatever the checkout platform.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+Caddyfile text eol=lf
+Dockerfile* text eol=lf

@@ -174,6 +174,12 @@ class Quota:
                 live.remove(receipt)
                 self._save_locked()
 
+    def forget(self, uid: str) -> None:
+        """Drop one account's counts (scripts/delete_user.py)."""
+        with self._lock:
+            if self._used.pop(uid, None) is not None:
+                self._save_locked()
+
     def status(self, uid: str) -> dict:
         """What the account has used and when it frees up, for the UI. Unlimited fields are None."""
         if not self.applies(uid):

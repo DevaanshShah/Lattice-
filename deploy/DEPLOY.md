@@ -291,6 +291,20 @@ Sign-in then starts on the API, and returns the browser to the frontend. Only ad
 
 ---
 
+## 8b. Running it day to day
+
+| Task | Command |
+|---|---|
+| Update to the latest code | on the server: `bash ~/lattice-new/deploy/oracle/update.sh` (rolls back by itself if the new code fails preflight or never answers /health) |
+| Back up the data to your PC | on your PC: `powershell -File deploy\oracleackup-to-pc.ps1` |
+| Delete someone's data on request | on the server, with the app stopped: `cd backend && ./.venv/bin/python -m scripts.delete_user --email them@example.com` (lists), then add `--yes` |
+| See why a request failed | `journalctl -u lattice | grep <ref>` with the reference shown on the error page |
+
+Abuse limits: each client address gets 20 sign-in attempts, 60 changes and 600 other API calls a minute
+(`LATTICE_RATE_LIMIT_*`), on top of the per-account daily limits and the global spend ceiling.
+
+---
+
 ## 9. After deploying
 
 ```bash
