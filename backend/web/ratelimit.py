@@ -101,3 +101,61 @@ class RateLimitMiddleware:
                     await response(scope, receive, send)
                     return
         await self.app(scope, receive, send)
+
+
+# --- request size --------------------------------------------------------------------------------
+# Every free-text field the model reads is paid for by the token. Field limits catch the known fields;
+# this catches the rest (a field someone adds later without a limit, a body padded with junk). Learn
+# messages carry a pasted image as a data URL, so those two routes get room for one; nothing else needs
+# more than a few kilobytes (a pasted code snippet is capped at 20,000 characters).
+import re  # noqa: E402
+
+MAX_BODY = 64 * 1024
+IMAGE_BODY = 12 * 1024 * 1024
+_IMAGE_ROUTES = re.compile(r"/api/learn/threads(/[^/]+/messages)?/?")
+
+
+class _TooLarge(Exception):
+    pass
+
+
+def body_limit_for(method: str, path: str) -> int | None:
+    if method.upper() not in WRITES or not path.startswith("/api/"):
+        return None
+    return IMAGE_BODY if _IMAGE_ROUTES.fullmatch(path) else MAX_BODY
+
+
+class BodySizeLimitMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send, limit: int) -> None:
+        kb = limit // 1024
+        size = f"{kb // 1024} MB" if kb >= 1024 else f"{kb} KB"
+        await errors_mod.respond(Request(scope), 413, f"That request is too large (the limit is {size}).")(
+            scope, receive, send)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        limit = body_limit_for(scope.get("method", ""), scope.get("path", "")) if scope["type"] == "http" else None
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+        declared = next((v for k, v in scope.get("headers") or [] if k == b"content-length"), None)
+        if declared is not None and declared.isdigit() and int(declared) > limit:
+            await self._refuse(scope, receive, send, limit)
+            return
+        received = 0
+
+        async def counted() -> dict:          # a body sent without Content-Length is counted as it arrives
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise _TooLarge()
+            return message
+
+        try:
+            await self.app(scope, counted, send)
+        except _TooLarge:
+            await self._refuse(scope, receive, send, limit)

@@ -255,9 +255,9 @@ def by_surface(rows: list[dict]) -> list[dict]:
 def _authorized(request: Request) -> bool:
     token = (settings.admin_token or "").strip()
     if token:
-        given = (request.headers.get("x-admin-token")
-                 or request.query_params.get("token")
-                 or request.cookies.get("lattice_admin") or "")
+        # Header only. A token in the URL ends up in the server's access log, the browser history and
+        # bookmarks; a cookie would be sent by the browser on its own, which invites cross-site requests.
+        given = request.headers.get("x-admin-token") or ""
         return hmac.compare_digest(given, token)
     host = getattr(getattr(request, "client", None), "host", "") or ""
     return host in LOOPBACK          # no token configured -> local dev only, never public

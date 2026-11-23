@@ -18,7 +18,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -65,7 +65,7 @@ FRONTEND_DIR, STATIC_DIR = resolve_frontend()
 
 # --- request bodies -------------------------------------------------------------------------
 class CreateProject(BaseModel):
-    topic: str = Field(..., min_length=1)
+    topic: str = Field(..., min_length=1, max_length=2_000)
     max_scenes: int | None = None
     target_seconds: int | None = Field(None, ge=15, le=600)   # the user's duration pick (30/60/150...)
     renderer: Literal["legacy", "browser_v2"] = "legacy"
@@ -80,11 +80,11 @@ class FromCodeReq(BaseModel):
 
 class BuildReq(BaseModel):
     keep: list[int] | None = None         # outline edit: indices to keep, in new order (reorder+cut)
-    quality: str = "preview"
+    quality: str = Field("preview", pattern=r"^[a-z]{1,12}$")
 
 
 class QualityReq(BaseModel):
-    quality: str = "preview"
+    quality: str = Field("preview", pattern=r"^[a-z]{1,12}$")
 
 
 class ReorderReq(BaseModel):
@@ -94,19 +94,19 @@ class ReorderReq(BaseModel):
 
 class InsertReq(BaseModel):
     pos: int
-    title: str = Field(..., min_length=1)
-    intent: str = Field(..., min_length=1)
-    quality: str = "preview"
+    title: str = Field(..., min_length=1, max_length=200)
+    intent: str = Field(..., min_length=1, max_length=2_000)
+    quality: str = Field("preview", pattern=r"^[a-z]{1,12}$")
 
 
 class NarrationReq(BaseModel):
-    lines: list[str] = Field(..., min_length=1)
-    quality: str = "preview"
+    lines: list[Annotated[str, Field(max_length=1_000)]] = Field(..., min_length=1, max_length=60)
+    quality: str = Field("preview", pattern=r"^[a-z]{1,12}$")
 
 
 class TweakReq(BaseModel):
-    instruction: str = Field(..., min_length=1)
-    quality: str = "preview"
+    instruction: str = Field(..., min_length=1, max_length=1_000)
+    quality: str = Field("preview", pattern=r"^[a-z]{1,12}$")
 
 
 class RollbackReq(BaseModel):
@@ -178,6 +178,7 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
         "write": settings.rate_limit_writes_per_min,
         "read": settings.rate_limit_reads_per_min,
     }))
+    app.add_middleware(ratelimit_mod.BodySizeLimitMiddleware)      # oversized bodies never reach a route
     # A separately hosted frontend talks to this API cross-origin. Off unless configured, so a
     # single-server deploy has no CORS surface at all. Added AFTER the auth middleware, which makes it
     # the OUTER one: a preflight (which carries no cookies) is answered before the session gate sees it,
@@ -457,6 +458,8 @@ def create_app(*, engine: Engine | None = None, queue: jobs_mod.JobQueue | None 
             res = engine.export(pid, subtitles=subtitles, fmt=fmt, log=lambda _m: None)
         except FileNotFoundError as e:
             raise HTTPException(409, str(e))
+        except ValueError as e:       # e.g. burn requested on a video with no narration to caption
+            raise HTTPException(400, str(e))
         return FileResponse(res["mp4"], media_type="video/mp4", filename=f"{pid}-{fmt}.mp4")
 
     @app.get("/api/projects/{pid}/script")
