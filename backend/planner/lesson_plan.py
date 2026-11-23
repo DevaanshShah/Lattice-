@@ -70,6 +70,21 @@ def _reason(exc: Exception) -> str:
     return "; ".join(faults[:8]) + (f"; and {len(faults) - 8} more like these" if len(faults) > 8 else "")
 
 
+def _ids_hint(reason: str, data) -> str:
+    """A move with no pieces is sent back with the ids it can use. Live 2026-11-23 the model wrote
+    every move as "pieces": [] (the prompt's [ids] taken as a blank) and "a introduce move needs
+    pieces" alone did not tell it what to put there: five tries, the same empty lists."""
+    if not ("needs pieces" in reason or "needs a path" in reason or "valid list" in reason):
+        return reason
+    pieces = (data.get("map") or {}).get("pieces") if isinstance(data, dict) else None
+    ids = [piece["id"] for piece in pieces or [] if isinstance(piece, dict) and isinstance(piece.get("id"), str)]
+    if not ids:
+        return reason
+    example = ", ".join(f'"{name}"' for name in ids[:2])
+    return (f"{reason}. A move names the pieces it acts on by their ids in your map, never an empty "
+            f"list, such as \"pieces\": [{example}]; your map's ids are {', '.join(ids)}")
+
+
 def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3,
              schema_version: int = 1, target_seconds: float | None = None,
              max_scenes: int | None = None, on_reject=None,
@@ -191,7 +206,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             return plan
         except (ValueError, ValidationError) as exc:
             last = exc
-            reason = _reason(exc)
+            reason = _ids_hint(_reason(exc), data)
             if on_reject is not None:
                 on_reject(reason)
             repair = f"That was invalid ({reason}). Return only valid JSON."

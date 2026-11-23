@@ -162,8 +162,13 @@ class LLMClient:
             if settings.llm_provider_pin:
                 prov.setdefault("order", [settings.llm_provider_pin])
                 prov.setdefault("allow_fallbacks", True)   # warm cache, but don't wedge if the host is down
-            elif settings.llm_provider_sort:
+            # the fallbacks are sorted too: a pin the provider no longer serves must not leave the
+            # call to whichever host happens to come up
+            if settings.llm_provider_sort:
                 prov.setdefault("sort", settings.llm_provider_sort)
+            quantizations = [q.strip() for q in settings.llm_provider_quantizations.split(",") if q.strip()]
+            if quantizations:
+                prov.setdefault("quantizations", quantizations)
             eb["provider"] = prov
             kwargs["extra_body"] = eb
         last_exc: Exception | None = None

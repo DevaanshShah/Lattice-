@@ -30,6 +30,7 @@ Add "check_question" and "check_answer" (a question that tests understanding, en
 3. THE SCENES.
 "scenes": [{"title", "learning_goal", "beats": [{"spoken_text", "move"}], "takeaway"}]
 Each beat is one spoken sentence and exactly one move, which is what the viewer sees while it is spoken:
+(Below, [ids] stands for a list of the ids of your map's pieces, such as ["shop", "server"]. It is never an empty list.)
 - {"do":"introduce","pieces":[ids]}: pieces come on screen.
 - {"do":"send","path":[ids]}: a ball travels through those pieces in order. Each step must be two pieces joined by an arrow; it may travel back along an arrow, for a reply. Pieces not yet on screen appear first.
 - {"do":"trouble","pieces":[ids]}: the pieces turn red. Add "meter" and "value" to push a meter up in red. Add "path" and "count": 4 to first send a stream of balls, the traffic that causes the trouble. Only when the sentence says something fails, overloads or slows down.

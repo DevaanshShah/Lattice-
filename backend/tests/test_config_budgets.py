@@ -147,3 +147,34 @@ def test_transient_retry_count_comes_from_settings(monkeypatch):
     with pytest.raises(APIConnectionError):
         c._create(messages=[{"role": "user", "content": "hi"}], model="m")
     assert len(calls) == 3           # LATTICE_LLM_ATTEMPTS, not the old literal 6
+
+
+@pytest.mark.unit
+def test_openrouter_calls_sort_their_fallbacks_and_leave_out_low_precision_hosts(monkeypatch):
+    """Live 2026-11-23: the pinned provider no longer served the model, so every call fell back
+    to whichever of ~37 hosts came up, fp4 ones among them, and long lessons came back with every
+    list of ids empty. A pin now still sorts its fallbacks, and low-precision hosts are left out."""
+    from types import SimpleNamespace
+
+    from core import llm as llm_mod
+    from core.config import settings
+
+    calls = []
+
+    class FakeCompletions:
+        def create(self, **kw):
+            calls.append(kw)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))], usage=None)
+
+    monkeypatch.setattr(settings, "llm_provider_pin", "DeepSeek")
+    monkeypatch.setattr(settings, "llm_provider_sort", "throughput")
+    monkeypatch.setattr(settings, "llm_provider_quantizations", "fp8,bf16")
+    c = llm_mod.LLMClient(base_url="https://openrouter.ai/api/v1", model="m")
+    c._client = type("C", (), {"chat": type("Ch", (), {"completions": FakeCompletions()})()})()
+    c._create(messages=[{"role": "user", "content": "hi"}], model="m")
+    provider = calls[0]["extra_body"]["provider"]
+    assert provider["order"] == ["DeepSeek"] and provider["allow_fallbacks"] is True
+    assert provider["sort"] == "throughput" and provider["quantizations"] == ["fp8", "bf16"]
+    monkeypatch.setattr(settings, "llm_provider_quantizations", "")
+    c._create(messages=[{"role": "user", "content": "hi"}], model="m")
+    assert "quantizations" not in calls[1]["extra_body"]["provider"]

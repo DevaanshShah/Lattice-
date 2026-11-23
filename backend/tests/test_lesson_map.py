@@ -722,3 +722,64 @@ def test_a_brief_without_a_quiz_adds_no_question_at_the_end():
     half["brief"].pop("check_answer")
     with pytest.raises(ValidationError, match="come together, or neither"):
         _lesson(half)
+
+
+@pytest.mark.integration
+def test_trouble_on_a_map_floods_the_arrow_slides_the_meter_and_breaks_the_piece():
+    """Owner review, 2026-11-22: KodeKloud's pieces crack and the camera moves; ours only changed
+    colour. On the load-balancer lesson's trouble beat: a stream of 4 is drawn as a crowd of 8,
+    the load bar slides from 20 to 100, and the server shakes with a red ring as the camera leans in."""
+    from pathlib import Path
+
+    from playwright.sync_api import sync_playwright
+
+    from composition.slides import chrome_path
+    from core.schemas.browser_visual_plan import BrowserVisualPlan
+    from generation.browser_scene import CAPTURE_ARGS, animation_html
+
+    saved = Path(__file__).parent / "fixtures" / "video_golden" / "taught_map" / "browser_visual_plan.json"
+    scene = BrowserVisualPlan.model_validate_json(saved.read_text(encoding="utf-8")).scenes[0]
+    beat = scene.beats[2]
+    opening = closing_state(scene.model_copy(update={"beats": scene.beats[:2]}))
+    windows = beat.timeline(9.0)
+    kinds = [(action.kind, action.target_ids) for action in beat.actions]
+    stream = kinds.index(("trace", ["students", "door", "server"]))
+    meter, broke = kinds.index(("set_state", ["load"])), kinds.index(("set_state", ["server"]))
+    document = animation_html(scene, beat, title="Results day", opening=opening, duration=9.0)
+
+    def at(seconds, script):
+        page = browser.new_page(viewport={"width": 1920, "height": 1080})
+        page.set_content(document)
+        page.evaluate("() => window.animationReady()")
+        page.evaluate("t => window.seekAnimation(t)", seconds)
+        return page.evaluate(script)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=chrome_path(), headless=True, args=CAPTURE_ARGS)
+        balls = at(windows[stream][0] + .1, "document.querySelectorAll('.flow-packet').length")
+        bar = at(windows[meter][0] + .5, "(()=>{const i=document.querySelector('[data-object-id=load] .meter-bar i');"
+                                         "return i.getBoundingClientRect().width/i.parentElement.getBoundingClientRect().width})()")
+        ring = at(windows[broke][0] + .4, "document.querySelectorAll('.map-ring').length")
+        lean = at(windows[broke][0] + 1.2, "getComputedStyle(document.querySelector('.diagram')).transform")
+        browser.close()
+    assert balls == 8
+    assert .25 < bar < .95                                  # on its way from 20 to 100
+    assert ring == 1
+    assert lean != "none" and float(lean.split("(")[1].split(",")[0]) > 1.02
+
+
+@pytest.mark.unit
+def test_a_move_written_with_no_pieces_is_sent_back_with_the_maps_ids():
+    """Live 2026-11-23: every move came back as "pieces": [] five times running; the reason
+    'needs pieces' did not say what to write. It now names the ids the map has."""
+    from planner import lesson_plan
+
+    empty = _answer()
+    for scene in empty["scenes"]:
+        for beat in scene["beats"]:
+            if beat["move"].get("pieces"):
+                beat["move"]["pieces"] = []
+    client = _Scripted([empty, _answer()])
+    lesson_plan.generate("t", SKILL, client=client, schema_version=2)
+    told = client.asked[1][-1]["content"]
+    assert "never an empty list" in told and all(piece["id"] in told for piece in PIECES)

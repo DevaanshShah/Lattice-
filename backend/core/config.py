@@ -140,6 +140,10 @@ class Settings(BaseSettings):
     # so DeepSeek's context cache hits (~90% off repeated input); fallbacks stay ON for reliability.
     llm_provider_pin: str = ""                         # e.g. "DeepSeek" — prefer this OpenRouter provider (warm cache)
     llm_provider_sort: str = "throughput"              # used only when NOT pinning: throughput|price|latency
+    # Hosts serving the model at a lower precision are left out. Live 2026-11-23 the pinned provider
+    # no longer served the model, every call fell back to whichever of ~37 hosts came up (fp4 among
+    # them), and long lesson answers came back with every list of ids empty.
+    llm_provider_quantizations: str = "fp8,fp16,bf16,fp32,unknown"   # comma list; "" lets any host serve
     # Retry/timeout budget for ONE model call. Without an explicit timeout the SDK waits on its own
     # default (10 min) before our retry policy ever runs, so a wedged route reads as a hung job.
     # llm_attempts is OUR retry loop; the SDK's internal retries are turned OFF (see core/llm.py) so

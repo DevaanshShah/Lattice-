@@ -60,6 +60,9 @@ _SEMANTIC_CSS = """
 .graph-node.is-path circle{fill:#123d22;stroke:#4ade80;stroke-width:4}
 .graph-node.is-goal circle{stroke-width:4}.graph-node.is-goal:not(.is-path):not(.is-current) circle{stroke:#f472b6}
 .graph-scout{fill:#fbbf24;filter:drop-shadow(0 0 6px #fbbf24)}.graph-walker{fill:#f4f4f5;stroke:#4ade80;stroke-width:4;filter:drop-shadow(0 0 10px #4ade80)}
+.map-ring{border:4px solid;border-radius:50%;pointer-events:none;box-shadow:0 0 18px currentColor}
+/* a broken piece is crossed out while it stays broken */
+.semantic-piece.tone-red .piece-icons{position:relative}.semantic-piece.tone-red:not(.is-placeholder) .piece-icons::before{content:'✕';position:absolute;top:-12px;right:-16px;width:30px;height:30px;border-radius:50%;background:#f87171;color:#0a0a0a;font:800 18px/30px Segoe UI,system-ui,sans-serif;text-align:center;z-index:2}.flow-packet{filter:drop-shadow(0 0 6px currentColor)}
 .graph-frontier{margin-top:12px;text-align:center;color:#fbbf24;font:650 22px/1.3 Cascadia Code,Consolas,monospace}
 .tree-node.is-marked circle{fill:#3a1518;stroke:#f87171;stroke-width:3}.tree-node.is-marked text{fill:#fecaca}
 .tree-note{margin-top:8px;min-height:30px;color:#f87171;font:650 22px/1.3 Segoe UI,system-ui,sans-serif}
@@ -979,11 +982,14 @@ function display(index){
     const distances=[0];
     for(let i=1;i<points.length;i++)distances.push(distances[i-1]+
       Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]));
-    const total=distances[distances.length-1],count=action.params.count||1,gap=.14;
+    // A busy stream reads as a crowd: twice the balls the move counts (at most twelve), closer
+    // together and larger, so "thousands of requests" looks like a flood, not four dots.
+    const asked=action.params.count||1,count=asked>1?Math.min(12,asked*2):1;
+    const total=distances[distances.length-1],gap=count>1?Math.min(.14,.55/(count-1)):0;
     const run=1-gap*(count-1),fill=plan.rest[index+1]?plan.rest[index+1][2]:'#f4f4f5';
     for(let k=0;points.length&&k<count;k++){
       const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
-      dot.setAttribute('r','7');dot.setAttribute('fill',fill);dot.setAttribute('class','flow-packet');
+      dot.setAttribute('r',count>1?'9':'7');dot.setAttribute('fill',fill);dot.setAttribute('class','flow-packet');
       const start=gap*k,frames=points.map((p,i)=>({transform:`translate(${p[0]}px,${p[1]}px)`,
         opacity:1,offset:start+run*(total?distances[i]/total:i/(points.length-1))}));
       // a later ball waits unseen at the start; all but the last fade out on arrival
@@ -992,7 +998,50 @@ function display(index){
       svg.append(dot);animate(dot,frames,HOP*hops*(1+gap*(count-1)),count>1?'linear':EASE);
     }
   }
-  if(action.kind==='set_state')searchMotion(action,before,animate);
+  if(action.kind==='set_state'){searchMotion(action,before,animate);mapMotion(action,before,animate);}
+}
+// A map shows trouble and repair, not only a change of colour (owner review, 2026-11-22: things
+// crack, get crossed out, the camera moves). A piece that breaks shakes, sends out a red ring and
+// the camera leans in on it; a piece that is mended sends out a green one; a meter's bar slides
+// to its new reading instead of jumping.
+function mapMotion(action,before,animate){
+  for(const id of action.target_ids){
+    const element=stage.querySelector(`[data-object-id="${CSS.escape(id)}"]`),old=before.get(id);
+    if(!element||!old||!old.element.classList)continue;
+    const was=old.element.classList,now=element.classList;
+    if(now.contains('semantic-meter')){
+      const fill=element.querySelector('.meter-bar i'),from=old.element.querySelector('.meter-bar i');
+      if(fill&&from&&fill.style.width!==from.style.width)
+        animate(fill,[{width:from.style.width},{width:fill.style.width}],1.2);
+      continue;
+    }
+    if(!now.contains('semantic-piece'))continue;
+    const broke=now.contains('tone-red')&&!was.contains('tone-red');
+    const mended=was.contains('tone-red')&&!now.contains('tone-red');
+    if(!broke&&!mended)continue;
+    ring(element,broke?'#f87171':'#4ade80',animate);
+    if(broke){
+      const icons=element.querySelector('.piece-icons')||element;
+      animate(icons,[0,-9,9,-7,7,-4,4,0].map((x,i,all)=>({transform:`translateX(${x}px)`,
+        offset:i/(all.length-1)})),.8,'linear');
+      lean(element,animate);
+    }
+  }
+}
+function ring(element,colour,animate){
+  const box=element.getBoundingClientRect(),size=Math.max(box.width,box.height)*.9;
+  const halo=document.createElement('div');halo.className='animation-ghost map-ring';
+  Object.assign(halo.style,{position:'fixed',left:box.x+box.width/2-size/2+'px',
+    top:box.y+box.height/2-size/2+'px',width:size+'px',height:size+'px',borderColor:colour,color:colour,zIndex:'4'});
+  document.body.append(halo);
+  animate(halo,[{transform:'scale(.5)',opacity:.95},{transform:'scale(1.7)',opacity:0}],1.1);
+}
+function lean(element,animate){
+  // the camera leans in on the piece in trouble: a slow push, held for the rest of the step
+  const diagram=document.querySelector('.diagram'),frame=diagram.getBoundingClientRect(),
+    box=element.getBoundingClientRect();
+  diagram.style.transformOrigin=`${box.x+box.width/2-frame.x}px ${box.y+box.height/2-frame.y}px`;
+  animate(diagram,[{transform:'scale(1)'},{transform:'scale(1.06)'}],1.6);
 }
 // A graph search moves, not only changes colour (owner review, 2026-11-22: "the components are
 // dynamic"). When a node is taken, a dot runs down each doorway to the nodes it has just found;
