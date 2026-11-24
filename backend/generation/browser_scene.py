@@ -23,7 +23,7 @@ from verification.browser_layout import audit_html, BrowserLayoutError
 
 _CSS = """
 :root{--bg:#0d0d12;--ink:#f1efe9;--muted:#aaa9b2;--line:#343541;--panel:#171720;
---blue:#63a8e8;--purple:#c88add;--green:#5fca90;--amber:#edb34a;--cyan:#59c5d2;--red:#eb7063}
+--glow:#fde68a;--blue:#63a8e8;--purple:#c88add;--green:#5fca90;--amber:#edb34a;--cyan:#59c5d2;--red:#eb7063}
 *{box-sizing:border-box}body{margin:0;width:1280px;height:720px;overflow:hidden;background:radial-gradient(circle at 50% 45%,#151722 0,#0d0d12 48%,#090a0f 100%);color:var(--ink);font-family:Segoe UI,system-ui,sans-serif}
 .frame{height:100%;padding:40px 58px 34px;display:flex;flex-direction:column}.title{font:600 40px/1.1 Georgia,serif;text-align:center;margin:0 0 22px}.diagram{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.nodes{position:relative;z-index:1;width:100%;min-height:360px;display:flex;align-items:center;justify-content:center;gap:64px}.connections{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}.edge{stroke:#74798c;stroke-width:2.3;fill:none;opacity:.9}.edge.checks{stroke:var(--amber)}.edge.branches_to{stroke:var(--green)}.edge.transforms_to{stroke:var(--purple)}.edge-label{fill:var(--ink);font:650 13px/1 Segoe UI,sans-serif;paint-order:stroke;stroke:var(--bg);stroke-width:7px;stroke-linejoin:round}.node{flex:0 1 220px;min-width:150px;min-height:106px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#1b1c27,#111218);padding:18px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:19px;font-weight:650;box-shadow:0 12px 38px #0006;transition:opacity .35s,transform .35s,border-color .35s,box-shadow .35s}.node.role-input,.node.role-source{border-color:#4c83b3}.node.role-operation{border-color:#986ca7}.node.role-decision{border-color:#b88d43}.node.role-output,.node.role-result,.node.role-destination{border-color:#4c966d}.node.role-metric{font-size:40px;color:var(--amber);width:min(300px,28vw)}.node.role-before{border-color:var(--red)}.node.role-after{border-color:var(--green)}
 .kind-message{border-radius:24px 24px 24px 6px;background:linear-gradient(145deg,#182331,#10151d)}.kind-document{border-radius:8px;background:linear-gradient(135deg,#1b1b25 0 84%,#343646 84%)}.kind-card{border-left:5px solid var(--green);background:#151720}.kind-tool{border-radius:999px;border-color:var(--purple);background:linear-gradient(145deg,#25192b,#15101a)}.kind-gate{min-height:144px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);border:0;border-radius:0;background:linear-gradient(145deg,#4b3a1c,#211b12);padding:34px}.kind-group{border-style:dashed;background:#12131a}.kind-metric{font-size:38px;color:var(--amber)}
@@ -637,6 +637,54 @@ _SEMANTIC_LABEL_JS = (
     "if(hits())spans.forEach(([t,x0,y0])=>{t.setAttribute('x',x0);t.setAttribute('y',y0)})}}")
 
 
+# The whiteboard style (after the owner's Lamina-style reference, 2026-11-24): a white board,
+# hand-lettered capitals, black arrows, and colour only inside the icons, each drawn with a black
+# outline. It restyles the same markup, so every motion (glow, rings, streams, draw-on) works in it.
+_WHITEBOARD_CSS = """
+@font-face{font-family:'Board';src:url(data:font/ttf;base64,__FONT__) format('truetype')}
+html[data-theme=whiteboard]{--bg:#fdfdfc;--ink:#111;--muted:#555;--line:#111;--glow:#f59e0b}
+html[data-theme=whiteboard] body{background:#fdfdfc;color:#111;font-family:'Board',Segoe UI,sans-serif}
+html[data-theme=whiteboard] .title{font:400 44px/1.1 'Board',sans-serif;text-transform:uppercase;letter-spacing:.02em;color:#111}
+html[data-theme=whiteboard] .foot{color:#9a9a9a}
+html[data-theme=whiteboard] .semantic-piece{color:#111}
+html[data-theme=whiteboard] .semantic-object.is-past{opacity:1}
+html[data-theme=whiteboard] .piece-label{font:400 30px/1.1 'Board',sans-serif;letter-spacing:.02em;color:#111;text-align:center}
+html[data-theme=whiteboard] .piece-icons svg{width:140px;height:140px;overflow:visible;
+  filter:drop-shadow(2.5px 0 0 #111) drop-shadow(-2.5px 0 0 #111) drop-shadow(0 2.5px 0 #111) drop-shadow(0 -2.5px 0 #111)}
+html[data-theme=whiteboard] .piece-icons.is-many svg{width:56px;height:56px}
+html[data-theme=whiteboard] .piece-icons svg[viewBox="0 0 32 32"] :is(path,circle,rect,ellipse,polygon,line,polyline){stroke:#111;stroke-width:.7;stroke-linejoin:round;stroke-linecap:round}
+html[data-theme=whiteboard] .semantic-piece.is-active .piece-icons{filter:drop-shadow(0 0 10px var(--glow))}
+html[data-theme=whiteboard] .semantic-piece.tone-red .piece-label{color:#c62828}
+html[data-theme=whiteboard] .semantic-piece.is-placeholder .piece-icons{border-color:#111;border-style:dashed}
+html[data-theme=whiteboard] .semantic-piece.is-placeholder .piece-icons::after{color:#111}
+html[data-theme=whiteboard] .semantic-piece.tone-red:not(.is-placeholder) .piece-icons::before{border:3px solid #111}
+html[data-theme=whiteboard] .connections .edge{stroke:#111;stroke-width:3.5;opacity:1}
+html[data-theme=whiteboard] .connections marker path{fill:#111}
+html[data-theme=whiteboard] .edge-label,html[data-theme=whiteboard] .frame:has(.semantic-stage) .edge-label{fill:#111;font:400 26px/1 'Board',sans-serif;stroke:#fdfdfc;stroke-width:9px}
+html[data-theme=whiteboard] .flow-packet{fill:#111;filter:none}
+html[data-theme=whiteboard] .semantic-meter{color:#111}
+html[data-theme=whiteboard] .meter-label{font:400 22px/1.1 'Board',sans-serif;color:#111}
+html[data-theme=whiteboard] .meter-bar{border:3px solid #111;border-radius:6px;height:18px}
+html[data-theme=whiteboard] .meter-bar i{background:#2e9e5b}
+html[data-theme=whiteboard] .semantic-meter.tone-red .meter-bar i{background:#e53935}
+html[data-theme=whiteboard] .semantic-caption-line{font:400 30px/1.25 'Board',sans-serif;color:#111;letter-spacing:.02em}
+html[data-theme=whiteboard] .semantic-caption-line.is-question{color:#111;font-size:34px}
+html[data-theme=whiteboard] .semantic-caption-line.is-idea{color:#b45309;font-size:32px}
+html[data-theme=whiteboard] .semantic-caption-line.tone-teal{color:#0f766e}
+html[data-theme=whiteboard] .map-ring{box-shadow:none}
+"""
+
+
+def _theme_head(scene: BrowserScene) -> tuple[str, str]:
+    """The <html> attributes and the extra CSS for a scene's style."""
+    if scene.theme != "whiteboard":
+        return "", ""
+    import base64
+    from core.visual_assets import ASSET_ROOT
+    font = base64.b64encode((ASSET_ROOT / "fonts" / "PatrickHandSC-Regular.ttf").read_bytes()).decode("ascii")
+    return ' data-theme="whiteboard"', _WHITEBOARD_CSS.replace("__FONT__", font)
+
+
 def page_html(scene: BrowserScene, *, title: str, active_beat_id: str | None = None,
               footer: str = "Lattice", layout_mode: str = "auto",
               state: VisualState | None = None) -> str:
@@ -824,8 +872,9 @@ window.routeConnection=(stage,svg,line,a,b,x1,y1,x2,y2)=>{
                                 "};window.fitFlow();window.drawConnections();")
         script = routing + script
         relations = _semantic_relations_json(scene)
-        return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_CSS}'
-                f'{_SEMANTIC_CSS}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
+        html_attrs, theme_css = _theme_head(scene)
+        return (f'<!doctype html><html{html_attrs}><head><meta charset="utf-8"><style>{_CSS}'
+                f'{_SEMANTIC_CSS}{theme_css}</style></head><body><main class="frame{(" compact" if layout_mode == "compact" else "")}">'
                 f'<h1 class="title">{escape(title)}</h1><section class="diagram">'
                 f'<svg class="connections" aria-hidden="true"></svg>'
                 f'<div class="semantic-stage{(" semantic-linked" if scene.relationships else "")}">'
@@ -994,6 +1043,10 @@ function display(index){
     const id=key(element);after.add(id);
     const old=before.get(id),rect=element.getBoundingClientRect();
     const opacity=getComputedStyle(element).opacity;
+    // a piece not yet shown is in the page already, hidden; it arrives when it stops being hidden
+    const arrives=!old||(old.element.classList.contains('is-hidden')&&!element.classList.contains('is-hidden'));
+    if(arrives&&document.documentElement.dataset.theme==='whiteboard'&&element.classList.contains('semantic-piece')){
+      drawOn(element,animate);continue;}
     if(!old){animate(element,[{opacity:0},{opacity}]);continue;}
     const dx=old.rect.x-rect.x,dy=old.rect.y-rect.y;
     if(dx||dy||old.opacity!==opacity){animate(element,[
@@ -1163,6 +1216,26 @@ window.seekAnimation=seconds=>{
     }
   }
 };
+// A piece is drawn, not faded in (the whiteboard reference): its outline traces itself stroke by
+// stroke, the colour fills in, then the label is written left to right. It ends exactly as the
+// static piece looks, so a later beat that redraws it from scratch shows no change.
+const DRAW_ON=1.9;
+function drawOn(element,animate){
+  const shapes=[...element.querySelectorAll('.piece-icons svg :is(path,circle,rect,ellipse,polygon,line,polyline)')]
+    .filter(shape=>!shape.closest('defs,clipPath,mask'));
+  for(const shape of shapes){
+    shape.setAttribute('pathLength','1');
+    const filled=getComputedStyle(shape).fill!=='none';
+    animate(shape,[
+      {strokeDasharray:'1 1',strokeDashoffset:1,fillOpacity:0,offset:0},
+      {strokeDasharray:'1 1',strokeDashoffset:0,fillOpacity:0,offset:.5},
+      {strokeDasharray:'1 1',strokeDashoffset:0,fillOpacity:filled?1:0,offset:.82},
+      {strokeDasharray:'1 1',strokeDashoffset:0,fillOpacity:filled?1:0,offset:1}],DRAW_ON,'linear');
+  }
+  const label=element.querySelector('.piece-label');
+  if(label)animate(label,[{clipPath:'inset(0 100% 0 0)',offset:0},{clipPath:'inset(0 100% 0 0)',offset:.6},
+    {clipPath:'inset(0 0 0 0)',offset:1}],DRAW_ON,'linear');
+}
 // What the voice names swells and glows for a moment, rising and settling with the word.
 function glowMentions(seconds){
   for(const element of document.querySelectorAll('.is-mentioned')){
@@ -1176,7 +1249,7 @@ function glowMentions(seconds){
       if(!element||element.closest('.is-hidden'))continue;
       element.classList.add('is-mentioned');
       element.style.scale=String(1+.16*g);
-      element.style.filter=`drop-shadow(0 0 ${Math.round(18*g)}px #fde68a) brightness(${1+.35*g})`;
+      element.style.filter=`drop-shadow(0 0 ${Math.round(18*g)}px var(--glow)) brightness(${1+.35*g})`;
     }
   }
 }

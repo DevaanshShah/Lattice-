@@ -95,7 +95,13 @@ def _issues(data: dict) -> list[str]:
 
 
 def audit_html(document: str, *, label: str = "browser scene", timeout: int = 60) -> dict:
-    script = """() => {
+    # A page with its own font measures wrongly until the font is in: the pieces change width and
+    # the arrows, drawn before, no longer meet them. So the audit waits for fonts and lays out again,
+    # as the renderer does (found 2026-11-24 on the whiteboard style's embedded font).
+    script = """async () => {
+await document.fonts.ready;
+if(window.fitFlow)window.fitFlow();
+if(window.drawConnections)window.drawConnections();
 const rect=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]};
 return {viewport:[innerWidth,innerHeight],title:rect(document.querySelector('.title')),nodes:[...document.querySelectorAll('.node:not(.is-hidden),.semantic-object:not(.is-hidden)')].map(e=>({id:e.dataset.objectId,rect:rect(e),card:e.classList.contains('semantic-card'),piece:e.classList.contains('semantic-object'),panel:e.classList.contains('semantic-panel'),parent:(e.parentElement.closest('[data-object-id]')||{dataset:{}}).dataset.objectId||null})),labels:[...document.querySelectorAll('.edge-label')].map(e=>({text:e.textContent,rect:rect(e)})),stage:rect(document.querySelector('.diagram')||document.body),edges:[...document.querySelectorAll('.connections line,.connections path.edge')].filter(e=>e.dataset.route).map(e=>({source:e.dataset.sourceId,target:e.dataset.targetId,points:JSON.parse(e.dataset.route)})),cells:[...document.querySelectorAll('.semantic-cell')].map(e=>({text:e.textContent,rect:rect(e)})),semantic_text:[...document.querySelectorAll('.semantic-caption,.semantic-cell,.semantic-counter,.semantic-formula,.semantic-code,.semantic-note')].map(e=>({id:e.textContent,overflow:e.scrollWidth>e.clientWidth+3 || e.scrollHeight>e.clientHeight+3}))};
 }"""

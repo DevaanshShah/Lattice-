@@ -8,7 +8,7 @@ from core.config import settings
 from core.llm import LLMClient, get_client
 from core.schemas.lesson_plan import LessonPlan
 from core.textutil import extract_json
-from core.visual_assets import asset_inventory
+from core.visual_assets import asset_inventory, icon_choices
 from planner.playbooks import PLAYBOOKS
 from planner.product_recipe import Recipe
 from prompts.loader import load
@@ -88,7 +88,7 @@ def _ids_hint(reason: str, data) -> str:
 def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, attempts: int = 3,
              schema_version: int = 1, target_seconds: float | None = None,
              max_scenes: int | None = None, on_reject=None,
-             diagnostic_dir: str | Path | None = None) -> LessonPlan:
+             diagnostic_dir: str | Path | None = None, style: str = "dark") -> LessonPlan:
     """`on_reject(reason)` is called for every answer that is sent back, so a run can show why a
     lesson needed more than one call."""
     if schema_version not in (1, 2):
@@ -118,6 +118,8 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
     # moves, and the code that draws them. A board without a playbook gets the general prompt.
     playbook = PLAYBOOKS.get(skill.board) if schema_version == 2 else None
     icons = asset_inventory()["icons"] if playbook is not None and playbook.needs_icons else []
+    if style == "whiteboard" and icons:      # the colour set, shortlisted for this topic
+        icons = icon_choices(topic) or icons
     contract = (f"Selected skill: {skill.id}\nLesson guidance: {skill.outline_guidance}"
                 if playbook is None or playbook.guided else "")
     if schema_version == 1:
@@ -180,6 +182,7 @@ def generate(topic: str, skill: Recipe, *, client: LLMClient | None = None, atte
             data["topic"] = topic
             data["skill_id"] = skill.id
             data["schema_version"] = schema_version
+            data["style"] = style
             plan = LessonPlan.model_validate(data)
             # a playbook's anchors come from its moves, and are checked when it is compiled
             missing_anchors = [] if playbook is not None else [

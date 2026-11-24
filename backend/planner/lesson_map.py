@@ -368,6 +368,7 @@ def compile_map_scene(lesson: LessonPlan, scene: LessonScene,
         let_the_line_go(scene, position, actions, visible)
         beats.append(compiled_beat(scene, position, actions, shown))
     return {"lesson_scene_id": scene.id, "pattern": "architecture", "render_mode": "browser",
+            "theme": lesson.style,
             "objects": objects, "relationships": relationships,
             "layout_ids": [obj["id"] for obj in objects], "beats": beats,
             "opening_visible_ids": opening, "carryover_ids": opening,

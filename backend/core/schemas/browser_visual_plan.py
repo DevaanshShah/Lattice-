@@ -139,6 +139,7 @@ class BrowserScene(BaseModel):
     lesson_scene_id: str
     pattern: VisualPattern
     render_mode: Literal["browser", "manim"] = "browser"
+    theme: Literal["dark", "whiteboard"] = "dark"
     objects: list[VisualObject] = Field(..., min_length=1)
     relationships: list[VisualRelation] = Field(default_factory=list)
     beats: list[VisualBeat] = Field(..., min_length=1)

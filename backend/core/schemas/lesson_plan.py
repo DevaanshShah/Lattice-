@@ -501,6 +501,7 @@ class LessonPlan(BaseModel):
     schema_version: Literal[1, 2] = 1
     topic: str = Field(..., min_length=1)
     skill_id: str = Field(..., min_length=1)
+    style: Literal["dark", "whiteboard"] = "dark"      # how the picture is drawn
     learning_objective: str = Field(..., min_length=1)
     audience: str | None = None
     prerequisites: list[str] = Field(default_factory=list)
