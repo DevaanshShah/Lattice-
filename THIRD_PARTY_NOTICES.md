@@ -9,6 +9,8 @@ it bundles. Versions are the ones the test suite runs against.
 | Component | Where | License |
 |---|---|---|
 | [Lucide](https://lucide.dev) icons | `backend/assets/icons/` | ISC (full text in `backend/assets/icons/LICENSE`) |
+| [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) | `backend/assets/icons/fluent/` | MIT (full text in `backend/assets/icons/fluent/LICENSE`) |
+| Patrick Hand SC (Mariano Diez Gutierrez) | `backend/assets/fonts/` | SIL Open Font License 1.1 (full text in `backend/assets/fonts/LICENSE.txt`) |
 
 ## Python packages (installed from `backend/requirements.txt`)
 
