@@ -86,7 +86,7 @@
             ${t.videos} video${t.videos > 1 ? "s" : ""}</span>` : ""}
         </div>
       </div>`).join("");
-    return `<div style="flex:0 0 282px;display:flex;flex-direction:column;border-right:1px solid var(--line);
+    return `<div class="lt-side" style="flex:0 0 282px;display:flex;flex-direction:column;border-right:1px solid var(--line);
         background:var(--bg2);min-height:0;">
       <div style="padding:16px 16px 10px;">
         <button data-act="learn-new" style="width:100%;display:flex;align-items:center;justify-content:center;

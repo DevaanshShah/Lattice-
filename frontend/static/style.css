@@ -38,4 +38,50 @@ body { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
 .lt-row:hover { background: var(--raise); }
 .lt-act:hover { background: var(--raise2); }
 input, textarea, button { font-family: inherit; }
-#app { height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); overflow: hidden; }
+#app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* landing hero: text left, animated system-design diagram right */
+.lt-hero { display:grid; grid-template-columns:minmax(0,1.02fr) minmax(0,0.98fr); gap:40px; align-items:stretch; }
+@media (max-width: 1000px) { .lt-hero { grid-template-columns:1fr; } .lt-hero-art { min-height:380px; } }
+
+/* ---- responsive ---------------------------------------------------------------------------
+   Layout is inline-styled from JS, so these rules key off class hooks and style-attribute
+   selectors and use !important to win over the inline values. */
+img, video, canvas { max-width: 100%; }
+/* Side lists (studio projects, Learn chats) keep their fixed width: without min-width:0 a long
+   nowrap title sets the flex item's min-content width and the sidebar swallows the page. */
+.lt-side { min-width: 0; overflow: hidden; }
+@media (max-width: 900px) {
+  .lt-side { display: none !important; }                       /* project/chat lists: reachable via Gallery / Learn */
+  .lt-edit { grid-template-columns: 1fr !important; }
+  .lt-demo-grid { grid-template-columns: 1fr !important; min-height: 0 !important; }
+  .lt-demo-grid > div:first-child { border-right: none !important; border-bottom: 1px solid var(--line); }
+  .lt-demo-grid > div:last-child { min-height: 260px; }
+  .lt-4grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 760px) {
+  .lt-top { height: auto !important; flex: 0 0 auto !important; flex-wrap: wrap; padding: 8px 14px 0 !important; row-gap: 2px; }
+  .lt-top-right { gap: 8px !important; }
+  .lt-tabs { order: 3; width: 100%; overflow-x: auto; gap: 22px !important; padding: 8px 0 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .lt-tabs::-webkit-scrollbar { display: none; }
+  .lt-tabs > div { white-space: nowrap; flex: 0 0 auto; }
+  .lt-wrap { padding: 28px 16px 0 !important; }
+  .lt-hero { gap: 28px; }
+  .lt-hero-art canvas { min-height: 300px !important; }
+  .lt-cards { grid-template-columns: 1fr !important; }
+  .lt-cta { padding: 0 16px !important; font-size: 14px !important; }
+  .lt-sthead { padding: 12px 14px !important; flex-wrap: wrap; }
+  .lt-4grid { gap: 14px !important; }
+  input, textarea { font-size: 16px !important; }              /* stops iOS zooming into fields */
+  #app [style*="padding:110px 32px"] { padding: 56px 16px !important; }
+  #app [style*="padding:72px 32px"], #app [style*="padding:60px 32px"] { padding: 36px 16px !important; }
+  #app [style*="padding:38px 32px"] { padding: 24px 16px 40px !important; }
+  #app [style*="padding:44px 40px"], #app [style*="padding:32px 40px"], #app [style*="padding:30px 40px"], #app [style*="padding:14px 40px"] { padding-left: 16px !important; padding-right: 16px !important; }
+  #app [style*="padding:64px 24px"], #app [style*="padding:80px 24px"] { padding-top: 36px !important; padding-bottom: 36px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  #app [style*="padding:40px 24px"] { padding-left: 16px !important; padding-right: 16px !important; }
+  #app h1 { overflow-wrap: anywhere; }
+  .lt-dlmenu { position: fixed !important; top: auto !important; left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto !important; z-index: 70 !important; }
+}
+@media (max-width: 420px) {
+  .lt-4grid { grid-template-columns: 1fr !important; }
+}

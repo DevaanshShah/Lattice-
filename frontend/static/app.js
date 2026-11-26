@@ -298,6 +298,7 @@ function sizeCanvas(c) {
 function loop(now) {
   const T = now / 1000;
   const lat = document.querySelector("canvas[data-lattice]"); if (lat) { const s = sizeCanvas(lat); if (s) drawLattice(s.ctx, s.w, s.h, T); }
+  const sys = document.querySelector("canvas[data-sysdesign]"); if (sys) { const s = sizeCanvas(sys); if (s) drawSystem(s.ctx, s.w, s.h, T); }
   const fou = document.querySelector("canvas[data-fourier]"); if (fou) { const s = sizeCanvas(fou); if (s) drawFourier(s.ctx, s.w, s.h, T); tickDemo(T); }
   RAF = requestAnimationFrame(loop);
 }
@@ -310,6 +311,51 @@ function drawLattice(ctx, w, h, t) {
     const a = 0.05 + 0.14 * Math.max(0, Math.sin(t * 0.7 + x * 0.02 + y * 0.02));
     ctx.fillStyle = `rgba(242,180,65,${a})`; ctx.fillRect(x - 1, y - 1, 2, 2);
   }
+}
+// Hero art: a tiny system-design diagram — requests flow client → load balancer → app server → cache (hit) or database (miss).
+const SYS_CAPTIONS = ["Scene 01 · A request arrives", "Scene 02 · Balancing the load", "Scene 03 · Cache hit, skip the database", "Scene 04 · Cache miss, ask the database"];
+function drawSystem(ctx, w, h, t) {
+  const AC = "#F2B441", INK = "236,234,227";
+  ctx.fillStyle = "#0B0B10"; ctx.fillRect(0, 0, w, h);
+  const sp = 34; ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.035)";
+  for (let x = 0; x <= w; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y <= h; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  const N = {
+    client: { x: 0.11, y: 0.50, l: "Client" }, lb: { x: 0.33, y: 0.50, l: "Load balancer" },
+    s0: { x: 0.58, y: 0.20, l: "App 1" }, s1: { x: 0.58, y: 0.50, l: "App 2" }, s2: { x: 0.58, y: 0.80, l: "App 3" },
+    cache: { x: 0.86, y: 0.27, l: "Cache" }, db: { x: 0.86, y: 0.73, l: "Database" },
+  };
+  const P = (k) => ({ x: N[k].x * w, y: N[k].y * h });
+  const edges = [["client", "lb"], ["lb", "s0"], ["lb", "s1"], ["lb", "s2"], ["s0", "cache"], ["s1", "cache"], ["s2", "cache"], ["s0", "db"], ["s1", "db"], ["s2", "db"]];
+  ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.13)";
+  for (const [a, b] of edges) { const A = P(a), B = P(b); ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+  // packets: each request walks client → lb → server → cache (→ db on a miss) and back
+  const PERIOD = 8, glow = {};
+  for (let q = 0; q < 3; q++) {
+    const u = t / PERIOD + q / 3, idx = Math.floor(u), f = u - idx;
+    const srv = "s" + ((idx + q) % 3), miss = (idx + q) % 3 === 0;
+    const route = miss ? ["client", "lb", srv, "cache", "db", "cache", srv, "lb", "client"] : ["client", "lb", srv, "cache", srv, "lb", "client"];
+    const segs = route.length - 1, pos = f * segs, i = Math.min(segs - 1, Math.floor(pos)), lp = pos - i;
+    const e = lp < 0.5 ? 2 * lp * lp : 1 - Math.pow(-2 * lp + 2, 2) / 2;
+    const A = P(route[i]), B = P(route[i + 1]), x = A.x + (B.x - A.x) * e, y = A.y + (B.y - A.y) * e;
+    const back = i >= segs / 2;
+    const col = back ? "120,200,140" : "242,180,65";
+    for (let k = 5; k >= 1; k--) { const ee = Math.max(0, e - k * 0.05); ctx.fillStyle = `rgba(${col},${0.07 * (6 - k)})`; ctx.beginPath(); ctx.arc(A.x + (B.x - A.x) * ee, A.y + (B.y - A.y) * ee, 3, 0, 6.283); ctx.fill(); }
+    ctx.fillStyle = `rgb(${col})`; ctx.shadowColor = `rgb(${col})`; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(x, y, 3.6, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+    if (lp > 0.75) glow[route[i + 1]] = Math.max(glow[route[i + 1]] || 0, (lp - 0.75) * 4);
+  }
+  // nodes
+  const nw = Math.min(132, w * 0.21), nh = 40;
+  ctx.font = "500 11.5px 'Geist Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const k in N) {
+    const { x, y } = P(k), g = glow[k] || 0;
+    ctx.fillStyle = "#14141a"; ctx.strokeStyle = g > 0 ? `rgba(242,180,65,${0.35 + 0.65 * g})` : "rgba(255,255,255,0.22)"; ctx.lineWidth = 1.2;
+    if (g > 0) { ctx.shadowColor = AC; ctx.shadowBlur = 14 * g; }
+    ctx.beginPath(); ctx.roundRect(x - nw / 2, y - nh / 2, nw, nh, 8); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(${INK},${0.8 + 0.2 * g})`; ctx.fillText(N[k].l, x, y);
+  }
+  const cap = document.querySelector("[data-syslabel]"), txt = SYS_CAPTIONS[Math.floor(t / 4) % SYS_CAPTIONS.length];
+  if (cap && cap.textContent !== txt) cap.textContent = txt;
 }
 function drawFourier(ctx, w, h, t) {
   const AC = "#F2B441"; ctx.fillStyle = "#0B0B10"; ctx.fillRect(0, 0, w, h);
@@ -498,15 +544,15 @@ async function loadSource(index) {
 
 function topbar() {
   const tab = (id, txt, on) => `<div data-act="tab-${id}" style="${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;padding-bottom:3px;color:${on ? "var(--text)" : "var(--muted)"};border-bottom:1.5px solid ${on ? "var(--accent)" : "transparent"};">${txt}</div>`;
-  return `<div style="height:56px;flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:var(--bg2);position:relative;z-index:40;">
+  return `<div class="lt-top" style="height:56px;flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:var(--bg2);position:relative;z-index:40;">
     <div data-act="home" style="display:flex;align-items:center;gap:11px;cursor:pointer;">
       ${logoMark(24)}
       <span style="${DISPLAY}font-weight:600;font-size:18px;letter-spacing:-0.02em;color:var(--text);">Lattice</span>
     </div>
-    <div style="display:flex;align-items:center;gap:26px;">
+    <div class="lt-tabs" style="display:flex;align-items:center;gap:26px;">
       ${tab("home", "Home", state.screen === "landing")}${tab("learn", "Learn", state.screen === "learn")}${tab("studio", "Teach", state.screen === "studio")}${tab("slides", "Slides", state.screen === "slides")}${tab("gallery", "Gallery", state.screen === "gallery")}
     </div>
-    <div style="display:flex;align-items:center;gap:12px;">
+    <div class="lt-top-right" style="display:flex;align-items:center;gap:12px;">
       <div data-act="theme" title="Toggle theme" style="width:34px;height:34px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);">${state.theme === "dark" ? ICON.moon : ICON.sun}</div>
       ${accountChip()}
     </div>
@@ -578,10 +624,12 @@ function landing() {
     </div>`).join("") : `<div style="grid-column:1/-1;${MONO}font-size:12px;color:var(--faint);">No videos yet — make your first above.</div>`;
   return `<div class="lt-scroll" style="flex:1;overflow-y:auto;position:relative;">
     <canvas data-lattice style="position:absolute;top:0;left:0;width:100%;height:560px;opacity:0.4;pointer-events:none;"></canvas>
-    <div style="position:relative;max-width:1200px;margin:0 auto;padding:64px 40px 0;">
-      <h1 class="lt-fade" style="${DISPLAY}font-size:clamp(44px,7.4vw,88px);line-height:0.98;letter-spacing:-0.035em;font-weight:600;margin:0 0 24px;color:var(--text);max-width:14ch;">Turn any idea into an <span style="color:var(--accent);">explainer video</span>.</h1>
+    <div class="lt-wrap" style="position:relative;max-width:1520px;margin:0 auto;padding:48px 28px 0;">
+      <div class="lt-hero">
+      <div class="lt-hero-text">
+      <h1 class="lt-fade" style="${DISPLAY}font-size:clamp(40px,5.6vw,80px);line-height:0.98;letter-spacing:-0.035em;font-weight:600;margin:0 0 24px;color:var(--text);max-width:14ch;">Turn any idea into an <span style="color:var(--accent);">explainer video</span>.</h1>
       <p class="lt-fade" style="font-size:19px;line-height:1.5;color:var(--muted);max-width:48ch;margin:0 0 30px;">Describe a concept in a sentence. Lattice storyboards it, animates every idea, and narrates the whole thing — start to finish, no design or editing.</p>
-      <div class="lt-fade" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:0 0 30px;">
+      <div class="lt-fade lt-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:0 0 30px;">
         <div class="lt-thumb" data-act="go-learn" style="cursor:pointer;border:1px solid var(--line2);border-radius:12px;background:var(--raise);padding:22px;">
           <div style="${DISPLAY}font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px;">Learn</div>
           <div style="font-size:14px;color:var(--muted);line-height:1.45;">Ask about any concept — get a short animated explainer made for you. Just watch.</div>
@@ -594,13 +642,19 @@ function landing() {
       <div class="lt-fade" style="max-width:640px;">
         <div style="display:flex;align-items:stretch;border:1px solid var(--line2);border-radius:8px;background:var(--raise);overflow:hidden;">
           <input id="landing-input" placeholder="Explain how neural networks learn…" style="flex:1;background:transparent;border:none;outline:none;font-size:16px;color:var(--text);padding:16px 18px;min-width:0;" />
-          <button class="lt-btnp" data-act="landing-go" style="border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:15px;padding:0 24px;cursor:pointer;">Create video →</button>
+          <button class="lt-btnp lt-cta" data-act="landing-go" style="border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:15px;padding:0 24px;cursor:pointer;">Create video →</button>
         </div>
         ${suggestRow("sugg-landing")}
       </div>
+      </div>
+      <div class="lt-hero-art lt-fade" style="position:relative;border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:#0B0B10;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,0.08);${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(236,234,227,0.55);"><span>System design</span><span data-syslabel>Scene 01 · A request arrives</span></div>
+        <canvas data-sysdesign style="display:block;width:100%;height:calc(100% - 38px);min-height:420px;"></canvas>
+      </div>
+      </div>
       <div class="lt-fade" style="margin-top:54px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg2);">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--line);${MONO}font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint);"><span data-demostatus>Live · from prompt to preview</span><span>Fourier series</span></div>
-        <div style="display:grid;grid-template-columns:0.82fr 1.18fr;min-height:340px;">
+        <div class="lt-demo-grid" style="display:grid;grid-template-columns:0.82fr 1.18fr;min-height:340px;">
           <div style="padding:26px;border-right:1px solid var(--line);display:flex;flex-direction:column;">
             ${label("Your prompt")}
             <div style="font-size:20px;line-height:1.42;color:var(--text);font-weight:450;min-height:88px;"><span data-typed></span><span style="color:var(--accent);animation:lt-blink 1s step-end infinite;">▏</span></div>
@@ -618,7 +672,7 @@ function landing() {
       </div>
       <div style="margin:64px 0 80px;">
         <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:22px;"><span style="${MONO}font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint);">Made with Lattice</span><span style="flex:1;height:1px;background:var(--line);"></span></div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px;">${exHtml}</div>
+        <div class="lt-4grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px;">${exHtml}</div>
       </div>
     </div>
   </div>`;
@@ -631,7 +685,7 @@ function sidebar() {
       <div style="flex:0 0 44px;height:28px;border-radius:4px;overflow:hidden;position:relative;background:#0B0B10;"><div style="${thumb(seedOf(p.id))}"></div></div>
       <div style="flex:1;min-width:0;"><div style="font-size:13px;color:var(--text);font-weight:450;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.topic)}</div><div style="${MONO}font-size:10.5px;color:var(--faint);margin-top:1px;">${p.scenes || 0} scenes</div></div>
     </div>`).join("") || `<div style="${MONO}font-size:11px;color:var(--faint);padding:8px;">No projects yet.</div>`;
-  return `<div style="flex:0 0 268px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--bg2);min-height:0;">
+  return `<div class="lt-side" style="flex:0 0 268px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--bg2);min-height:0;">
     <div style="padding:16px 16px 12px;"><button class="lt-btnp" data-act="new" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:14px;cursor:pointer;">＋ New video</button></div>
     <div style="padding:0 16px 10px;"><div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:6px;background:var(--raise);"><span style="color:var(--faint);font-size:13px;">⌕</span><input id="side-search" value="${esc(state.sideSearch)}" placeholder="Search projects" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);min-width:0;" /></div></div>
     ${label("Recent", 6).replace("margin-bottom:6px", "margin:8px 16px 6px")}
@@ -648,7 +702,7 @@ function studio() {
   if (state.phase === "result") {
     dl = `<button class="lt-btnp" data-act="dl-toggle" style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:6px;border:none;background:var(--accent);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer;">↓ Download</button>`;
     const reel = state.format === "reel";
-    if (state.downloadOpen) dl += `<div class="lt-snap" style="position:absolute;top:48px;right:0;width:248px;background:var(--raise);border:1px solid var(--line2);border-radius:8px;padding:14px;box-shadow:0 24px 60px -24px rgba(0,0,0,0.8);z-index:30;">
+    if (state.downloadOpen) dl += `<div class="lt-snap lt-dlmenu" style="position:absolute;top:48px;right:0;width:248px;background:var(--raise);border:1px solid var(--line2);border-radius:8px;padding:14px;box-shadow:0 24px 60px -24px rgba(0,0,0,0.8);z-index:30;">
       ${label("Export", 10)}
       ${segmented("fmt", [["youtube", "YouTube"], ["reel", "Reel"]], state.format)}
       <div style="${MONO}font-size:10.5px;color:var(--faint);margin:7px 2px 2px;">${reel ? "1080&times;1920 &middot; 9:16 &middot; Shorts / TikTok" : "1920&times;1080 &middot; 16:9"}</div>
@@ -661,7 +715,7 @@ function studio() {
   const body = state.phase === "prompt" ? phasePrompt() : state.phase === "outline" ? phaseOutline() : state.phase === "generating" ? phaseGenerating() : phaseResult();
   return `<div style="flex:1;display:flex;min-height:0;">${sidebar()}
     <div class="lt-scroll" style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;">
-      <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 26px;border-bottom:1px solid var(--line);">
+      <div class="lt-sthead" style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 26px;border-bottom:1px solid var(--line);">
         <div style="display:flex;align-items:center;gap:14px;min-width:0;"><span style="${DISPLAY}font-size:17px;font-weight:600;letter-spacing:-0.015em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(title)}</span><span style="${MONO}font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line);border-radius:4px;color:${bCol};white-space:nowrap;">${bTxt}</span></div>
         <div style="display:flex;align-items:center;gap:12px;position:relative;">${dl}</div>
       </div>
@@ -939,7 +993,7 @@ function editorPanel(sel) {
   const util = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--text);font-weight:500;font-size:12.5px;cursor:pointer;";
   const danger = "display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:6px;border:1px solid rgba(240,85,59,0.32);background:transparent;color:var(--danger);font-weight:500;font-size:12.5px;cursor:pointer;";
   const browserV2 = state.project && state.project.renderer === "browser_v2";
-  return `<div class="lt-snap" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
+  return `<div class="lt-snap lt-edit" style="margin-top:22px;display:grid;grid-template-columns:340px 1fr;gap:22px;border-top:1px solid var(--line2);padding-top:22px;">
     <div>
       <div style="position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#0B0B10;">${sel.built ? `<video onerror="videoFailed(this)" src="${U(`/api/projects/${state.project.id}/scenes/${sel.index}/preview?t=${Date.now()}`)}" controls playsinline style="width:100%;height:100%;object-fit:contain;"></video>` : `<div style="${thumb(seedOf(sel.sid || sel.index))}"></div>`}<span style="position:absolute;top:8px;left:9px;font-size:10.5px;${MONO}color:rgba(236,234,227,0.8);pointer-events:none;">Scene ${state.selected + 1}</span></div>
       <div style="${DISPLAY}font-size:19px;font-weight:600;color:var(--text);letter-spacing:-0.015em;margin-top:14px;">${esc(sel.title)}</div>

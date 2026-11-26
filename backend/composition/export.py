@@ -41,7 +41,12 @@ _TS = re.compile(
 
 FORMATS = ("youtube", "reel")
 REEL_W, REEL_H = 1080, 1920           # the 9:16 canvas Shorts/Reels/TikTok all expect
-_REEL_SUB_STYLE = "FontSize=17,MarginV=300"  # lift captions off the bottom edge, into the pad band
+# libass sizes an SRT against a 288-unit-tall reference canvas (PlayResY), NOT output pixels, so
+# both numbers are in those units: MarginV must stay well under 288 or the captions land below the
+# frame (a margin of 300 once burned nothing at all). On the 1080x1920 reel the letterboxed video
+# ends ~190 units down; a 48-unit margin puts 2-3 caption lines inside the bottom pad band.
+REEL_SUB_PLAYRES_Y = 288
+_REEL_SUB_STYLE = "FontSize=10,MarginV=48"
 _HEX = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
 
@@ -204,12 +209,37 @@ def _probe_duration(mp4: str | Path) -> float:
         return 0.0
 
 
+def script_srt(lines: list[str], duration: float) -> str:
+    """Captions for a scene that has narration lines but no SRT of its own.
+
+    Each line gets a share of the scene's duration proportional to its length — narration is spoken
+    at a steady rate, so length tracks speaking time. Renderers that never write per-scene captions
+    (the browser pipeline) still get subtitles this way.
+    """
+    lines = [ln.strip() for ln in (lines or []) if ln and ln.strip()]
+    if not lines or duration <= 0:
+        return ""
+    total = sum(len(ln) for ln in lines)
+    out: list[str] = []
+    t = 0.0
+    for i, ln in enumerate(lines, start=1):
+        end = duration if i == len(lines) else t + duration * len(ln) / total
+        out += [str(i), f"{_fmt_ts(t)} --> {_fmt_ts(end)}", ln, ""]
+        t = end
+    return "\n".join(out)
+
+
 def merged_captions(project: VideoProject) -> str:
-    """Build the whole-video SRT by offsetting each scene's captions (probes scene durations)."""
+    """Build the whole-video SRT by offsetting each scene's captions (probes scene durations).
+
+    A scene with no SRT file falls back to captions built from its narration script.
+    """
     scenes: list[tuple[str, float]] = []
     for s in project.scenes:
         text = Path(s.srt).read_text(encoding="utf-8") if (s.srt and Path(s.srt).exists()) else ""
         dur = _probe_duration(s.mp4) if s.mp4 else 0.0
+        if not text.strip():
+            text = script_srt(list(s.script or []), dur)
         scenes.append((text, dur))
     return merge_srt(scenes)
 
@@ -241,7 +271,12 @@ def export(project: VideoProject, *, out_dir: str | Path, subtitles: str = "none
     if subtitles in ("separate", "burn"):
         say("-> merging per-scene captions into one track")
         srt_path = out / "captions.srt"
-        srt_path.write_text(merged_captions(project), encoding="utf-8")
+        srt_text = merged_captions(project)
+        if subtitles == "burn" and not srt_text.strip():
+            # ffmpeg's subtitles filter cannot open an empty file; say so plainly instead
+            raise ValueError("this video has no narration to turn into subtitles — "
+                             "download it without burned-in subtitles")
+        srt_path.write_text(srt_text, encoding="utf-8")
 
     # only re-encode when the request actually changes pixels
     if fmt == "youtube" and subtitles != "burn":

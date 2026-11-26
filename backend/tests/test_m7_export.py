@@ -144,3 +144,45 @@ def test_build_export_command_is_hardened_and_copies_audio(tmp_path):
     assert "--network=none" in cmd
     assert cmd[cmd.index("-vf") + 1] == "scale=1080:-2"
     assert cmd[cmd.index("-c:a") + 1] == "copy"
+
+
+def test_script_srt_splits_duration_by_line_length():
+    srt = export.script_srt(["Short.", "A much longer second line here."], 10.0)
+    cues = export._shift_block(srt.split("\n\n")[0], 0) + export._shift_block(srt.split("\n\n")[1], 0)
+    assert [c[2] for c in cues] == ["Short.", "A much longer second line here."]
+    assert cues[0][0] == 0.0 and abs(cues[1][1] - 10.0) < 0.01
+    assert cues[0][1] < 3.0 < cues[1][1]           # the short line gets the smaller share
+
+
+def test_script_srt_empty_without_lines_or_duration():
+    assert export.script_srt([], 5.0) == ""
+    assert export.script_srt(["hi"], 0.0) == ""
+
+
+def test_merged_captions_falls_back_to_the_narration_script(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(export, "_probe_duration", lambda _p: 4.0)
+    proj = SimpleNamespace(scenes=[SimpleNamespace(srt=None, mp4="a.mp4", script=["One line."]),
+                                   SimpleNamespace(srt=None, mp4="b.mp4", script=["Two."])])
+    merged = export.merged_captions(proj)
+    assert "One line." in merged and "Two." in merged
+    assert "00:00:04,000 --> 00:00:08,000" in merged   # second scene offset by the first's length
+
+
+def test_burn_with_no_captions_fails_plainly(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    final = tmp_path / "final.mp4"; final.write_bytes(b"x")
+    monkeypatch.setattr(export, "merged_captions", lambda _p: "")
+    proj = SimpleNamespace(final_mp4=str(final), scenes=[])
+    with pytest.raises(ValueError, match="no narration"):
+        export.export(proj, out_dir=tmp_path / "out", subtitles="burn")
+
+
+def test_reel_caption_style_stays_inside_the_frame():
+    style = dict(kv.split("=") for kv in export._REEL_SUB_STYLE.split(","))
+    margin, size = int(style["MarginV"]), int(style["FontSize"])
+    # units are libass's 288-tall reference canvas; the letterboxed 16:9 video ends at
+    # 50% + half its height of the frame, and the captions must sit in the band below it
+    video_bottom = export.REEL_SUB_PLAYRES_Y * (0.5 + (export.REEL_W * 9 / 16) / export.REEL_H / 2)
+    assert 0 < margin < export.REEL_SUB_PLAYRES_Y - video_bottom    # bottom edge sits inside the band
+    assert export.REEL_SUB_PLAYRES_Y - margin - 2 * size * 1.2 > video_bottom  # two lines fit below the video
